@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block title %}Panel principal{% endblock %}
+
+{% block content %}
+<div class="card">
+  <h1>Panel principal</h1>
+  <p>Aquí puedes elegir la herramienta que necesitas usar en cada momento.</p>
+</div>
+
+<div class="card">
+  <h2>Reporte de stats</h2>
+  <p>Carga un CSV, convierte las stats de turno.</p>
+  <a class="btn" href="{{ url_for('reporte_agentes.reporte_agentes') }}">Abrir reporte de stats</a>
+</div>
+{% endblock %}

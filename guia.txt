@@ -1,0 +1,19 @@
+instalación
+abre powershell
+ir a carpeta de herramienta c:/herramientas_equipo
+py -m pip install -r requirements.txt
+
+
+
+para ejecutar
+
+cd C:\herramientas_equipo
+py app.py
+
+
+
+
+
+en pagina web abrir
+
+http://127.0.0.1:5000
