@@ -1,14 +1,7 @@
 import pandas as pd
-from flask import Blueprint, redirect, render_template, request, url_for
+from flask import Blueprint, render_template, request
 
-from utils.archivos import (
-    ARCHIVO_TURNOS,
-    cargar_csv_guardado,
-    cargar_turnos_guardados,
-    extraer_agentes,
-    guardar_csv_subido,
-    guardar_turnos,
-)
+from utils.archivos import extraer_agentes, leer_csv_subido
 from utils.transformaciones import (
     COLUMNAS_VISIBLES,
     TRADUCCIONES,
@@ -17,7 +10,7 @@ from utils.transformaciones import (
     segundos_a_minutos,
     validar_columnas,
 )
-from utils.turnos import detectar_repetidos, mapa_agente_a_turnos, obtener_turno
+from utils.turnos import cargar_turnos_fijos, detectar_repetidos, obtener_turno
 
 reporte_agentes_bp = Blueprint("reporte_agentes", __name__)
 
@@ -66,10 +59,9 @@ def reporte_agentes():
     resumen = None
     tabla_general = None
     secciones_turnos = []
-
-    turnos_config = cargar_turnos_guardados()
-    df = cargar_csv_guardado()
-    lista_agentes = extraer_agentes(df) if df is not None else []
+    lista_agentes = []
+    agentes_sin_asignar = []
+    turnos_config = cargar_turnos_fijos()
 
     orden_columna = request.args.get("orden_columna", "Llamadas")
     orden_direccion = request.args.get("orden_direccion", "desc")
@@ -93,127 +85,76 @@ def reporte_agentes():
     ascendente = orden_direccion == "asc"
 
     if request.method == "POST":
-        accion = request.form.get("accion", "procesar")
+        archivo = request.files.get("archivo")
 
-        if accion == "subir_csv":
-            archivo = request.files.get("archivo")
-            if not archivo or not archivo.filename:
-                advertencia = "Selecciona un archivo CSV."
-            else:
-                try:
-                    df = guardar_csv_subido(archivo)
-                    lista_agentes = extraer_agentes(df)
-                    mensaje = "CSV cargado correctamente."
-                except Exception as e:
-                    advertencia = f"No se pudo cargar el CSV: {e}"
+        if not archivo or not archivo.filename:
+            advertencia = "Selecciona un archivo CSV."
+        else:
+            try:
+                df = leer_csv_subido(archivo)
+                lista_agentes = extraer_agentes(df)
 
-        elif accion == "agregar_turno":
-            nuevo_turno = limpiar_texto(request.form.get("nuevo_turno", ""))
-            if not nuevo_turno:
-                advertencia = "Escribe un nombre de turno."
-            elif nuevo_turno in turnos_config:
-                advertencia = "Ese turno ya existe."
-            else:
-                turnos_config[nuevo_turno] = []
-                guardar_turnos(turnos_config)
-                return redirect(
-                    url_for(
-                        "reporte_agentes.reporte_agentes",
-                        orden_columna=orden_columna,
-                        orden_direccion=orden_direccion,
-                    )
-                )
+                repetidos = detectar_repetidos(turnos_config)
+                if repetidos:
+                    advertencia = "Estos agentes están repetidos en la configuración de turnos: " + ", ".join(repetidos)
 
-        elif accion.startswith("eliminar_turno:"):
-            nombre_turno = accion.split(":", 1)[1]
-            if nombre_turno in turnos_config:
-                del turnos_config[nombre_turno]
-                guardar_turnos(turnos_config)
-            return redirect(
-                url_for(
-                    "reporte_agentes.reporte_agentes",
-                    orden_columna=orden_columna,
-                    orden_direccion=orden_direccion,
-                )
-            )
+                df_final = preparar_dataframe(df, turnos_config)
+                df_final = df_final.sort_values(by=orden_columna, ascending=ascendente, kind="stable")
 
-        elif accion == "guardar_turnos":
-            nuevos_turnos = {}
-            for turno in list(turnos_config.keys()):
-                seleccion = request.form.getlist(f"turno::{turno}")
-                nuevos_turnos[turno] = seleccion
-            turnos_config = nuevos_turnos
-            guardar_turnos(turnos_config)
-            mensaje = "Turnos guardados correctamente."
-
-        elif accion == "restablecer_turnos":
-            if ARCHIVO_TURNOS.exists():
-                ARCHIVO_TURNOS.unlink()
-            return redirect(
-                url_for(
-                    "reporte_agentes.reporte_agentes",
-                    orden_columna=orden_columna,
-                    orden_direccion=orden_direccion,
-                )
-            )
-
-    turnos_config = cargar_turnos_guardados()
-    df = cargar_csv_guardado()
-    lista_agentes = extraer_agentes(df) if df is not None else []
-    mapa_turnos = mapa_agente_a_turnos(turnos_config)
-
-    if df is not None:
-        repetidos = detectar_repetidos(turnos_config)
-        if repetidos:
-            advertencia = "Estos agentes están asignados en más de un turno: " + ", ".join(repetidos)
-
-        df_final = preparar_dataframe(df, turnos_config)
-        df_final = df_final.sort_values(by=orden_columna, ascending=ascendente, kind="stable")
-
-        resumen = {
-            "Agentes": int(df_final["Agente"].nunique()),
-            "Llamadas": int(df_final["Llamadas"].sum()),
-            "Salientes": int(df_final["Salientes"].sum()),
-            "Perdidas": int(df_final["Perdidas"].sum()),
-            "Mins llamadas": int(df_final["Mins llamadas"].sum()),
-            "Mins salientes": int(df_final["Mins salientes"].sum()),
-        }
-
-        tabla_general = html_tabla(df_final[COLUMNAS_VISIBLES])
-
-        for turno in sorted(turnos_config.keys()):
-            bloque = df_final[df_final["Turno"] == turno][[c for c in COLUMNAS_VISIBLES if c != "Turno"]]
-            if not bloque.empty:
-                secciones_turnos.append(
-                    {
-                        "nombre": turno,
-                        "filas": html_tabla(bloque),
-                    }
-                )
-
-        bloque_sin = df_final[df_final["Turno"] == "Sin asignar"][
-            [c for c in COLUMNAS_VISIBLES if c != "Turno"]
-        ]
-        if not bloque_sin.empty:
-            secciones_turnos.append(
-                {
-                    "nombre": "Sin asignar",
-                    "filas": html_tabla(bloque_sin),
+                resumen = {
+                    "Agentes": int(df_final["Agente"].nunique()),
+                    "Llamadas": int(df_final["Llamadas"].sum()),
+                    "Salientes": int(df_final["Salientes"].sum()),
+                    "Perdidas": int(df_final["Perdidas"].sum()),
+                    "Mins llamadas": int(df_final["Mins llamadas"].sum()),
+                    "Mins salientes": int(df_final["Mins salientes"].sum()),
                 }
-            )
+
+                tabla_general = html_tabla(df_final[COLUMNAS_VISIBLES])
+
+                for turno in sorted(turnos_config.keys()):
+                    bloque = df_final[df_final["Turno"] == turno][[c for c in COLUMNAS_VISIBLES if c != "Turno"]]
+                    if not bloque.empty:
+                        secciones_turnos.append(
+                            {
+                                "nombre": turno,
+                                "filas": html_tabla(bloque),
+                            }
+                        )
+
+                bloque_sin = df_final[df_final["Turno"] == "Sin asignar"][
+                    [c for c in COLUMNAS_VISIBLES if c != "Turno"]
+                ]
+                if not bloque_sin.empty:
+                    secciones_turnos.append(
+                        {
+                            "nombre": "Sin asignar",
+                            "filas": html_tabla(bloque_sin),
+                        }
+                    )
+
+                agentes_configurados = set()
+                for agentes in turnos_config.values():
+                    for agente in agentes:
+                        agentes_configurados.add(agente)
+
+                agentes_sin_asignar = [ag for ag in lista_agentes if ag not in agentes_configurados]
+
+                mensaje = "CSV procesado correctamente."
+
+            except Exception as e:
+                advertencia = f"No se pudo procesar el archivo: {e}"
 
     return render_template(
         "reporte_agentes.html",
         mensaje=mensaje,
         advertencia=advertencia,
-        turnos_config=turnos_config,
-        lista_agentes=lista_agentes,
-        mapa_turnos=mapa_turnos,
         resumen=resumen,
         tabla_general=tabla_general,
         columnas_visibles=COLUMNAS_VISIBLES,
         secciones_turnos=secciones_turnos,
         orden_columna=orden_columna,
         orden_direccion=orden_direccion,
+        turnos_config=turnos_config,
+        agentes_sin_asignar=agentes_sin_asignar,
     )
-    

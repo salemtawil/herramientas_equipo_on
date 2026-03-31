@@ -4,8 +4,8 @@
 
 {% block content %}
 <div class="card">
-  <h1>Reporte de Stats</h1>
-  <p>Genera reporte de stats de llamadas del dia del usuario</p>
+  <h1>Reporte de agentes</h1>
+  <p>Los turnos están definidos manualmente en el código. El CSV se procesa temporalmente y no se guarda.</p>
 
   {% if mensaje %}
     <div class="success">{{ mensaje }}</div>
@@ -16,91 +16,51 @@
   {% endif %}
 </div>
 
+<details class="card seccion-desplegable">
+  <summary class="titulo-desplegable">
+    <span>Configuración fija de turnos</span>
+    <span class="small">{{ turnos_config|length }} turnos</span>
+  </summary>
+
+  <div class="top-space">
+    <p class="small">
+      Para cambiar turnos, edita el archivo <strong>utils/config_turnos.py</strong>.
+    </p>
+
+    <div class="turno-grid">
+      {% for turno, agentes in turnos_config.items() %}
+      <div class="card">
+        <div class="header-turno">
+          <h3>{{ turno }}</h3>
+          <span class="small">{{ agentes|length }} agentes</span>
+        </div>
+
+        <div class="agente-lista">
+          {% if agentes %}
+            {% for agente in agentes %}
+              <div class="agente-item">
+                <label>{{ agente }}</label>
+              </div>
+            {% endfor %}
+          {% else %}
+            <p class="small">No hay agentes configurados en este turno.</p>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</details>
+
 <div class="card">
-  <h2>1. Cargar CSV</h2>
+  <h2>Cargar CSV</h2>
   <form method="post" enctype="multipart/form-data">
     <div class="row">
       <div><input type="file" name="archivo" accept=".csv"></div>
-      <div><button type="submit" name="accion" value="subir_csv">Cargar CSV</button></div>
+      <div><button type="submit">Procesar CSV</button></div>
     </div>
   </form>
 </div>
-
-<div class="card">
-  <h2>2. Agregar turno</h2>
-  <form method="post">
-    <div class="row">
-      <div><input type="text" name="nuevo_turno" placeholder="Nombre del nuevo turno"></div>
-      <div><button type="submit" name="accion" value="agregar_turno">Agregar turno</button></div>
-    </div>
-  </form>
-</div>
-
-<form method="post">
-  <details class="card seccion-desplegable">
-    <summary class="titulo-desplegable">
-      <span>3. Configuración de turnos</span>
-      <span class="small">{{ turnos_config|length }} turnos</span>
-    </summary>
-
-    <div class="top-space">
-      <p class="small">Ahora puedes seleccionar agentes con un clic, sin usar Ctrl.</p>
-
-      <div class="turno-grid">
-        {% for turno, agentes_guardados in turnos_config.items() %}
-        <div class="card">
-          <div class="header-turno">
-            <h3>{{ turno }}</h3>
-            <button class="btn danger" type="submit" name="accion" value="eliminar_turno:{{ turno }}">Eliminar</button>
-          </div>
-
-          <div class="agente-lista">
-            {% if lista_agentes %}
-              {% for agente in lista_agentes %}
-                {% set otros_turnos = [] %}
-                {% if agente in mapa_turnos %}
-                  {% for t in mapa_turnos[agente] %}
-                    {% if t != turno %}
-                      {% set _ = otros_turnos.append(t) %}
-                    {% endif %}
-                  {% endfor %}
-                {% endif %}
-
-                <div class="agente-item">
-                  <input
-                    type="checkbox"
-                    id="{{ turno }}_{{ loop.index }}"
-                    name="turno::{{ turno }}"
-                    value="{{ agente }}"
-                    {% if agente in agentes_guardados %}checked{% endif %}
-                  >
-                  <label for="{{ turno }}_{{ loop.index }}">
-                    {{ agente }}
-                    {% if otros_turnos %}
-                      <span class="badge badge-usado">En: {{ otros_turnos | join(', ') }}</span>
-                    {% endif %}
-                    {% if agente in agentes_guardados %}
-                      <span class="badge badge-actual">Seleccionado</span>
-                    {% endif %}
-                  </label>
-                </div>
-              {% endfor %}
-            {% else %}
-              <p class="small">Carga primero un CSV para ver agentes.</p>
-            {% endif %}
-          </div>
-        </div>
-        {% endfor %}
-      </div>
-
-      <div class="row-3 top-space">
-        <button type="submit" name="accion" value="guardar_turnos">Guardar turnos</button>
-        <button type="submit" name="accion" value="restablecer_turnos">Restablecer turnos</button>
-        <a class="btn secondary" href="{{ url_for('inicio') }}">Volver al inicio</a>
-      </div>
-    </div>
-  </details>
-</form>
 
 {% if tabla_general %}
 <div class="card">
@@ -139,6 +99,19 @@
       <div class="metric">
         <div class="label">{{ nombre }}</div>
         <div class="value">{{ valor }}</div>
+      </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if agentes_sin_asignar %}
+<div class="card">
+  <h2>Agentes sin asignar</h2>
+  <div class="agente-lista">
+    {% for agente in agentes_sin_asignar %}
+      <div class="agente-item">
+        <label>{{ agente }}</label>
       </div>
     {% endfor %}
   </div>
