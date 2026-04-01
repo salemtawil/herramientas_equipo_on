@@ -7,7 +7,7 @@ from utils.transformaciones import limpiar_texto, validar_columnas
 def leer_csv_subido(file_storage):
     contenido = file_storage.read()
     df = pd.read_csv(io.BytesIO(contenido))
-    validar_columnas(df)
+    df = validar_columnas(df)
     return df
 
 
