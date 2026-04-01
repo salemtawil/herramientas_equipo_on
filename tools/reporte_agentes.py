@@ -17,7 +17,7 @@ reporte_agentes_bp = Blueprint("reporte_agentes", __name__)
 
 def preparar_dataframe(df, turnos_config):
     df = df.copy()
-    validar_columnas(df)
+    df = validar_columnas(df)
 
     df["First Name"] = df["First Name"].apply(limpiar_texto)
     df["Last Name"] = df["Last Name"].apply(limpiar_texto)
@@ -52,6 +52,31 @@ def html_tabla(df):
     return df.to_dict(orient="records")
 
 
+def construir_resumen_turnos(df_final):
+    resumen_turnos = (
+        df_final.groupby("Turno", dropna=False)
+        .agg(
+            Agentes=("Agente", "nunique"),
+            Llamadas=("Llamadas", "sum"),
+            Salientes=("Salientes", "sum"),
+            Perdidas=("Perdidas", "sum"),
+            **{
+                "Mins llamadas": ("Mins llamadas", "sum"),
+                "Mins salientes": ("Mins salientes", "sum"),
+            }
+        )
+        .reset_index()
+    )
+
+    orden_turnos = list(cargar_turnos_fijos().keys()) + ["Sin asignar"]
+    resumen_turnos["orden_turno"] = resumen_turnos["Turno"].apply(
+        lambda x: orden_turnos.index(x) if x in orden_turnos else 999
+    )
+    resumen_turnos = resumen_turnos.sort_values(by="orden_turno").drop(columns=["orden_turno"])
+
+    return html_tabla(resumen_turnos)
+
+
 @reporte_agentes_bp.route("/reporte-agentes", methods=["GET", "POST"])
 def reporte_agentes():
     mensaje = ""
@@ -59,6 +84,7 @@ def reporte_agentes():
     resumen = None
     tabla_general = None
     secciones_turnos = []
+    tabla_resumen_turnos = None
     lista_agentes = []
     agentes_sin_asignar = []
     turnos_config = cargar_turnos_fijos()
@@ -89,6 +115,7 @@ def reporte_agentes():
                 }
 
                 tabla_general = html_tabla(df_final[COLUMNAS_VISIBLES])
+                tabla_resumen_turnos = construir_resumen_turnos(df_final)
 
                 for turno in sorted(turnos_config.keys()):
                     bloque = df_final[df_final["Turno"] == turno][[c for c in COLUMNAS_VISIBLES if c != "Turno"]]
@@ -133,4 +160,5 @@ def reporte_agentes():
         secciones_turnos=secciones_turnos,
         turnos_config=turnos_config,
         agentes_sin_asignar=agentes_sin_asignar,
+        tabla_resumen_turnos=tabla_resumen_turnos,
     )

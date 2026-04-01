@@ -142,6 +142,40 @@
 </div>
 {% endfor %}
 
+{% if tabla_resumen_turnos %}
+<div class="card">
+  <h2>Resumen por turno</h2>
+  <div class="table-wrap">
+    <table class="tabla-ordenable">
+      <thead>
+        <tr>
+          <th>Turno</th>
+          <th>Agentes</th>
+          <th>Llamadas</th>
+          <th>Salientes</th>
+          <th>Perdidas</th>
+          <th>Mins llamadas</th>
+          <th>Mins salientes</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for fila in tabla_resumen_turnos %}
+          <tr>
+            <td>{{ fila["Turno"] }}</td>
+            <td>{{ fila["Agentes"] }}</td>
+            <td>{{ fila["Llamadas"] }}</td>
+            <td>{{ fila["Salientes"] }}</td>
+            <td>{{ fila["Perdidas"] }}</td>
+            <td>{{ fila["Mins llamadas"] }}</td>
+            <td>{{ fila["Mins salientes"] }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
 <script>
 document.addEventListener("DOMContentLoaded", function () {
   const tablas = document.querySelectorAll(".tabla-ordenable");
