@@ -62,35 +62,6 @@
   </form>
 </div>
 
-{% if tabla_general %}
-<div class="card">
-  <h2>Ordenar tabla</h2>
-  <form method="get">
-    <div class="row">
-      <div>
-        <label>Ordenar por</label>
-        <select name="orden_columna" onchange="this.form.submit()">
-          <option value="Llamadas" {% if orden_columna == "Llamadas" %}selected{% endif %}>Llamadas</option>
-          <option value="Salientes" {% if orden_columna == "Salientes" %}selected{% endif %}>Salientes</option>
-          <option value="Perdidas" {% if orden_columna == "Perdidas" %}selected{% endif %}>Perdidas</option>
-          <option value="Mins llamadas" {% if orden_columna == "Mins llamadas" %}selected{% endif %}>Mins llamadas</option>
-          <option value="Mins salientes" {% if orden_columna == "Mins salientes" %}selected{% endif %}>Mins salientes</option>
-          <option value="Nombre" {% if orden_columna == "Nombre" %}selected{% endif %}>Nombre</option>
-          <option value="Turno" {% if orden_columna == "Turno" %}selected{% endif %}>Turno</option>
-        </select>
-      </div>
-      <div>
-        <label>Dirección</label>
-        <select name="orden_direccion" onchange="this.form.submit()">
-          <option value="desc" {% if orden_direccion == "desc" %}selected{% endif %}>Mayor a menor</option>
-          <option value="asc" {% if orden_direccion == "asc" %}selected{% endif %}>Menor a mayor</option>
-        </select>
-      </div>
-    </div>
-  </form>
-</div>
-{% endif %}
-
 {% if resumen %}
 <div class="card">
   <h2>Resumen general</h2>
@@ -122,7 +93,7 @@
 <div class="card">
   <h2>Tabla general</h2>
   <div class="table-wrap">
-    <table>
+    <table class="tabla-ordenable">
       <thead>
         <tr>
           {% for col in columnas_visibles %}
@@ -141,6 +112,7 @@
       </tbody>
     </table>
   </div>
+  <p class="small">Haz clic en el nombre de una columna para ordenar.</p>
 </div>
 {% endif %}
 
@@ -148,7 +120,7 @@
 <div class="card">
   <h3>{{ seccion.nombre }}</h3>
   <div class="table-wrap">
-    <table>
+    <table class="tabla-ordenable">
       <thead>
         <tr>
           {% for col in columnas_visibles if col != "Turno" %}
@@ -169,4 +141,46 @@
   </div>
 </div>
 {% endfor %}
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const tablas = document.querySelectorAll(".tabla-ordenable");
+
+  tablas.forEach((tabla) => {
+    const headers = tabla.querySelectorAll("th");
+
+    headers.forEach((header, index) => {
+      header.style.cursor = "pointer";
+      header.addEventListener("click", () => {
+        const tbody = tabla.querySelector("tbody");
+        const rows = Array.from(tbody.querySelectorAll("tr"));
+        const asc = !header.classList.contains("asc");
+
+        headers.forEach(h => h.classList.remove("asc", "desc"));
+        header.classList.add(asc ? "asc" : "desc");
+
+        rows.sort((a, b) => {
+          const aText = a.children[index].innerText.trim();
+          const bText = b.children[index].innerText.trim();
+
+          const aNum = parseFloat(aText.replace(",", "."));
+          const bNum = parseFloat(bText.replace(",", "."));
+
+          const ambosNumeros = !isNaN(aNum) && !isNaN(bNum);
+
+          if (ambosNumeros) {
+            return asc ? aNum - bNum : bNum - aNum;
+          }
+
+          return asc
+            ? aText.localeCompare(bText, "es", { numeric: true })
+            : bText.localeCompare(aText, "es", { numeric: true });
+        });
+
+        rows.forEach(row => tbody.appendChild(row));
+      });
+    });
+  });
+});
+</script>
 {% endblock %}

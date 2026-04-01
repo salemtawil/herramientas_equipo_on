@@ -63,27 +63,6 @@ def reporte_agentes():
     agentes_sin_asignar = []
     turnos_config = cargar_turnos_fijos()
 
-    orden_columna = request.args.get("orden_columna", "Llamadas")
-    orden_direccion = request.args.get("orden_direccion", "desc")
-
-    columnas_ordenables = [
-        "Llamadas",
-        "Salientes",
-        "Perdidas",
-        "Mins llamadas",
-        "Mins salientes",
-        "Nombre",
-        "Turno",
-    ]
-
-    if orden_columna not in columnas_ordenables:
-        orden_columna = "Llamadas"
-
-    if orden_direccion not in ["asc", "desc"]:
-        orden_direccion = "desc"
-
-    ascendente = orden_direccion == "asc"
-
     if request.method == "POST":
         archivo = request.files.get("archivo")
 
@@ -99,7 +78,6 @@ def reporte_agentes():
                     advertencia = "Estos agentes están repetidos en la configuración de turnos: " + ", ".join(repetidos)
 
                 df_final = preparar_dataframe(df, turnos_config)
-                df_final = df_final.sort_values(by=orden_columna, ascending=ascendente, kind="stable")
 
                 resumen = {
                     "Agentes": int(df_final["Agente"].nunique()),
@@ -153,8 +131,6 @@ def reporte_agentes():
         tabla_general=tabla_general,
         columnas_visibles=COLUMNAS_VISIBLES,
         secciones_turnos=secciones_turnos,
-        orden_columna=orden_columna,
-        orden_direccion=orden_direccion,
         turnos_config=turnos_config,
         agentes_sin_asignar=agentes_sin_asignar,
     )
