@@ -7,6 +7,10 @@
   <h1>Reporte de agentes</h1>
   <p>Los turnos están definidos manualmente en el código. El CSV se procesa temporalmente y no se guarda.</p>
 
+	<div class="top-space">
+		<a class="btn secondary" href="{{ url_for('inicio') }}">Volver al inicio</a>
+	</div>
+
   {% if mensaje %}
     <div class="success">{{ mensaje }}</div>
   {% endif %}
