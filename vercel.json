@@ -1,4 +1,5 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
   "builds": [
     {
@@ -11,5 +12,7 @@
       "src": "/(.*)",
       "dest": "app.py"
     }
-  ]
+  ],
+  "installCommand": "pip install -r requirements.txt && python -m playwright install chromium",
+  "buildCommand": "echo build-complete"
 }
