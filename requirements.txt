@@ -1,2 +1,4 @@
-flask
+Flask
 pandas
+playwright
+requests
