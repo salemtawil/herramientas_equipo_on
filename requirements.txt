@@ -1,5 +1,4 @@
 Flask
 pandas
-playwright
 requests
 boto3

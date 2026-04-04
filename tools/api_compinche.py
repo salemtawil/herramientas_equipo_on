@@ -35,20 +35,21 @@ def _headers(token):
         "user-agent": "Mozilla/5.0"
     }
 
-def _extraer_items(data):
-    if isinstance(data, dict):
-        return data.get("Items", [])
-    return []
-
 def _request_json(url, token):
     response = requests.get(url, headers=_headers(token), timeout=30)
     response.raise_for_status()
     return response.json()
 
-def obtener_items_compinche(token):
-    return _extraer_items(_request_json(COMPINCHE_USERS_URL, token))
+def _extraer_items(data):
+    if isinstance(data, dict):
+        return data.get("Items", [])
+    return []
 
-def obtener_admins(token):
+def obtener_usuarios_compinche(token):
+    data = _request_json(COMPINCHE_USERS_URL, token)
+    return _extraer_items(data)
+
+def obtener_admins_compinche(token):
     data = _request_json(COMPINCHE_ADMINS_URL, token)
     return data if isinstance(data, list) else []
 
@@ -56,13 +57,13 @@ def obtener_metricas_compinche_api():
     token = COMPINCHE_ID_TOKEN
 
     try:
-        usuarios = obtener_items_compinche(token)
-        admins = obtener_admins(token)
+        usuarios = obtener_usuarios_compinche(token)
+        admins = obtener_admins_compinche(token)
     except Exception:
         nuevos = refrescar_compinche_token()
         token = nuevos["id_token"]
-        usuarios = obtener_items_compinche(token)
-        admins = obtener_admins(token)
+        usuarios = obtener_usuarios_compinche(token)
+        admins = obtener_admins_compinche(token)
 
     admin_phones = {
         admin.get("phoneNumber")
