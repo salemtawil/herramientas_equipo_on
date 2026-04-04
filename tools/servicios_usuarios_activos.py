@@ -1,13 +1,10 @@
 from datetime import datetime
 from threading import Thread, Lock
 from concurrent.futures import ThreadPoolExecutor
-import os
 
 from tools.api_compinche import obtener_metricas_compinche_api
-from tools.scraper_paripe import obtener_metricas_paripe
+from tools.api_paripe import obtener_metricas_paripe_api
 from tools.api_multiadmin import obtener_metricas_multiadmin
-
-EN_VERCEL = os.getenv("VERCEL") == "1"
 
 estado_lock = Lock()
 
@@ -100,23 +97,10 @@ def proceso_compinche():
 def proceso_paripe():
     ahora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    if EN_VERCEL:
-        actualizar_estado(
-            "Paripe",
-            good_standing_users=0,
-            photo_pool=0,
-            updated_at=ahora,
-            progress="No disponible en Vercel",
-            error="Este sistema usa navegador automático y solo está disponible en entorno local."
-        )
-        return
-
     try:
-        actualizar_estado("Paripe", progress="Abriendo login...", error=None)
+        actualizar_estado("Paripe", progress="Consultando API interna...", error=None)
 
-        metricas = obtener_metricas_paripe(
-            callback_progreso=lambda mensaje: actualizar_estado("Paripe", progress=mensaje)
-        )
+        metricas = obtener_metricas_paripe_api()
 
         actualizar_estado(
             "Paripe",
