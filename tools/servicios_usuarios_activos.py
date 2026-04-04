@@ -1,10 +1,13 @@
 from datetime import datetime
 from threading import Thread, Lock
 from concurrent.futures import ThreadPoolExecutor
+import os
 
-from tools.scraper_compinche import obtener_metricas_compinche
+from tools.api_compinche import obtener_metricas_compinche_api
 from tools.scraper_paripe import obtener_metricas_paripe
 from tools.api_multiadmin import obtener_metricas_multiadmin
+
+EN_VERCEL = os.getenv("VERCEL") == "1"
 
 estado_lock = Lock()
 
@@ -73,16 +76,14 @@ def proceso_compinche():
     ahora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     try:
-        actualizar_estado("Compinche", progress="Abriendo login...", error=None)
+        actualizar_estado("Compinche", progress="Consultando API interna...", error=None)
 
-        metricas = obtener_metricas_compinche(
-            callback_progreso=lambda mensaje: actualizar_estado("Compinche", progress=mensaje)
-        )
+        metricas = obtener_metricas_compinche_api()
 
         actualizar_estado(
             "Compinche",
-            active_users=metricas.get("active_users") or 0,
-            running_users=metricas.get("running_users") or 0,
+            active_users=metricas.get("active_users", 0),
+            running_users=metricas.get("running_users", 0),
             updated_at=ahora,
             progress="Completado",
             error=None
@@ -99,6 +100,17 @@ def proceso_compinche():
 def proceso_paripe():
     ahora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+    if EN_VERCEL:
+        actualizar_estado(
+            "Paripe",
+            good_standing_users=0,
+            photo_pool=0,
+            updated_at=ahora,
+            progress="No disponible en Vercel",
+            error="Este sistema usa navegador automático y solo está disponible en entorno local."
+        )
+        return
+
     try:
         actualizar_estado("Paripe", progress="Abriendo login...", error=None)
 
@@ -108,8 +120,8 @@ def proceso_paripe():
 
         actualizar_estado(
             "Paripe",
-            good_standing_users=metricas.get("good_standing_users") or 0,
-            photo_pool=metricas.get("photo_pool") or 0,
+            good_standing_users=metricas.get("good_standing_users", 0),
+            photo_pool=metricas.get("photo_pool", 0),
             updated_at=ahora,
             progress="Completado",
             error=None
