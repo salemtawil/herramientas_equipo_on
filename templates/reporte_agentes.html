@@ -95,6 +95,74 @@
 </details>
 {% endif %}
 
+{% if top_5_mejores %}
+<details class="card seccion-desplegable">
+  <summary class="titulo-desplegable">
+    <span>Top 5 mejores valorados</span>
+    <span class="small">Score por desempeño</span>
+  </summary>
+
+  <div class="top-space">
+    <div class="table-wrap table-wrap-elevated">
+      <table class="tabla-ordenable tabla-moderna tabla-ranking">
+        <thead>
+          <tr>
+            {% for col in columnas_ranking %}
+              <th>{{ col }}</th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for fila in top_5_mejores %}
+            <tr>
+              {% for col in columnas_ranking %}
+                <td class="{% if col == 'Score' %}score-cell{% endif %}">
+                  {{ fila[col] }}
+                </td>
+              {% endfor %}
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</details>
+{% endif %}
+
+{% if top_5_peores %}
+<details class="card seccion-desplegable">
+  <summary class="titulo-desplegable">
+    <span>Top 5 peores valorados</span>
+    <span class="small">Score por desempeño</span>
+  </summary>
+
+  <div class="top-space">
+    <div class="table-wrap table-wrap-elevated">
+      <table class="tabla-ordenable tabla-moderna tabla-ranking">
+        <thead>
+          <tr>
+            {% for col in columnas_ranking %}
+              <th>{{ col }}</th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for fila in top_5_peores %}
+            <tr>
+              {% for col in columnas_ranking %}
+                <td class="{% if col == 'Score' %}score-cell{% endif %}">
+                  {{ fila[col] }}
+                </td>
+              {% endfor %}
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</details>
+{% endif %}
+
 {% if agentes_sin_asignar %}
 <details class="card seccion-desplegable">
   <summary class="titulo-desplegable">

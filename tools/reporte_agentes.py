@@ -52,10 +52,6 @@ def html_tabla(df):
     return df.to_dict(orient="records")
 
 
-def es_valor_numerico(valor):
-    return isinstance(valor, (int, float)) and not pd.isna(valor)
-
-
 def construir_fila_totales(df, columnas, etiqueta="TOTAL"):
     fila_total = {}
 
@@ -101,6 +97,83 @@ def construir_resumen_turnos(df_final):
     return resumen_turnos
 
 
+def normalizar_serie_0_100(serie):
+    serie = serie.fillna(0).astype(float)
+    minimo = serie.min()
+    maximo = serie.max()
+
+    if maximo == minimo:
+        return pd.Series([50.0] * len(serie), index=serie.index)
+
+    return ((serie - minimo) / (maximo - minimo)) * 100
+
+
+def construir_ranking_agentes(df_final):
+    columnas_base = [
+        "Agente",
+        "Turno",
+        "Llamadas",
+        "Salientes",
+        "Perdidas",
+        "Mins llamadas",
+        "Mins salientes",
+    ]
+
+    df_ranking = df_final[columnas_base].copy()
+
+    agrupado = (
+        df_ranking.groupby(["Agente", "Turno"], dropna=False)
+        .agg(
+            Llamadas=("Llamadas", "sum"),
+            Salientes=("Salientes", "sum"),
+            Perdidas=("Perdidas", "sum"),
+            **{
+                "Mins llamadas": ("Mins llamadas", "sum"),
+                "Mins salientes": ("Mins salientes", "sum"),
+            }
+        )
+        .reset_index()
+    )
+
+    agrupado["score_llamadas"] = normalizar_serie_0_100(agrupado["Llamadas"])
+    agrupado["score_salientes"] = normalizar_serie_0_100(agrupado["Salientes"])
+    agrupado["score_mins_llamadas"] = normalizar_serie_0_100(agrupado["Mins llamadas"])
+    agrupado["score_mins_salientes"] = normalizar_serie_0_100(agrupado["Mins salientes"])
+    agrupado["score_perdidas"] = 100 - normalizar_serie_0_100(agrupado["Perdidas"])
+
+    agrupado["Score"] = (
+        agrupado["score_llamadas"] * 0.25
+        + agrupado["score_salientes"] * 0.20
+        + agrupado["score_mins_llamadas"] * 0.20
+        + agrupado["score_mins_salientes"] * 0.20
+        + agrupado["score_perdidas"] * 0.15
+    ).round(2)
+
+    columnas_salida = [
+        "Agente",
+        "Turno",
+        "Llamadas",
+        "Salientes",
+        "Perdidas",
+        "Mins llamadas",
+        "Mins salientes",
+        "Score",
+    ]
+
+    ranking = agrupado[columnas_salida].sort_values(
+        by=["Score", "Llamadas", "Salientes"],
+        ascending=[False, False, False],
+    ).reset_index(drop=True)
+
+    top_5_mejores = ranking.head(5).copy()
+    top_5_peores = ranking.sort_values(
+        by=["Score", "Perdidas"],
+        ascending=[True, False],
+    ).head(5).copy()
+
+    return ranking, top_5_mejores, top_5_peores
+
+
 @reporte_agentes_bp.route("/reporte-agentes", methods=["GET", "POST"])
 def reporte_agentes():
     mensaje = ""
@@ -115,6 +188,19 @@ def reporte_agentes():
 
     totales_tabla_general = None
     totales_resumen_turnos = None
+
+    top_5_mejores = None
+    top_5_peores = None
+    columnas_ranking = [
+        "Agente",
+        "Turno",
+        "Llamadas",
+        "Salientes",
+        "Perdidas",
+        "Mins llamadas",
+        "Mins salientes",
+        "Score",
+    ]
 
     if request.method == "POST":
         archivo = request.files.get("archivo")
@@ -162,6 +248,10 @@ def reporte_agentes():
                     columnas_resumen_turnos,
                     etiqueta="TOTAL",
                 )
+
+                _, df_top_5_mejores, df_top_5_peores = construir_ranking_agentes(df_final)
+                top_5_mejores = html_tabla(df_top_5_mejores)
+                top_5_peores = html_tabla(df_top_5_peores)
 
                 for turno in sorted(turnos_config.keys()):
                     columnas_turno = [c for c in COLUMNAS_VISIBLES if c != "Turno"]
@@ -211,4 +301,7 @@ def reporte_agentes():
         tabla_resumen_turnos=tabla_resumen_turnos,
         totales_tabla_general=totales_tabla_general,
         totales_resumen_turnos=totales_resumen_turnos,
+        top_5_mejores=top_5_mejores,
+        top_5_peores=top_5_peores,
+        columnas_ranking=columnas_ranking,
     )
