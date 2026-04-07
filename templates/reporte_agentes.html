@@ -7,9 +7,15 @@
   <h1>Reporte de agentes</h1>
   <p>Los turnos están definidos manualmente en el código. El CSV se procesa temporalmente y no se guarda.</p>
 
-	<div class="top-space">
-		<a class="btn secondary" href="{{ url_for('inicio') }}">Volver al inicio</a>
-	</div>
+  <div class="top-space">
+    <a class="btn secondary" href="{{ url_for('inicio') }}">Volver al inicio</a>
+  </div>
+
+  <div class="top-space acciones-superiores">
+    <button type="button" id="toggle-theme" class="btn secondary">
+      Cambiar modo
+    </button>
+  </div>
 
   {% if mensaje %}
     <div class="success">{{ mensaje }}</div>
@@ -67,121 +73,178 @@
 </div>
 
 {% if resumen %}
-<div class="card">
-  <h2>Resumen general</h2>
-  <div class="grid">
-    {% for nombre, valor in resumen.items() %}
-      <div class="metric">
-        <div class="label">{{ nombre }}</div>
-        <div class="value">{{ valor }}</div>
-      </div>
-    {% endfor %}
+<details class="card seccion-desplegable">
+  <summary class="titulo-desplegable">
+    <span>Resumen general</span>
+    <span class="small">Ver detalles</span>
+  </summary>
+
+  <div class="top-space">
+    <div class="grid">
+      {% for nombre, valor in resumen.items() %}
+        <div class="metric">
+          <div class="label">{{ nombre }}</div>
+          <div class="value">{{ valor }}</div>
+        </div>
+      {% endfor %}
+    </div>
   </div>
-</div>
+</details>
 {% endif %}
 
 {% if agentes_sin_asignar %}
-<div class="card">
-  <h2>Agentes sin asignar</h2>
-  <div class="agente-lista">
-    {% for agente in agentes_sin_asignar %}
-      <div class="agente-item">
-        <label>{{ agente }}</label>
-      </div>
-    {% endfor %}
+<details class="card seccion-desplegable">
+  <summary class="titulo-desplegable">
+    <span>Agentes sin asignar</span>
+    <span class="small">{{ agentes_sin_asignar|length }} agentes</span>
+  </summary>
+
+  <div class="top-space">
+    <div class="agente-lista">
+      {% for agente in agentes_sin_asignar %}
+        <div class="agente-item">
+          <label>{{ agente }}</label>
+        </div>
+      {% endfor %}
+    </div>
   </div>
-</div>
+</details>
 {% endif %}
 
 {% if tabla_general %}
-<div class="card">
-  <h2>Tabla general</h2>
-  <div class="table-wrap">
-    <table class="tabla-ordenable">
-      <thead>
-        <tr>
-          {% for col in columnas_visibles %}
-            <th>{{ col }}</th>
-          {% endfor %}
-        </tr>
-      </thead>
-      <tbody>
-        {% for fila in tabla_general %}
+<details class="card seccion-desplegable">
+  <summary class="titulo-desplegable">
+    <span>Tabla general</span>
+    <span class="small">{{ tabla_general|length }} filas</span>
+  </summary>
+
+  <div class="top-space">
+    <div class="table-wrap">
+      <table class="tabla-ordenable tabla-moderna">
+        <thead>
           <tr>
             {% for col in columnas_visibles %}
-              <td>{{ fila[col] }}</td>
+              <th>{{ col }}</th>
             {% endfor %}
           </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {% for fila in tabla_general %}
+            <tr>
+              {% for col in columnas_visibles %}
+                <td>{{ fila[col] }}</td>
+              {% endfor %}
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="small">Haz clic en el nombre de una columna para ordenar.</p>
   </div>
-  <p class="small">Haz clic en el nombre de una columna para ordenar.</p>
-</div>
+</details>
 {% endif %}
 
 {% for seccion in secciones_turnos %}
-<div class="card">
-  <h3>{{ seccion.nombre }}</h3>
-  <div class="table-wrap">
-    <table class="tabla-ordenable">
-      <thead>
-        <tr>
-          {% for col in columnas_visibles if col != "Turno" %}
-            <th>{{ col }}</th>
-          {% endfor %}
-        </tr>
-      </thead>
-      <tbody>
-        {% for fila in seccion.filas %}
+<details class="card seccion-desplegable">
+  <summary class="titulo-desplegable">
+    <span>{{ seccion.nombre }}</span>
+    <span class="small">{{ seccion.filas|length }} filas</span>
+  </summary>
+
+  <div class="top-space">
+    <div class="table-wrap">
+      <table class="tabla-ordenable tabla-moderna">
+        <thead>
           <tr>
             {% for col in columnas_visibles if col != "Turno" %}
-              <td>{{ fila[col] }}</td>
+              <th>{{ col }}</th>
             {% endfor %}
           </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {% for fila in seccion.filas %}
+            <tr>
+              {% for col in columnas_visibles if col != "Turno" %}
+                <td>{{ fila[col] }}</td>
+              {% endfor %}
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   </div>
-</div>
+</details>
 {% endfor %}
 
 {% if tabla_resumen_turnos %}
-<div class="card">
-  <h2>Resumen por turno</h2>
-  <div class="table-wrap">
-    <table class="tabla-ordenable">
-      <thead>
-        <tr>
-          <th>Turno</th>
-          <th>Agentes</th>
-          <th>Llamadas</th>
-          <th>Salientes</th>
-          <th>Perdidas</th>
-          <th>Mins llamadas</th>
-          <th>Mins salientes</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for fila in tabla_resumen_turnos %}
+<details class="card seccion-desplegable">
+  <summary class="titulo-desplegable">
+    <span>Resumen por turno</span>
+    <span class="small">{{ tabla_resumen_turnos|length }} turnos</span>
+  </summary>
+
+  <div class="top-space">
+    <div class="table-wrap">
+      <table class="tabla-ordenable tabla-moderna">
+        <thead>
           <tr>
-            <td>{{ fila["Turno"] }}</td>
-            <td>{{ fila["Agentes"] }}</td>
-            <td>{{ fila["Llamadas"] }}</td>
-            <td>{{ fila["Salientes"] }}</td>
-            <td>{{ fila["Perdidas"] }}</td>
-            <td>{{ fila["Mins llamadas"] }}</td>
-            <td>{{ fila["Mins salientes"] }}</td>
+            <th>Turno</th>
+            <th>Agentes</th>
+            <th>Llamadas</th>
+            <th>Salientes</th>
+            <th>Perdidas</th>
+            <th>Mins llamadas</th>
+            <th>Mins salientes</th>
           </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {% for fila in tabla_resumen_turnos %}
+            <tr>
+              <td>{{ fila["Turno"] }}</td>
+              <td>{{ fila["Agentes"] }}</td>
+              <td>{{ fila["Llamadas"] }}</td>
+              <td>{{ fila["Salientes"] }}</td>
+              <td>{{ fila["Perdidas"] }}</td>
+              <td>{{ fila["Mins llamadas"] }}</td>
+              <td>{{ fila["Mins salientes"] }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   </div>
-</div>
+</details>
 {% endif %}
 
 <script>
 document.addEventListener("DOMContentLoaded", function () {
+  const body = document.body;
+  const toggleThemeBtn = document.getElementById("toggle-theme");
+
+  function aplicarTextoBotonTema() {
+    if (!toggleThemeBtn) return;
+    toggleThemeBtn.textContent = body.classList.contains("dark-mode")
+      ? "Modo claro"
+      : "Modo oscuro";
+  }
+
+  const temaGuardado = localStorage.getItem("theme");
+  if (temaGuardado === "dark") {
+    body.classList.add("dark-mode");
+  }
+  aplicarTextoBotonTema();
+
+  if (toggleThemeBtn) {
+    toggleThemeBtn.addEventListener("click", function () {
+      body.classList.toggle("dark-mode");
+      localStorage.setItem(
+        "theme",
+        body.classList.contains("dark-mode") ? "dark" : "light"
+      );
+      aplicarTextoBotonTema();
+    });
+  }
+
   const tablas = document.querySelectorAll(".tabla-ordenable");
 
   tablas.forEach((tabla) => {
