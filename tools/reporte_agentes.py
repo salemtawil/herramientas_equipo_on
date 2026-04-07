@@ -52,6 +52,30 @@ def html_tabla(df):
     return df.to_dict(orient="records")
 
 
+def es_valor_numerico(valor):
+    return isinstance(valor, (int, float)) and not pd.isna(valor)
+
+
+def construir_fila_totales(df, columnas, etiqueta="TOTAL"):
+    fila_total = {}
+
+    if df is None or df.empty:
+        for i, col in enumerate(columnas):
+            fila_total[col] = etiqueta if i == 0 else ""
+        return fila_total
+
+    for i, col in enumerate(columnas):
+        if i == 0:
+            fila_total[col] = etiqueta
+        elif col in df.columns and pd.api.types.is_numeric_dtype(df[col]):
+            total = df[col].fillna(0).sum()
+            fila_total[col] = int(total) if float(total).is_integer() else round(total, 2)
+        else:
+            fila_total[col] = ""
+
+    return fila_total
+
+
 def construir_resumen_turnos(df_final):
     resumen_turnos = (
         df_final.groupby("Turno", dropna=False)
@@ -74,7 +98,7 @@ def construir_resumen_turnos(df_final):
     )
     resumen_turnos = resumen_turnos.sort_values(by="orden_turno").drop(columns=["orden_turno"])
 
-    return html_tabla(resumen_turnos)
+    return resumen_turnos
 
 
 @reporte_agentes_bp.route("/reporte-agentes", methods=["GET", "POST"])
@@ -88,6 +112,9 @@ def reporte_agentes():
     lista_agentes = []
     agentes_sin_asignar = []
     turnos_config = cargar_turnos_fijos()
+
+    totales_tabla_general = None
+    totales_resumen_turnos = None
 
     if request.method == "POST":
         archivo = request.files.get("archivo")
@@ -114,27 +141,48 @@ def reporte_agentes():
                     "Mins salientes": int(df_final["Mins salientes"].sum()),
                 }
 
-                tabla_general = html_tabla(df_final[COLUMNAS_VISIBLES])
-                tabla_resumen_turnos = construir_resumen_turnos(df_final)
+                df_tabla_general = df_final[COLUMNAS_VISIBLES].copy()
+                tabla_general = html_tabla(df_tabla_general)
+                totales_tabla_general = construir_fila_totales(df_tabla_general, COLUMNAS_VISIBLES, etiqueta="TOTAL")
+
+                df_resumen_turnos = construir_resumen_turnos(df_final)
+                tabla_resumen_turnos = html_tabla(df_resumen_turnos)
+
+                columnas_resumen_turnos = [
+                    "Turno",
+                    "Agentes",
+                    "Llamadas",
+                    "Salientes",
+                    "Perdidas",
+                    "Mins llamadas",
+                    "Mins salientes",
+                ]
+                totales_resumen_turnos = construir_fila_totales(
+                    df_resumen_turnos,
+                    columnas_resumen_turnos,
+                    etiqueta="TOTAL",
+                )
 
                 for turno in sorted(turnos_config.keys()):
-                    bloque = df_final[df_final["Turno"] == turno][[c for c in COLUMNAS_VISIBLES if c != "Turno"]]
+                    columnas_turno = [c for c in COLUMNAS_VISIBLES if c != "Turno"]
+                    bloque = df_final[df_final["Turno"] == turno][columnas_turno].copy()
                     if not bloque.empty:
                         secciones_turnos.append(
                             {
                                 "nombre": turno,
                                 "filas": html_tabla(bloque),
+                                "totales": construir_fila_totales(bloque, columnas_turno, etiqueta="TOTAL"),
                             }
                         )
 
-                bloque_sin = df_final[df_final["Turno"] == "Sin asignar"][
-                    [c for c in COLUMNAS_VISIBLES if c != "Turno"]
-                ]
+                columnas_turno = [c for c in COLUMNAS_VISIBLES if c != "Turno"]
+                bloque_sin = df_final[df_final["Turno"] == "Sin asignar"][columnas_turno].copy()
                 if not bloque_sin.empty:
                     secciones_turnos.append(
                         {
                             "nombre": "Sin asignar",
                             "filas": html_tabla(bloque_sin),
+                            "totales": construir_fila_totales(bloque_sin, columnas_turno, etiqueta="TOTAL"),
                         }
                     )
 
@@ -161,4 +209,6 @@ def reporte_agentes():
         turnos_config=turnos_config,
         agentes_sin_asignar=agentes_sin_asignar,
         tabla_resumen_turnos=tabla_resumen_turnos,
+        totales_tabla_general=totales_tabla_general,
+        totales_resumen_turnos=totales_resumen_turnos,
     )

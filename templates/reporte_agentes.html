@@ -140,6 +140,13 @@
             </tr>
           {% endfor %}
         </tbody>
+        <tfoot>
+          <tr class="fila-total">
+            {% for col in columnas_visibles %}
+              <td>{{ totales_tabla_general[col] if totales_tabla_general else "" }}</td>
+            {% endfor %}
+          </tr>
+        </tfoot>
       </table>
     </div>
     <p class="small top-space-sm">Haz clic en el nombre de una columna para ordenar.</p>
@@ -173,6 +180,13 @@
             </tr>
           {% endfor %}
         </tbody>
+        <tfoot>
+          <tr class="fila-total">
+            {% for col in columnas_visibles if col != "Turno" %}
+              <td>{{ seccion.totales[col] if seccion.totales else "" }}</td>
+            {% endfor %}
+          </tr>
+        </tfoot>
       </table>
     </div>
   </div>
@@ -213,6 +227,17 @@
             </tr>
           {% endfor %}
         </tbody>
+        <tfoot>
+          <tr class="fila-total">
+            <td>{{ totales_resumen_turnos["Turno"] if totales_resumen_turnos else "" }}</td>
+            <td>{{ totales_resumen_turnos["Agentes"] if totales_resumen_turnos else "" }}</td>
+            <td>{{ totales_resumen_turnos["Llamadas"] if totales_resumen_turnos else "" }}</td>
+            <td>{{ totales_resumen_turnos["Salientes"] if totales_resumen_turnos else "" }}</td>
+            <td>{{ totales_resumen_turnos["Perdidas"] if totales_resumen_turnos else "" }}</td>
+            <td>{{ totales_resumen_turnos["Mins llamadas"] if totales_resumen_turnos else "" }}</td>
+            <td>{{ totales_resumen_turnos["Mins salientes"] if totales_resumen_turnos else "" }}</td>
+          </tr>
+        </tfoot>
       </table>
     </div>
   </div>
