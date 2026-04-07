@@ -3,17 +3,16 @@
 {% block title %}Reporte de agentes{% endblock %}
 
 {% block content %}
-<div class="card">
-  <h1>Reporte de agentes</h1>
-  <p>Los turnos están definidos manualmente en el código. El CSV se procesa temporalmente y no se guarda.</p>
-
-  <div class="top-space">
-    <a class="btn secondary" href="{{ url_for('inicio') }}">Volver al inicio</a>
+<div class="card hero-card">
+  <div class="hero-titulo">
+    <h1>Reporte de agentes</h1>
+    <p>Los turnos están definidos manualmente en el código. El CSV se procesa temporalmente y no se guarda.</p>
   </div>
 
-  <div class="top-space acciones-superiores">
-    <button type="button" id="toggle-theme" class="btn secondary">
-      Cambiar modo
+  <div class="top-space top-actions">
+    <a class="btn secondary" href="{{ url_for('inicio') }}">Volver al inicio</a>
+    <button type="button" id="toggle-theme" class="btn">
+      Modo oscuro
     </button>
   </div>
 
@@ -39,7 +38,7 @@
 
     <div class="turno-grid">
       {% for turno, agentes in turnos_config.items() %}
-      <div class="card">
+      <div class="card turno-card">
         <div class="header-turno">
           <h3>{{ turno }}</h3>
           <span class="small">{{ agentes|length }} agentes</span>
@@ -66,8 +65,12 @@
   <h2>Cargar CSV</h2>
   <form method="post" enctype="multipart/form-data">
     <div class="row">
-      <div><input type="file" name="archivo" accept=".csv"></div>
-      <div><button type="submit">Procesar CSV</button></div>
+      <div>
+        <input type="file" name="archivo" accept=".csv">
+      </div>
+      <div>
+        <button type="submit">Procesar CSV</button>
+      </div>
     </div>
   </form>
 </div>
@@ -119,7 +122,7 @@
   </summary>
 
   <div class="top-space">
-    <div class="table-wrap">
+    <div class="table-wrap table-wrap-elevated">
       <table class="tabla-ordenable tabla-moderna">
         <thead>
           <tr>
@@ -139,7 +142,7 @@
         </tbody>
       </table>
     </div>
-    <p class="small">Haz clic en el nombre de una columna para ordenar.</p>
+    <p class="small top-space-sm">Haz clic en el nombre de una columna para ordenar.</p>
   </div>
 </details>
 {% endif %}
@@ -152,7 +155,7 @@
   </summary>
 
   <div class="top-space">
-    <div class="table-wrap">
+    <div class="table-wrap table-wrap-elevated">
       <table class="tabla-ordenable tabla-moderna">
         <thead>
           <tr>
@@ -184,7 +187,7 @@
   </summary>
 
   <div class="top-space">
-    <div class="table-wrap">
+    <div class="table-wrap table-wrap-elevated">
       <table class="tabla-ordenable tabla-moderna">
         <thead>
           <tr>
