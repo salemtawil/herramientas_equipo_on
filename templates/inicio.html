@@ -10,13 +10,26 @@
 
 <div class="card">
   <h2>Reporte de stats</h2>
-  <p>Carga un CSV, convierte las stats de turno.</p>
-  <a class="btn" href="{{ url_for('reporte_agentes.reporte_agentes') }}">Abrir reporte de stats</a>
+  <p>Herramientas para trabajar con reportes CSV de agentes.</p>
+
+  <div class="herramientas-relacionadas">
+    <div class="subherramienta">
+      <h3>Reporte de stats</h3>
+      <p>Carga un CSV y genera el reporte general por agente, turnos, resumen y ranking.</p>
+      <a class="btn" href="{{ url_for('reporte_agentes.reporte_agentes') }}">Abrir reporte de stats</a>
+    </div>
+
+    <div class="subherramienta subherramienta-destacada">
+      <h3>Comparar CSV</h3>
+      <p>Compara un CSV contra el reporte base y visualiza diferencias en llamadas, salientes, minutos y perdidas.</p>
+      <a class="btn secondary" href="/comparar-csv">Abrir comparador CSV</a>
+    </div>
+  </div>
 </div>
 
 <div class="card">
-    <h2>Usuarios activos</h2>
-    <p>Consulta usuarios activos de distintos sistemas en un solo lugar.</p>
-    <a href="/usuarios-activos/" class="btn">Abrir usuarios activos</a>
+  <h2>Usuarios activos</h2>
+  <p>Consulta usuarios activos de distintos sistemas en un solo lugar.</p>
+  <a href="/usuarios-activos/" class="btn">Abrir usuarios activos</a>
 </div>
 {% endblock %}

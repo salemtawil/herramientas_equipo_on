@@ -87,70 +87,6 @@
 </details>
 {% endif %}
 
-{% if top_5_mejores %}
-<details class="card seccion-desplegable">
-  <summary class="titulo-desplegable">
-    <span>Top 5 mejores valorados</span>
-    <span class="small">Score por desempeño</span>
-  </summary>
-
-  <div class="top-space">
-    <div class="table-wrap">
-      <table class="tabla-ordenable tabla-ranking">
-        <thead>
-          <tr>
-            {% for col in columnas_ranking %}
-              <th>{{ col }}</th>
-            {% endfor %}
-          </tr>
-        </thead>
-        <tbody>
-          {% for fila in top_5_mejores %}
-            <tr>
-              {% for col in columnas_ranking %}
-                <td class="{% if col == 'Score' %}score-cell{% endif %}">{{ fila[col] }}</td>
-              {% endfor %}
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </div>
-</details>
-{% endif %}
-
-{% if top_5_peores %}
-<details class="card seccion-desplegable">
-  <summary class="titulo-desplegable">
-    <span>Top 5 peores valorados</span>
-    <span class="small">Score por desempeño</span>
-  </summary>
-
-  <div class="top-space">
-    <div class="table-wrap">
-      <table class="tabla-ordenable tabla-ranking">
-        <thead>
-          <tr>
-            {% for col in columnas_ranking %}
-              <th>{{ col }}</th>
-            {% endfor %}
-          </tr>
-        </thead>
-        <tbody>
-          {% for fila in top_5_peores %}
-            <tr>
-              {% for col in columnas_ranking %}
-                <td class="{% if col == 'Score' %}score-cell{% endif %}">{{ fila[col] }}</td>
-              {% endfor %}
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </div>
-</details>
-{% endif %}
-
 {% if agentes_sin_asignar %}
 <details class="card seccion-desplegable">
   <summary class="titulo-desplegable">
@@ -300,6 +236,93 @@
 </details>
 {% endif %}
 
+{% if top_5_mejores or top_5_peores %}
+<details class="card seccion-desplegable" open>
+  <summary class="titulo-desplegable">
+    <span>Ranking visual de agentes</span>
+    <span class="small">Excluye Admin y Otros</span>
+  </summary>
+
+  <div class="top-space ranking-dual">
+    <div class="ranking-panel ranking-mejores">
+      <div class="ranking-header">
+        <h3>Top 5 mejores</h3>
+        <span class="ranking-badge">Mayor score</span>
+      </div>
+
+      {% if top_5_mejores %}
+        <div class="ranking-lista">
+          {% for fila in top_5_mejores %}
+            {% set score = fila["Score"]|float %}
+            {% set score_width = score if score <= 100 else 100 %}
+            <div class="ranking-card ranking-card-mejor">
+              <div class="ranking-card-top">
+                <div class="ranking-posicion">
+                  {% if loop.index == 1 %}🥇
+                  {% elif loop.index == 2 %}🥈
+                  {% elif loop.index == 3 %}🥉
+                  {% else %}#{{ loop.index }}
+                  {% endif %}
+                </div>
+                <div class="ranking-principal">
+                  <div class="ranking-nombre">{{ fila["Agente"] }}</div>
+                  <div class="ranking-turno">{{ fila["Turno"] }}</div>
+                </div>
+                <div class="ranking-score ranking-score-alto">{{ fila["Score"] }}</div>
+              </div>
+
+              <div class="score-barra">
+                <div class="score-barra-fill score-barra-fill-alto" style="width: {{ score_width }}%;"></div>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="small">No hay datos suficientes para mostrar el ranking.</p>
+      {% endif %}
+    </div>
+
+    <div class="ranking-panel ranking-peores">
+      <div class="ranking-header">
+        <h3>Top 5 peores</h3>
+        <span class="ranking-badge ranking-badge-peor">Menor score</span>
+      </div>
+
+      {% if top_5_peores %}
+        <div class="ranking-lista">
+          {% for fila in top_5_peores %}
+            {% set score = fila["Score"]|float %}
+            {% set score_width = score if score <= 100 else 100 %}
+            <div class="ranking-card ranking-card-peor">
+              <div class="ranking-card-top">
+                <div class="ranking-posicion ranking-posicion-peor">
+                  {% if loop.index == 1 %}⚠️
+                  {% elif loop.index == 2 %}⬇️
+                  {% elif loop.index == 3 %}🔻
+                  {% else %}#{{ loop.index }}
+                  {% endif %}
+                </div>
+                <div class="ranking-principal">
+                  <div class="ranking-nombre">{{ fila["Agente"] }}</div>
+                  <div class="ranking-turno">{{ fila["Turno"] }}</div>
+                </div>
+                <div class="ranking-score ranking-score-bajo">{{ fila["Score"] }}</div>
+              </div>
+
+              <div class="score-barra">
+                <div class="score-barra-fill score-barra-fill-bajo" style="width: {{ score_width }}%;"></div>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="small">No hay datos suficientes para mostrar el ranking.</p>
+      {% endif %}
+    </div>
+  </div>
+</details>
+{% endif %}
+
 <script>
 document.addEventListener("DOMContentLoaded", function () {
   const body = document.body;
@@ -345,8 +368,8 @@ document.addEventListener("DOMContentLoaded", function () {
         header.classList.add(asc ? "asc" : "desc");
 
         rows.sort((a, b) => {
-          const aText = a.children[index].innerText.trim();
-          const bText = b.children[index].innerText.trim();
+          const aText = a.children[index].innerText.trim().replace("%", "");
+          const bText = b.children[index].innerText.trim().replace("%", "");
 
           const aNum = parseFloat(aText.replace(",", "."));
           const bNum = parseFloat(bText.replace(",", "."));

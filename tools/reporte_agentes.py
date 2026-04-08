@@ -2,6 +2,7 @@ import pandas as pd
 from flask import Blueprint, render_template, request
 
 from utils.archivos import extraer_agentes, leer_csv_subido
+from utils.config_ranking import obtener_pesos_turno
 from utils.transformaciones import (
     COLUMNAS_VISIBLES,
     TRADUCCIONES,
@@ -13,6 +14,12 @@ from utils.transformaciones import (
 from utils.turnos import cargar_turnos_fijos, detectar_repetidos, obtener_turno
 
 reporte_agentes_bp = Blueprint("reporte_agentes", __name__)
+
+TURNOS_EXCLUIDOS_RANKING = [
+    "Admin",
+    "Otros",
+    "Shift Leaders",
+]
 
 
 def preparar_dataframe(df, turnos_config):
@@ -108,6 +115,20 @@ def normalizar_serie_0_100(serie):
     return ((serie - minimo) / (maximo - minimo)) * 100
 
 
+def calcular_score_por_turno(fila):
+    pesos = obtener_pesos_turno(fila["Turno"])
+
+    score = (
+        fila["score_llamadas"] * pesos["llamadas"]
+        + fila["score_salientes"] * pesos["salientes"]
+        + fila["score_mins_llamadas"] * pesos["mins_llamadas"]
+        + fila["score_mins_salientes"] * pesos["mins_salientes"]
+        - fila["score_perdidas"] * pesos["perdidas"]
+    )
+
+    return round(score, 2)
+
+
 def construir_ranking_agentes(df_final):
     columnas_base = [
         "Agente",
@@ -120,6 +141,10 @@ def construir_ranking_agentes(df_final):
     ]
 
     df_ranking = df_final[columnas_base].copy()
+    df_ranking = df_ranking[~df_ranking["Turno"].isin(TURNOS_EXCLUIDOS_RANKING)]
+
+    if df_ranking.empty:
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
     agrupado = (
         df_ranking.groupby(["Agente", "Turno"], dropna=False)
@@ -139,15 +164,9 @@ def construir_ranking_agentes(df_final):
     agrupado["score_salientes"] = normalizar_serie_0_100(agrupado["Salientes"])
     agrupado["score_mins_llamadas"] = normalizar_serie_0_100(agrupado["Mins llamadas"])
     agrupado["score_mins_salientes"] = normalizar_serie_0_100(agrupado["Mins salientes"])
-    agrupado["score_perdidas"] = 100 - normalizar_serie_0_100(agrupado["Perdidas"])
+    agrupado["score_perdidas"] = normalizar_serie_0_100(agrupado["Perdidas"])
 
-    agrupado["Score"] = (
-        agrupado["score_llamadas"] * 0.25
-        + agrupado["score_salientes"] * 0.20
-        + agrupado["score_mins_llamadas"] * 0.20
-        + agrupado["score_mins_salientes"] * 0.20
-        + agrupado["score_perdidas"] * 0.15
-    ).round(2)
+    agrupado["Score"] = agrupado.apply(calcular_score_por_turno, axis=1)
 
     columnas_salida = [
         "Agente",
@@ -178,6 +197,7 @@ def construir_ranking_agentes(df_final):
 def reporte_agentes():
     mensaje = ""
     advertencia = ""
+
     resumen = None
     tabla_general = None
     secciones_turnos = []
@@ -191,31 +211,20 @@ def reporte_agentes():
 
     top_5_mejores = None
     top_5_peores = None
-    columnas_ranking = [
-        "Agente",
-        "Turno",
-        "Llamadas",
-        "Salientes",
-        "Perdidas",
-        "Mins llamadas",
-        "Mins salientes",
-        "Score",
-    ]
 
     if request.method == "POST":
-        archivo = request.files.get("archivo")
+        repetidos = detectar_repetidos(turnos_config)
+        if repetidos:
+            advertencia = "Estos agentes están repetidos en la configuración de turnos: " + ", ".join(repetidos)
 
-        if not archivo or not archivo.filename:
-            advertencia = "Selecciona un archivo CSV."
-        else:
-            try:
+        try:
+            archivo = request.files.get("archivo")
+
+            if not archivo or not archivo.filename:
+                advertencia = "Selecciona un archivo CSV."
+            else:
                 df = leer_csv_subido(archivo)
                 lista_agentes = extraer_agentes(df)
-
-                repetidos = detectar_repetidos(turnos_config)
-                if repetidos:
-                    advertencia = "Estos agentes están repetidos en la configuración de turnos: " + ", ".join(repetidos)
-
                 df_final = preparar_dataframe(df, turnos_config)
 
                 resumen = {
@@ -285,8 +294,8 @@ def reporte_agentes():
 
                 mensaje = "CSV procesado correctamente."
 
-            except Exception as e:
-                advertencia = f"No se pudo procesar el archivo: {e}"
+        except Exception as e:
+            advertencia = f"No se pudo procesar el archivo: {e}"
 
     return render_template(
         "reporte_agentes.html",
@@ -303,5 +312,4 @@ def reporte_agentes():
         totales_resumen_turnos=totales_resumen_turnos,
         top_5_mejores=top_5_mejores,
         top_5_peores=top_5_peores,
-        columnas_ranking=columnas_ranking,
     )

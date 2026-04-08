@@ -1,4 +1,4 @@
-#!D:\Tawil\compinche\herramientas_equipo_on\venv\Scripts\python.exe
+#!C:\herramientas_equipo_on\venv\Scripts\python.exe
 
 import sys
 import json
