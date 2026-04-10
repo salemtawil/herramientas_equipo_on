@@ -279,7 +279,7 @@
 
         <div class="acciones-columna">
           <label class="small">&nbsp;</label>
-          <button type="submit" name="accion" value="descargar_csv" data-processing-message="Generando y descargando el CSV...">
+          <button type="submit" name="accion" value="descargar_csv">
             Descargar CSV listo
           </button>
         </div>
@@ -460,6 +460,10 @@ document.addEventListener("DOMContentLoaded", function () {
       const mensajeBoton = submitter ? submitter.getAttribute("data-processing-message") : "";
       const mensajeForm = form.getAttribute("data-processing-message") || "";
       const mensaje = mensajeBoton || mensajeForm;
+
+      if (!mensaje) {
+        return;
+      }
 
       mostrarProcessing(mensaje);
       bloquearFormularioDespues(form, submitter);
