@@ -236,12 +236,28 @@
 </details>
 {% endif %}
 
-{% if top_5_mejores or top_5_peores %}
+{% if ranking_completo %}
 <details class="card seccion-desplegable" open>
   <summary class="titulo-desplegable">
     <span>Ranking visual de agentes</span>
-    <span class="small">Excluye Admin y Otros</span>
+    <span class="small">Excluye Admin y Otros por defecto</span>
   </summary>
+
+  <div class="top-space">
+    <label class="small">Excluir turnos del ranking</label>
+    <div class="turnos-filtro-grid" id="ranking-turnos-filtros">
+      {% for turno in turnos_ranking_disponibles %}
+        <label class="turno-filtro-item">
+          <input
+            type="checkbox"
+            class="ranking-turno-checkbox"
+            value="{{ turno }}"
+          >
+          <span>{{ turno }}</span>
+        </label>
+      {% endfor %}
+    </div>
+  </div>
 
   <div class="top-space ranking-dual">
     <div class="ranking-panel ranking-mejores">
@@ -249,37 +265,7 @@
         <h3>Top 5 mejores</h3>
         <span class="ranking-badge">Mayor score</span>
       </div>
-
-      {% if top_5_mejores %}
-        <div class="ranking-lista">
-          {% for fila in top_5_mejores %}
-            {% set score = fila["Score"]|float %}
-            {% set score_width = score if score <= 100 else 100 %}
-            <div class="ranking-card ranking-card-mejor">
-              <div class="ranking-card-top">
-                <div class="ranking-posicion">
-                  {% if loop.index == 1 %}🥇
-                  {% elif loop.index == 2 %}🥈
-                  {% elif loop.index == 3 %}🥉
-                  {% else %}#{{ loop.index }}
-                  {% endif %}
-                </div>
-                <div class="ranking-principal">
-                  <div class="ranking-nombre">{{ fila["Agente"] }}</div>
-                  <div class="ranking-turno">{{ fila["Turno"] }}</div>
-                </div>
-                <div class="ranking-score ranking-score-alto">{{ fila["Score"] }}</div>
-              </div>
-
-              <div class="score-barra">
-                <div class="score-barra-fill score-barra-fill-alto" style="width: {{ score_width }}%;"></div>
-              </div>
-            </div>
-          {% endfor %}
-        </div>
-      {% else %}
-        <p class="small">No hay datos suficientes para mostrar el ranking.</p>
-      {% endif %}
+      <div class="ranking-lista" id="ranking-mejores-lista"></div>
     </div>
 
     <div class="ranking-panel ranking-peores">
@@ -287,37 +273,7 @@
         <h3>Top 5 peores</h3>
         <span class="ranking-badge ranking-badge-peor">Menor score</span>
       </div>
-
-      {% if top_5_peores %}
-        <div class="ranking-lista">
-          {% for fila in top_5_peores %}
-            {% set score = fila["Score"]|float %}
-            {% set score_width = score if score <= 100 else 100 %}
-            <div class="ranking-card ranking-card-peor">
-              <div class="ranking-card-top">
-                <div class="ranking-posicion ranking-posicion-peor">
-                  {% if loop.index == 1 %}⚠️
-                  {% elif loop.index == 2 %}⬇️
-                  {% elif loop.index == 3 %}🔻
-                  {% else %}#{{ loop.index }}
-                  {% endif %}
-                </div>
-                <div class="ranking-principal">
-                  <div class="ranking-nombre">{{ fila["Agente"] }}</div>
-                  <div class="ranking-turno">{{ fila["Turno"] }}</div>
-                </div>
-                <div class="ranking-score ranking-score-bajo">{{ fila["Score"] }}</div>
-              </div>
-
-              <div class="score-barra">
-                <div class="score-barra-fill score-barra-fill-bajo" style="width: {{ score_width }}%;"></div>
-              </div>
-            </div>
-          {% endfor %}
-        </div>
-      {% else %}
-        <p class="small">No hay datos suficientes para mostrar el ranking.</p>
-      {% endif %}
+      <div class="ranking-lista" id="ranking-peores-lista"></div>
     </div>
   </div>
 </details>
@@ -389,6 +345,100 @@ document.addEventListener("DOMContentLoaded", function () {
       });
     });
   });
+
+  const rankingData = {{ ranking_completo_json|safe if ranking_completo_json else '[]' }};
+  const rankingCheckboxes = Array.from(document.querySelectorAll(".ranking-turno-checkbox"));
+  const rankingMejoresLista = document.getElementById("ranking-mejores-lista");
+  const rankingPeoresLista = document.getElementById("ranking-peores-lista");
+
+  function escapeHtml(value) {
+    return String(value)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  function renderRankingCard(fila, index, tipo) {
+    const score = Number(fila.Score || 0);
+    const scoreWidth = Math.max(0, Math.min(score, 100));
+
+    let posicion = `#${index + 1}`;
+    if (tipo === "mejor") {
+      if (index === 0) posicion = "🥇";
+      else if (index === 1) posicion = "🥈";
+      else if (index === 2) posicion = "🥉";
+    } else {
+      if (index === 0) posicion = "⚠️";
+      else if (index === 1) posicion = "⬇️";
+      else if (index === 2) posicion = "🔻";
+    }
+
+    const scoreClass = tipo === "mejor" ? "ranking-score-alto" : "ranking-score-bajo";
+    const barraClass = tipo === "mejor" ? "score-barra-fill-alto" : "score-barra-fill-bajo";
+    const cardClass = tipo === "mejor" ? "ranking-card-mejor" : "ranking-card-peor";
+    const posClass = tipo === "mejor" ? "ranking-posicion" : "ranking-posicion ranking-posicion-peor";
+
+    return `
+      <div class="ranking-card ${cardClass}">
+        <div class="ranking-card-top">
+          <div class="${posClass}">${posicion}</div>
+          <div class="ranking-principal">
+            <div class="ranking-nombre">${escapeHtml(fila.Agente)}</div>
+            <div class="ranking-turno">${escapeHtml(fila.Turno)}</div>
+          </div>
+          <div class="ranking-score ${scoreClass}">${score.toFixed(2)}</div>
+        </div>
+        <div class="score-barra">
+          <div class="score-barra-fill ${barraClass}" style="width: ${scoreWidth}%;"></div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderRankingVacio(texto) {
+    return `<p class="small">${texto}</p>`;
+  }
+
+  function actualizarRanking() {
+    if (!rankingMejoresLista || !rankingPeoresLista) return;
+
+    const turnosExcluidos = rankingCheckboxes
+      .filter(cb => cb.checked)
+      .map(cb => cb.value);
+
+    const filtrado = rankingData.filter(fila => !turnosExcluidos.includes(fila.Turno));
+
+    const mejores = [...filtrado]
+      .sort((a, b) => {
+        if ((b.Score || 0) !== (a.Score || 0)) return (b.Score || 0) - (a.Score || 0);
+        if ((b.Llamadas || 0) !== (a.Llamadas || 0)) return (b.Llamadas || 0) - (a.Llamadas || 0);
+        return (b.Salientes || 0) - (a.Salientes || 0);
+      })
+      .slice(0, 5);
+
+    const peores = [...filtrado]
+      .sort((a, b) => {
+        if ((a.Score || 0) !== (b.Score || 0)) return (a.Score || 0) - (b.Score || 0);
+        return (b.Perdidas || 0) - (a.Perdidas || 0);
+      })
+      .slice(0, 5);
+
+    rankingMejoresLista.innerHTML = mejores.length
+      ? mejores.map((fila, index) => renderRankingCard(fila, index, "mejor")).join("")
+      : renderRankingVacio("No hay datos suficientes para mostrar el ranking.");
+
+    rankingPeoresLista.innerHTML = peores.length
+      ? peores.map((fila, index) => renderRankingCard(fila, index, "peor")).join("")
+      : renderRankingVacio("No hay datos suficientes para mostrar el ranking.");
+  }
+
+  rankingCheckboxes.forEach(cb => {
+    cb.addEventListener("change", actualizarRanking);
+  });
+
+  actualizarRanking();
 });
 </script>
 {% endblock %}

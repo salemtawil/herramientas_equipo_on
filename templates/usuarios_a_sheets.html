@@ -1,0 +1,508 @@
+{% extends "base.html" %}
+
+{% block title %}Usuarios a Google Sheets{% endblock %}
+
+{% block content %}
+<style>
+  .sheet-page {
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  .sheet-hero {
+    padding: 24px;
+    border-radius: 18px;
+    background: linear-gradient(135deg, var(--card), var(--card-soft));
+    border: 1px solid var(--border);
+  }
+
+  .sheet-hero h1 {
+    font-size: 34px;
+    margin-bottom: 10px;
+    letter-spacing: -0.02em;
+  }
+
+  .sheet-hero p {
+    font-size: 15px;
+    line-height: 1.6;
+    max-width: 920px;
+  }
+
+  .sheet-card {
+    border-radius: 18px;
+    padding: 22px;
+  }
+
+  .sheet-card h2 {
+    font-size: 24px;
+    margin-bottom: 14px;
+  }
+
+  .sheet-card label.small {
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  .sheet-card input[type="file"],
+  .sheet-card input[type="text"] {
+    font-size: 15px;
+    padding: 12px 14px;
+    border-radius: 10px;
+  }
+
+  .sheet-card button,
+  .sheet-card .btn {
+    font-size: 15px;
+    font-weight: 700;
+    padding: 12px 16px;
+    border-radius: 10px;
+  }
+
+  .sheet-note {
+    background: var(--primary-soft);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 14px 16px;
+  }
+
+  .sheet-note p {
+    margin: 0 0 8px 0;
+    font-size: 14px;
+  }
+
+  .sheet-note p:last-child {
+    margin-bottom: 0;
+  }
+
+  .sheet-step-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28px;
+    height: 28px;
+    border-radius: 999px;
+    background: var(--primary);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 800;
+    margin-right: 10px;
+  }
+
+  .sheet-action-grid {
+    display: grid;
+    grid-template-columns: 1.25fr 1fr;
+    gap: 16px;
+    align-items: end;
+  }
+
+  .sheet-processing {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.55);
+    z-index: 9999;
+    backdrop-filter: blur(2px);
+  }
+
+  .sheet-processing.activo {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+
+  .sheet-processing-card {
+    width: min(520px, 100%);
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    box-shadow: var(--shadow);
+    padding: 26px;
+    text-align: center;
+  }
+
+  .sheet-spinner {
+    width: 54px;
+    height: 54px;
+    border-radius: 999px;
+    border: 5px solid var(--border);
+    border-top-color: var(--primary);
+    margin: 0 auto 18px auto;
+    animation: spinSheet 1s linear infinite;
+  }
+
+  @keyframes spinSheet {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .sheet-processing-card h3 {
+    font-size: 22px;
+    margin-bottom: 10px;
+  }
+
+  .sheet-processing-card p {
+    font-size: 15px;
+    line-height: 1.6;
+    color: var(--muted);
+    margin: 0;
+  }
+
+  .sheet-summary-grid .metric {
+    padding: 16px;
+    border-radius: 14px;
+  }
+
+  .sheet-summary-grid .metric .label {
+    font-size: 13px;
+  }
+
+  .sheet-summary-grid .metric .value {
+    font-size: 30px;
+  }
+
+  .sheet-preview table {
+    font-size: 14px;
+  }
+
+  .sheet-preview th,
+  .sheet-preview td {
+    padding: 10px 12px;
+  }
+
+  .sheet-preview th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+
+  .sheet-inline-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 16px;
+  }
+
+  .sheet-link-box {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    padding: 16px;
+    border-radius: 16px;
+    border: 1px solid var(--border);
+    background: var(--card-soft);
+    margin-top: 18px;
+  }
+
+  .sheet-link-title {
+    font-size: 17px;
+    font-weight: 800;
+    color: var(--title);
+    margin-top: 4px;
+    word-break: break-word;
+  }
+
+  @media (max-width: 900px) {
+    .sheet-action-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .sheet-link-box {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .sheet-hero h1 {
+      font-size: 28px;
+    }
+  }
+</style>
+
+<div class="sheet-page">
+  <div class="card sheet-hero">
+    <h1>Usuarios a Google Sheets</h1>
+    <p>
+      Carga un CSV de usuarios, analízalo primero, revisa el resumen y la vista previa,
+      y luego decide si quieres descargarlo o crear un Google Sheet compartible.
+    </p>
+
+    <div class="top-space acciones-barra">
+      <a class="btn secondary" href="{{ url_for('inicio') }}">Volver al panel principal</a>
+      <button type="button" id="toggle-theme" class="btn secondary">Modo oscuro</button>
+    </div>
+
+    {% if mensaje %}
+      <div class="success">{{ mensaje }}</div>
+    {% endif %}
+
+    {% if advertencia %}
+      <div class="warning">{{ advertencia }}</div>
+    {% endif %}
+  </div>
+
+  <div class="card sheet-card">
+    <h2><span class="sheet-step-badge">1</span>Analizar CSV</h2>
+
+    <form id="analizar-form" method="post" enctype="multipart/form-data" data-processing-message="Analizando el CSV y preparando la vista previa...">
+      <div class="row-2">
+        <div>
+          <label class="small">Archivo CSV</label>
+          <input type="file" name="archivo" accept=".csv">
+        </div>
+        <div class="acciones-columna">
+          <label class="small">&nbsp;</label>
+          <button type="submit" name="accion" value="analizar_csv">
+            Analizar CSV
+          </button>
+        </div>
+      </div>
+    </form>
+
+    <div class="top-space sheet-note">
+      <p>Se prioriza <strong>Telefono</strong> para deduplicar. Si no existe, se usa <strong>Preferido</strong> como respaldo.</p>
+      <p>El nombre se deja vacío si viene vacío.</p>
+    </div>
+  </div>
+
+  {% if resumen %}
+  <div class="card sheet-card">
+    <h2><span class="sheet-step-badge">2</span>Acciones finales</h2>
+
+    <form id="acciones-form" method="post" data-processing-message="Preparando la acción solicitada...">
+      <div class="sheet-action-grid">
+        <div>
+          <label class="small">Nombre del Google Sheet</label>
+          <input type="text" name="nombre_hoja" placeholder="Ej. Seguimiento usuarios abril">
+        </div>
+
+        <div class="acciones-columna">
+          <label class="small">&nbsp;</label>
+          <button type="submit" name="accion" value="descargar_csv" data-processing-message="Generando y descargando el CSV...">
+            Descargar CSV listo
+          </button>
+        </div>
+      </div>
+
+      <div class="sheet-inline-actions">
+        {% if apps_script_configurado %}
+          <button type="submit" name="accion" value="crear_sheet" class="btn secondary" data-processing-message="Creando el Google Sheet, aplicando formato y generando el enlace compartible...">
+            Crear Google Sheet
+          </button>
+        {% else %}
+          <div class="warning">
+            El botón para crear Google Sheet se habilita cuando configures
+            <strong>APPS_SCRIPT_WEBHOOK_URL</strong>.
+          </div>
+        {% endif %}
+
+        <button type="submit" name="accion" value="limpiar" class="btn secondary" data-processing-message="Limpiando la previsualización actual...">
+          Limpiar previsualización
+        </button>
+      </div>
+    </form>
+
+    {% if spreadsheet_url %}
+      <div class="sheet-link-box">
+        <div>
+          <div class="label">Google Sheet creado</div>
+          <div class="sheet-link-title">{{ spreadsheet_title }}</div>
+        </div>
+        <a class="btn" href="{{ spreadsheet_url }}" target="_blank" rel="noopener noreferrer">
+          Abrir Google Sheet
+        </a>
+      </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if resumen %}
+  <details class="card sheet-card seccion-desplegable" open>
+    <summary class="titulo-desplegable">
+      <span>Resumen del procesamiento</span>
+      <span class="small">Ver detalles</span>
+    </summary>
+
+    <div class="top-space grid sheet-summary-grid">
+      {% for nombre, valor in resumen.items() %}
+        <div class="metric">
+          <div class="label">{{ nombre }}</div>
+          <div class="value">{{ valor }}</div>
+        </div>
+      {% endfor %}
+    </div>
+  </details>
+  {% endif %}
+
+  {% if regiones_sin_tz %}
+  <details class="card sheet-card seccion-desplegable" open>
+    <summary class="titulo-desplegable">
+      <span>Regiones sin timezone reconocido</span>
+      <span class="small">{{ regiones_sin_tz|length }} regiones</span>
+    </summary>
+
+    <div class="top-space">
+      <div class="agente-lista">
+        {% for region in regiones_sin_tz %}
+          <div class="agente-item">
+            <label>{{ region }}</label>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  </details>
+  {% endif %}
+
+  {% if tabla_previa %}
+  <details class="card sheet-card seccion-desplegable sheet-preview" open>
+    <summary class="titulo-desplegable">
+      <span>Vista previa</span>
+      <span class="small">{{ tabla_previa|length }} filas mostradas</span>
+    </summary>
+
+    <div class="top-space">
+      <div class="table-wrap">
+        <table class="tabla-ordenable tabla-compacta">
+          <thead>
+            <tr>
+              {% for col in columnas_previa %}
+                <th>{{ col }}</th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for fila in tabla_previa %}
+              <tr>
+                {% for col in columnas_previa %}
+                  <td>
+                    {% if col == "Perfil" and fila[col] %}
+                      <a href="{{ fila[col] }}" target="_blank" rel="noopener noreferrer">{{ fila[col] }}</a>
+                    {% else %}
+                      {{ fila[col] }}
+                    {% endif %}
+                  </td>
+                {% endfor %}
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="small">Haz clic en el nombre de una columna para ordenar.</p>
+    </div>
+  </details>
+  {% endif %}
+</div>
+
+<div id="sheet-processing-overlay" class="sheet-processing" aria-hidden="true">
+  <div class="sheet-processing-card">
+    <div class="sheet-spinner"></div>
+    <h3>Procesando</h3>
+    <p id="sheet-processing-text">
+      Estamos trabajando en tu solicitud. Esto puede tardar un poco si el archivo es grande.
+    </p>
+  </div>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const body = document.body;
+  const toggleThemeBtn = document.getElementById("toggle-theme");
+  const overlay = document.getElementById("sheet-processing-overlay");
+  const overlayText = document.getElementById("sheet-processing-text");
+
+  function aplicarTextoBotonTema() {
+    if (!toggleThemeBtn) return;
+    toggleThemeBtn.textContent = body.classList.contains("dark-mode")
+      ? "Modo claro"
+      : "Modo oscuro";
+  }
+
+  const temaGuardado = localStorage.getItem("theme");
+  if (temaGuardado === "dark") {
+    body.classList.add("dark-mode");
+  }
+  aplicarTextoBotonTema();
+
+  if (toggleThemeBtn) {
+    toggleThemeBtn.addEventListener("click", function () {
+      body.classList.toggle("dark-mode");
+      localStorage.setItem(
+        "theme",
+        body.classList.contains("dark-mode") ? "dark" : "light"
+      );
+      aplicarTextoBotonTema();
+    });
+  }
+
+  function mostrarProcessing(mensaje) {
+    if (!overlay) return;
+    if (overlayText && mensaje) {
+      overlayText.textContent = mensaje;
+    }
+    overlay.classList.add("activo");
+    overlay.setAttribute("aria-hidden", "false");
+  }
+
+  function bloquearFormularioDespues(form, submitter) {
+    window.setTimeout(() => {
+      const elementos = form.querySelectorAll("button, input, select, textarea");
+      elementos.forEach(el => {
+        if (submitter && el === submitter) return;
+        el.disabled = true;
+      });
+    }, 0);
+  }
+
+  document.querySelectorAll("form[data-processing-message]").forEach((form) => {
+    form.addEventListener("submit", function (event) {
+      const submitter = event.submitter || null;
+      const mensajeBoton = submitter ? submitter.getAttribute("data-processing-message") : "";
+      const mensajeForm = form.getAttribute("data-processing-message") || "";
+      const mensaje = mensajeBoton || mensajeForm;
+
+      mostrarProcessing(mensaje);
+      bloquearFormularioDespues(form, submitter);
+    });
+  });
+
+  const tablas = document.querySelectorAll(".tabla-ordenable");
+
+  tablas.forEach((tabla) => {
+    const headers = tabla.querySelectorAll("th");
+
+    headers.forEach((header, index) => {
+      header.style.cursor = "pointer";
+      header.addEventListener("click", () => {
+        const tbody = tabla.querySelector("tbody");
+        const rows = Array.from(tbody.querySelectorAll("tr"));
+        const asc = !header.classList.contains("asc");
+
+        headers.forEach(h => h.classList.remove("asc", "desc"));
+        header.classList.add(asc ? "asc" : "desc");
+
+        rows.sort((a, b) => {
+          const aText = a.children[index].innerText.trim();
+          const bText = b.children[index].innerText.trim();
+
+          const aNum = parseFloat(aText.replace(",", "."));
+          const bNum = parseFloat(bText.replace(",", "."));
+
+          const ambosNumeros = !isNaN(aNum) && !isNaN(bNum);
+
+          if (ambosNumeros) {
+            return asc ? aNum - bNum : bNum - aNum;
+          }
+
+          return asc
+            ? aText.localeCompare(bText, "es", { numeric: true })
+            : bText.localeCompare(aText, "es", { numeric: true });
+        });
+
+        rows.forEach(row => tbody.appendChild(row));
+      });
+    });
+  });
+});
+</script>
+{% endblock %}

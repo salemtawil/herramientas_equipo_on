@@ -1,3 +1,4 @@
+import json
 import pandas as pd
 from flask import Blueprint, render_template, request
 
@@ -18,7 +19,6 @@ reporte_agentes_bp = Blueprint("reporte_agentes", __name__)
 TURNOS_EXCLUIDOS_RANKING = [
     "Admin",
     "Otros",
-    "Shift Leaders",
 ]
 
 
@@ -160,6 +160,19 @@ def construir_ranking_agentes(df_final):
         .reset_index()
     )
 
+    agrupado = agrupado[
+        ~(
+            (agrupado["Llamadas"] == 0)
+            & (agrupado["Salientes"] == 0)
+            & (agrupado["Perdidas"] == 0)
+            & (agrupado["Mins llamadas"] == 0)
+            & (agrupado["Mins salientes"] == 0)
+        )
+    ].copy()
+
+    if agrupado.empty:
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+
     agrupado["score_llamadas"] = normalizar_serie_0_100(agrupado["Llamadas"])
     agrupado["score_salientes"] = normalizar_serie_0_100(agrupado["Salientes"])
     agrupado["score_mins_llamadas"] = normalizar_serie_0_100(agrupado["Mins llamadas"])
@@ -211,6 +224,9 @@ def reporte_agentes():
 
     top_5_mejores = None
     top_5_peores = None
+    ranking_completo = None
+    ranking_completo_json = "[]"
+    turnos_ranking_disponibles = []
 
     if request.method == "POST":
         repetidos = detectar_repetidos(turnos_config)
@@ -258,9 +274,14 @@ def reporte_agentes():
                     etiqueta="TOTAL",
                 )
 
-                _, df_top_5_mejores, df_top_5_peores = construir_ranking_agentes(df_final)
+                df_ranking, df_top_5_mejores, df_top_5_peores = construir_ranking_agentes(df_final)
+                ranking_completo = html_tabla(df_ranking)
+                ranking_completo_json = json.dumps(ranking_completo or [], ensure_ascii=False)
                 top_5_mejores = html_tabla(df_top_5_mejores)
                 top_5_peores = html_tabla(df_top_5_peores)
+
+                if ranking_completo:
+                    turnos_ranking_disponibles = sorted({fila["Turno"] for fila in ranking_completo if fila.get("Turno")})
 
                 for turno in sorted(turnos_config.keys()):
                     columnas_turno = [c for c in COLUMNAS_VISIBLES if c != "Turno"]
@@ -312,4 +333,7 @@ def reporte_agentes():
         totales_resumen_turnos=totales_resumen_turnos,
         top_5_mejores=top_5_mejores,
         top_5_peores=top_5_peores,
+        ranking_completo=ranking_completo,
+        ranking_completo_json=ranking_completo_json,
+        turnos_ranking_disponibles=turnos_ranking_disponibles,
     )
