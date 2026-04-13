@@ -3,95 +3,125 @@
 {% block title %}Comparar CSV{% endblock %}
 
 {% block content %}
-<div class="card">
-  <h1>Comparar CSV</h1>
-  <p>Compara dos archivos CSV de agentes y revisa diferencias en llamadas, salientes, minutos y perdidas.</p>
+<div class="page-stack">
+  <section class="card page-hero">
+    <h1>Comparar CSV</h1>
+    <p>Compara dos archivos CSV de agentes y revisa diferencias en llamadas, salientes, minutos y perdidas.</p>
 
-  <div class="top-space acciones-barra">
-    <a class="btn secondary" href="{{ url_for('inicio') }}">Volver al panel principal</a>
-    <button type="button" id="toggle-theme" class="btn secondary">Modo oscuro</button>
-  </div>
+    {% if mensaje %}
+      <div class="success">{{ mensaje }}</div>
+    {% endif %}
 
-  {% if mensaje %}
-    <div class="success">{{ mensaje }}</div>
-  {% endif %}
+    {% if advertencia %}
+      <div class="warning">{{ advertencia }}</div>
+    {% endif %}
+  </section>
 
-  {% if advertencia %}
-    <div class="warning">{{ advertencia }}</div>
-  {% endif %}
-</div>
+  <section class="card">
+    <h2>Cargar archivos para comparar</h2>
 
-<div class="card">
-  <h2>Cargar archivos para comparar</h2>
-
-  <form method="post" enctype="multipart/form-data">
-    <div class="row-2">
-      <div>
-        <label class="small">CSV base</label>
-        <input type="file" name="archivo_base" accept=".csv">
+    <form method="post" enctype="multipart/form-data">
+      <div class="row-2">
+        <div>
+          <label class="small">CSV base</label>
+          <input type="file" name="archivo_base" accept=".csv">
+        </div>
+        <div>
+          <label class="small">CSV a comparar</label>
+          <input type="file" name="archivo_actual" accept=".csv">
+        </div>
       </div>
-      <div>
-        <label class="small">CSV a comparar</label>
-        <input type="file" name="archivo_actual" accept=".csv">
+
+      <div class="top-space acciones-barra">
+        <button type="submit" name="accion" value="comparar_csv">Generar comparativa</button>
+        <button type="submit" name="accion" value="descargar_comparativa" class="btn secondary">
+          Descargar comparativa CSV de agentes
+        </button>
       </div>
-    </div>
+    </form>
+  </section>
 
-    <div class="top-space acciones-barra">
-      <button type="submit" name="accion" value="comparar_csv">Generar comparativa</button>
-      <button type="submit" name="accion" value="descargar_comparativa" class="btn secondary">
-        Descargar comparativa CSV de agentes
-      </button>
-    </div>
-  </form>
-</div>
+  {% if tabla_comparativa_turnos %}
+  <details class="card seccion-desplegable" open>
+    <summary class="titulo-desplegable">
+      <span>Tabla comparativa por turno</span>
+      <span class="small">{{ tabla_comparativa_turnos|length }} turnos</span>
+    </summary>
 
-{% if tabla_comparativa_turnos %}
-<details class="card seccion-desplegable" open>
-  <summary class="titulo-desplegable">
-    <span>Tabla comparativa por turno</span>
-    <span class="small">{{ tabla_comparativa_turnos|length }} turnos</span>
-  </summary>
+    <div class="top-space">
+      <div class="comparativa-toolbar">
+        <span class="small">Mostrar cantidades:</span>
+        <button type="button" class="btn secondary btn-mini toggle-metrica" data-table="turnos" data-metric="metric-llamadas">Llamadas</button>
+        <button type="button" class="btn secondary btn-mini toggle-metrica" data-table="turnos" data-metric="metric-salientes">Salientes</button>
+        <button type="button" class="btn secondary btn-mini toggle-metrica" data-table="turnos" data-metric="metric-perdidas">Perdidas</button>
+        <button type="button" class="btn secondary btn-mini toggle-metrica" data-table="turnos" data-metric="metric-mins-llamadas">Mins llamadas</button>
+        <button type="button" class="btn secondary btn-mini toggle-metrica" data-table="turnos" data-metric="metric-mins-salientes">Mins salientes</button>
+        <button type="button" class="btn secondary btn-mini toggle-todo" data-table="turnos">Mostrar u ocultar todo</button>
+      </div>
 
-  <div class="top-space">
-    <div class="comparativa-toolbar">
-      <span class="small">Mostrar cantidades:</span>
-      <button type="button" class="btn secondary btn-mini toggle-metrica" data-table="turnos" data-metric="metric-llamadas">Llamadas</button>
-      <button type="button" class="btn secondary btn-mini toggle-metrica" data-table="turnos" data-metric="metric-salientes">Salientes</button>
-      <button type="button" class="btn secondary btn-mini toggle-metrica" data-table="turnos" data-metric="metric-perdidas">Perdidas</button>
-      <button type="button" class="btn secondary btn-mini toggle-metrica" data-table="turnos" data-metric="metric-mins-llamadas">Mins llamadas</button>
-      <button type="button" class="btn secondary btn-mini toggle-metrica" data-table="turnos" data-metric="metric-mins-salientes">Mins salientes</button>
-      <button type="button" class="btn secondary btn-mini toggle-todo" data-table="turnos">Mostrar/Ocultar todo</button>
-    </div>
-
-    <div class="table-wrap">
-      <table class="tabla-ordenable tabla-comparativa tabla-compacta" data-table-id="turnos">
-        <thead>
-          <tr>
-            {% for col in columnas_comparativa_turnos %}
-              {% set c = col|lower %}
-              {% set es_fija = c == 'turno' %}
-              {% set es_detalle = not es_fija and not c.startswith('dif.') and not c.startswith('%') %}
-              <th
-                class="
-                  {% if es_fija %}col-fija {% endif %}
-                  {% if 'llamadas' in c and 'mins' not in c %}metric-llamadas {% endif %}
-                  {% if 'salientes' in c and 'mins' not in c %}metric-salientes {% endif %}
-                  {% if 'perdidas' in c %}metric-perdidas {% endif %}
-                  {% if 'mins llamadas' in c %}metric-mins-llamadas {% endif %}
-                  {% if 'mins salientes' in c %}metric-mins-salientes {% endif %}
-                  {% if es_detalle %}col-detalle col-oculta {% endif %}
-                  {% if c.startswith('%') %}pct-cell{% endif %}
-                "
-              >{{ col }}</th>
-            {% endfor %}
-          </tr>
-        </thead>
-        <tbody>
-          {% for fila in tabla_comparativa_turnos %}
+      <div class="table-wrap">
+        <table class="tabla-ordenable tabla-comparativa tabla-compacta" data-table-id="turnos">
+          <thead>
             <tr>
               {% for col in columnas_comparativa_turnos %}
                 {% set c = col|lower %}
-                {% set valor = fila[col] %}
+                {% set es_fija = c == 'turno' %}
+                {% set es_detalle = not es_fija and not c.startswith('dif.') and not c.startswith('%') %}
+                <th
+                  class="
+                    {% if es_fija %}col-fija {% endif %}
+                    {% if 'llamadas' in c and 'mins' not in c %}metric-llamadas {% endif %}
+                    {% if 'salientes' in c and 'mins' not in c %}metric-salientes {% endif %}
+                    {% if 'perdidas' in c %}metric-perdidas {% endif %}
+                    {% if 'mins llamadas' in c %}metric-mins-llamadas {% endif %}
+                    {% if 'mins salientes' in c %}metric-mins-salientes {% endif %}
+                    {% if es_detalle %}col-detalle col-oculta {% endif %}
+                    {% if c.startswith('%') %}pct-cell{% endif %}
+                  "
+                >{{ col }}</th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for fila in tabla_comparativa_turnos %}
+              <tr>
+                {% for col in columnas_comparativa_turnos %}
+                  {% set c = col|lower %}
+                  {% set valor = fila[col] %}
+                  {% set es_fija = c == 'turno' %}
+                  {% set es_detalle = not es_fija and not c.startswith('dif.') and not c.startswith('%') %}
+                  <td
+                    class="
+                      {% if es_fija %}col-fija {% endif %}
+                      {% if 'llamadas' in c and 'mins' not in c %}metric-llamadas {% endif %}
+                      {% if 'salientes' in c and 'mins' not in c %}metric-salientes {% endif %}
+                      {% if 'perdidas' in c %}metric-perdidas {% endif %}
+                      {% if 'mins llamadas' in c %}metric-mins-llamadas {% endif %}
+                      {% if 'mins salientes' in c %}metric-mins-salientes {% endif %}
+                      {% if es_detalle %}col-detalle col-oculta {% endif %}
+                      {% if c.startswith('%') %}pct-cell{% endif %}
+                    "
+                  >
+                    {% if c.startswith('%') %}
+                      {% if valor > 0 %}
+                        <span class="pct-up">+{{ valor }}%</span>
+                      {% elif valor < 0 %}
+                        <span class="pct-down">{{ valor }}%</span>
+                      {% else %}
+                        {{ valor }}%
+                      {% endif %}
+                    {% else %}
+                      {{ valor }}
+                    {% endif %}
+                  </td>
+                {% endfor %}
+              </tr>
+            {% endfor %}
+          </tbody>
+          <tfoot>
+            <tr class="fila-total">
+              {% for col in columnas_comparativa_turnos %}
+                {% set c = col|lower %}
                 {% set es_fija = c == 'turno' %}
                 {% set es_detalle = not es_fija and not c.startswith('dif.') and not c.startswith('%') %}
                 <td
@@ -105,97 +135,97 @@
                     {% if es_detalle %}col-detalle col-oculta {% endif %}
                     {% if c.startswith('%') %}pct-cell{% endif %}
                   "
-                >
-                  {% if c.startswith('%') %}
-                    {% if valor > 0 %}
-                      <span class="pct-up">+{{ valor }}%</span>
-                    {% elif valor < 0 %}
-                      <span class="pct-down">{{ valor }}%</span>
-                    {% else %}
-                      {{ valor }}%
-                    {% endif %}
-                  {% else %}
-                    {{ valor }}
-                  {% endif %}
-                </td>
+                >{{ totales_comparativa_turnos[col] if totales_comparativa_turnos else "" }}</td>
               {% endfor %}
             </tr>
-          {% endfor %}
-        </tbody>
-        <tfoot>
-          <tr class="fila-total">
-            {% for col in columnas_comparativa_turnos %}
-              {% set c = col|lower %}
-              {% set es_fija = c == 'turno' %}
-              {% set es_detalle = not es_fija and not c.startswith('dif.') and not c.startswith('%') %}
-              <td
-                class="
-                  {% if es_fija %}col-fija {% endif %}
-                  {% if 'llamadas' in c and 'mins' not in c %}metric-llamadas {% endif %}
-                  {% if 'salientes' in c and 'mins' not in c %}metric-salientes {% endif %}
-                  {% if 'perdidas' in c %}metric-perdidas {% endif %}
-                  {% if 'mins llamadas' in c %}metric-mins-llamadas {% endif %}
-                  {% if 'mins salientes' in c %}metric-mins-salientes {% endif %}
-                  {% if es_detalle %}col-detalle col-oculta {% endif %}
-                  {% if c.startswith('%') %}pct-cell{% endif %}
-                "
-              >{{ totales_comparativa_turnos[col] if totales_comparativa_turnos else "" }}</td>
-            {% endfor %}
-          </tr>
-        </tfoot>
-      </table>
+          </tfoot>
+        </table>
+      </div>
     </div>
-  </div>
-</details>
-{% endif %}
+  </details>
+  {% endif %}
 
-{% if tabla_comparativa %}
-<details class="card seccion-desplegable" open>
-  <summary class="titulo-desplegable">
-    <span>Tabla comparativa por agente</span>
-    <span class="small">{{ tabla_comparativa|length }} agentes</span>
-  </summary>
+  {% if tabla_comparativa %}
+  <details class="card seccion-desplegable" open>
+    <summary class="titulo-desplegable">
+      <span>Tabla comparativa por agente</span>
+      <span class="small">{{ tabla_comparativa|length }} agentes</span>
+    </summary>
 
-  <div class="top-space">
-    <div class="comparativa-toolbar">
-      <span class="small">Mostrar cantidades:</span>
-      <button type="button" class="btn secondary btn-mini toggle-metrica" data-table="agentes" data-metric="metric-llamadas">Llamadas</button>
-      <button type="button" class="btn secondary btn-mini toggle-metrica" data-table="agentes" data-metric="metric-salientes">Salientes</button>
-      <button type="button" class="btn secondary btn-mini toggle-metrica" data-table="agentes" data-metric="metric-perdidas">Perdidas</button>
-      <button type="button" class="btn secondary btn-mini toggle-metrica" data-table="agentes" data-metric="metric-mins-llamadas">Mins llamadas</button>
-      <button type="button" class="btn secondary btn-mini toggle-metrica" data-table="agentes" data-metric="metric-mins-salientes">Mins salientes</button>
-      <button type="button" class="btn secondary btn-mini toggle-todo" data-table="agentes">Mostrar/Ocultar todo</button>
-    </div>
+    <div class="top-space">
+      <div class="comparativa-toolbar">
+        <span class="small">Mostrar cantidades:</span>
+        <button type="button" class="btn secondary btn-mini toggle-metrica" data-table="agentes" data-metric="metric-llamadas">Llamadas</button>
+        <button type="button" class="btn secondary btn-mini toggle-metrica" data-table="agentes" data-metric="metric-salientes">Salientes</button>
+        <button type="button" class="btn secondary btn-mini toggle-metrica" data-table="agentes" data-metric="metric-perdidas">Perdidas</button>
+        <button type="button" class="btn secondary btn-mini toggle-metrica" data-table="agentes" data-metric="metric-mins-llamadas">Mins llamadas</button>
+        <button type="button" class="btn secondary btn-mini toggle-metrica" data-table="agentes" data-metric="metric-mins-salientes">Mins salientes</button>
+        <button type="button" class="btn secondary btn-mini toggle-todo" data-table="agentes">Mostrar u ocultar todo</button>
+      </div>
 
-    <div class="table-wrap">
-      <table class="tabla-ordenable tabla-comparativa tabla-compacta" data-table-id="agentes">
-        <thead>
-          <tr>
-            {% for col in columnas_comparativa %}
-              {% set c = col|lower %}
-              {% set es_fija = c == 'agente' %}
-              {% set es_detalle = not es_fija and not c.startswith('dif.') and not c.startswith('%') %}
-              <th
-                class="
-                  {% if es_fija %}col-fija {% endif %}
-                  {% if 'llamadas' in c and 'mins' not in c %}metric-llamadas {% endif %}
-                  {% if 'salientes' in c and 'mins' not in c %}metric-salientes {% endif %}
-                  {% if 'perdidas' in c %}metric-perdidas {% endif %}
-                  {% if 'mins llamadas' in c %}metric-mins-llamadas {% endif %}
-                  {% if 'mins salientes' in c %}metric-mins-salientes {% endif %}
-                  {% if es_detalle %}col-detalle col-oculta {% endif %}
-                  {% if c.startswith('%') %}pct-cell{% endif %}
-                "
-              >{{ col }}</th>
-            {% endfor %}
-          </tr>
-        </thead>
-        <tbody>
-          {% for fila in tabla_comparativa %}
+      <div class="table-wrap">
+        <table class="tabla-ordenable tabla-comparativa tabla-compacta" data-table-id="agentes">
+          <thead>
             <tr>
               {% for col in columnas_comparativa %}
                 {% set c = col|lower %}
-                {% set valor = fila[col] %}
+                {% set es_fija = c == 'agente' %}
+                {% set es_detalle = not es_fija and not c.startswith('dif.') and not c.startswith('%') %}
+                <th
+                  class="
+                    {% if es_fija %}col-fija {% endif %}
+                    {% if 'llamadas' in c and 'mins' not in c %}metric-llamadas {% endif %}
+                    {% if 'salientes' in c and 'mins' not in c %}metric-salientes {% endif %}
+                    {% if 'perdidas' in c %}metric-perdidas {% endif %}
+                    {% if 'mins llamadas' in c %}metric-mins-llamadas {% endif %}
+                    {% if 'mins salientes' in c %}metric-mins-salientes {% endif %}
+                    {% if es_detalle %}col-detalle col-oculta {% endif %}
+                    {% if c.startswith('%') %}pct-cell{% endif %}
+                  "
+                >{{ col }}</th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for fila in tabla_comparativa %}
+              <tr>
+                {% for col in columnas_comparativa %}
+                  {% set c = col|lower %}
+                  {% set valor = fila[col] %}
+                  {% set es_fija = c == 'agente' %}
+                  {% set es_detalle = not es_fija and not c.startswith('dif.') and not c.startswith('%') %}
+                  <td
+                    class="
+                      {% if es_fija %}col-fija {% endif %}
+                      {% if 'llamadas' in c and 'mins' not in c %}metric-llamadas {% endif %}
+                      {% if 'salientes' in c and 'mins' not in c %}metric-salientes {% endif %}
+                      {% if 'perdidas' in c %}metric-perdidas {% endif %}
+                      {% if 'mins llamadas' in c %}metric-mins-llamadas {% endif %}
+                      {% if 'mins salientes' in c %}metric-mins-salientes {% endif %}
+                      {% if es_detalle %}col-detalle col-oculta {% endif %}
+                      {% if c.startswith('%') %}pct-cell{% endif %}
+                    "
+                  >
+                    {% if c.startswith('%') %}
+                      {% if valor > 0 %}
+                        <span class="pct-up">+{{ valor }}%</span>
+                      {% elif valor < 0 %}
+                        <span class="pct-down">{{ valor }}%</span>
+                      {% else %}
+                        {{ valor }}%
+                      {% endif %}
+                    {% else %}
+                      {{ valor }}
+                    {% endif %}
+                  </td>
+                {% endfor %}
+              </tr>
+            {% endfor %}
+          </tbody>
+          <tfoot>
+            <tr class="fila-total">
+              {% for col in columnas_comparativa %}
+                {% set c = col|lower %}
                 {% set es_fija = c == 'agente' %}
                 {% set es_detalle = not es_fija and not c.startswith('dif.') and not c.startswith('%') %}
                 <td
@@ -209,117 +239,21 @@
                     {% if es_detalle %}col-detalle col-oculta {% endif %}
                     {% if c.startswith('%') %}pct-cell{% endif %}
                   "
-                >
-                  {% if c.startswith('%') %}
-                    {% if valor > 0 %}
-                      <span class="pct-up">+{{ valor }}%</span>
-                    {% elif valor < 0 %}
-                      <span class="pct-down">{{ valor }}%</span>
-                    {% else %}
-                      {{ valor }}%
-                    {% endif %}
-                  {% else %}
-                    {{ valor }}
-                  {% endif %}
-                </td>
+                >{{ totales_comparativa[col] if totales_comparativa else "" }}</td>
               {% endfor %}
             </tr>
-          {% endfor %}
-        </tbody>
-        <tfoot>
-          <tr class="fila-total">
-            {% for col in columnas_comparativa %}
-              {% set c = col|lower %}
-              {% set es_fija = c == 'agente' %}
-              {% set es_detalle = not es_fija and not c.startswith('dif.') and not c.startswith('%') %}
-              <td
-                class="
-                  {% if es_fija %}col-fija {% endif %}
-                  {% if 'llamadas' in c and 'mins' not in c %}metric-llamadas {% endif %}
-                  {% if 'salientes' in c and 'mins' not in c %}metric-salientes {% endif %}
-                  {% if 'perdidas' in c %}metric-perdidas {% endif %}
-                  {% if 'mins llamadas' in c %}metric-mins-llamadas {% endif %}
-                  {% if 'mins salientes' in c %}metric-mins-salientes {% endif %}
-                  {% if es_detalle %}col-detalle col-oculta {% endif %}
-                  {% if c.startswith('%') %}pct-cell{% endif %}
-                "
-              >{{ totales_comparativa[col] if totales_comparativa else "" }}</td>
-            {% endfor %}
-          </tr>
-        </tfoot>
-      </table>
+          </tfoot>
+        </table>
+      </div>
     </div>
-  </div>
-</details>
-{% endif %}
+  </details>
+  {% endif %}
+</div>
+{% endblock %}
 
+{% block scripts %}
 <script>
 document.addEventListener("DOMContentLoaded", function () {
-  const body = document.body;
-  const toggleThemeBtn = document.getElementById("toggle-theme");
-
-  function aplicarTextoBotonTema() {
-    if (!toggleThemeBtn) return;
-    toggleThemeBtn.textContent = body.classList.contains("dark-mode")
-      ? "Modo claro"
-      : "Modo oscuro";
-  }
-
-  const temaGuardado = localStorage.getItem("theme");
-  if (temaGuardado === "dark") {
-    body.classList.add("dark-mode");
-  }
-  aplicarTextoBotonTema();
-
-  if (toggleThemeBtn) {
-    toggleThemeBtn.addEventListener("click", function () {
-      body.classList.toggle("dark-mode");
-      localStorage.setItem(
-        "theme",
-        body.classList.contains("dark-mode") ? "dark" : "light"
-      );
-      aplicarTextoBotonTema();
-    });
-  }
-
-  const tablas = document.querySelectorAll(".tabla-ordenable");
-
-  tablas.forEach((tabla) => {
-    const headers = tabla.querySelectorAll("th");
-
-    headers.forEach((header, index) => {
-      header.style.cursor = "pointer";
-      header.addEventListener("click", () => {
-        const tbody = tabla.querySelector("tbody");
-        const rows = Array.from(tbody.querySelectorAll("tr"));
-        const asc = !header.classList.contains("asc");
-
-        headers.forEach(h => h.classList.remove("asc", "desc"));
-        header.classList.add(asc ? "asc" : "desc");
-
-        rows.sort((a, b) => {
-          const aText = a.children[index].innerText.trim().replace("%", "");
-          const bText = b.children[index].innerText.trim().replace("%", "");
-
-          const aNum = parseFloat(aText.replace(",", "."));
-          const bNum = parseFloat(bText.replace(",", "."));
-
-          const ambosNumeros = !isNaN(aNum) && !isNaN(bNum);
-
-          if (ambosNumeros) {
-            return asc ? aNum - bNum : bNum - aNum;
-          }
-
-          return asc
-            ? aText.localeCompare(bText, "es", { numeric: true })
-            : bText.localeCompare(aText, "es", { numeric: true });
-        });
-
-        rows.forEach(row => tbody.appendChild(row));
-      });
-    });
-  });
-
   function toggleMetricColumns(tableId, metricClass) {
     const table = document.querySelector(`[data-table-id="${tableId}"]`);
     if (!table) return;
@@ -328,7 +262,6 @@ document.addEventListener("DOMContentLoaded", function () {
     if (!detailCols.length) return;
 
     const shouldShow = Array.from(detailCols).some(el => el.classList.contains("col-oculta"));
-
     detailCols.forEach(el => {
       el.classList.toggle("col-oculta", !shouldShow);
     });
@@ -338,11 +271,10 @@ document.addEventListener("DOMContentLoaded", function () {
     const table = document.querySelector(`[data-table-id="${tableId}"]`);
     if (!table) return;
 
-    const detailCols = table.querySelectorAll(`.col-detalle`);
+    const detailCols = table.querySelectorAll(".col-detalle");
     if (!detailCols.length) return;
 
     const shouldShow = Array.from(detailCols).some(el => el.classList.contains("col-oculta"));
-
     detailCols.forEach(el => {
       el.classList.toggle("col-oculta", !shouldShow);
     });

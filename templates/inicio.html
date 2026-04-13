@@ -3,44 +3,54 @@
 {% block title %}Panel principal{% endblock %}
 
 {% block content %}
-<div class="card">
-  <h1>Panel principal</h1>
-  <p>Aquí puedes elegir la herramienta que necesitas usar en cada momento.</p>
-</div>
+<div class="page-stack">
+  <section class="card page-hero">
+    <h1>Panel principal</h1>
+    <p>
+      Aqui puedes elegir la herramienta que necesitas usar en cada momento.
+      Todas las vistas comparten el mismo sistema visual, tema global y navegacion consistente.
+    </p>
+  </section>
 
-<div class="card">
-  <h2>Reporte de stats</h2>
-  <p>Herramientas para trabajar con reportes CSV de agentes.</p>
-
-  <div class="herramientas-relacionadas">
-    <div class="subherramienta">
-      <h3>Reporte de stats</h3>
-      <p>Carga un CSV y genera el reporte general por agente, turnos, resumen y ranking.</p>
-      <a class="btn" href="{{ url_for('reporte_agentes.reporte_agentes') }}">Abrir reporte de stats</a>
+  <section class="card">
+    <div class="page-section-title">
+      <h2>Herramientas disponibles</h2>
+      <span class="small">Accesos principales</span>
     </div>
 
-    <div class="subherramienta subherramienta-destacada">
-      <h3>Comparar CSV</h3>
-      <p>Compara un CSV contra el reporte base y visualiza diferencias en llamadas, salientes, minutos y perdidas.</p>
-      <a class="btn secondary" href="/comparar-csv">Abrir comparador CSV</a>
+    <div class="tool-grid">
+      <article class="subherramienta">
+        <div>
+          <h3>Reporte de stats</h3>
+          <p>Carga un CSV y genera el reporte general por agente, turnos, resumen y ranking.</p>
+        </div>
+        <a class="btn" href="{{ url_for('reporte_agentes.reporte_agentes') }}">Abrir reporte</a>
+      </article>
+
+      <article class="subherramienta subherramienta-destacada">
+        <div>
+          <h3>Comparar CSV</h3>
+          <p>Compara un CSV contra el reporte base y visualiza diferencias en llamadas, salientes, minutos y perdidas.</p>
+        </div>
+        <a class="btn secondary" href="/comparar-csv">Abrir comparador</a>
+      </article>
+
+      <article class="subherramienta">
+        <div>
+          <h3>Usuarios a Google Sheets</h3>
+          <p>Limpia una lista de usuarios desde CSV, elimina duplicados y la deja lista para descargar o crear en Google Sheets.</p>
+        </div>
+        <a class="btn" href="{{ url_for('usuarios_a_sheets.usuarios_a_sheets') }}">Abrir herramienta</a>
+      </article>
+
+      <article class="subherramienta">
+        <div>
+          <h3>Usuarios activos</h3>
+          <p>Consulta usuarios activos de distintos sistemas en un solo lugar.</p>
+        </div>
+        <a class="btn secondary" href="/usuarios-activos/">Abrir vista</a>
+      </article>
     </div>
-  </div>
-</div>
-
-<div class="card">
-  <h2>Usuarios a Google Sheets</h2>
-  <p>
-    Limpia una lista de usuarios desde CSV, elimina duplicados y la deja lista
-    para descargar o crear en Google Sheets.
-  </p>
-  <a class="btn" href="{{ url_for('usuarios_a_sheets.usuarios_a_sheets') }}">
-    Abrir herramienta
-  </a>
-</div>
-
-<div class="card">
-  <h2>Usuarios activos</h2>
-  <p>Consulta usuarios activos de distintos sistemas en un solo lugar.</p>
-  <a href="/usuarios-activos/" class="btn">Abrir usuarios activos</a>
+  </section>
 </div>
 {% endblock %}

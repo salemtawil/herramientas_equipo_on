@@ -171,7 +171,7 @@ def _ejecutar_actualizacion_total():
 
 
 def obtener_estado_actual():
-    return _ejecutar_actualizacion_total()
+    return list(_estado_base().values())
 
 
 def iniciar_actualizacion():

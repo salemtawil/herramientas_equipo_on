@@ -1,245 +1,230 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <title>Usuarios activos</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 30px;
-            background: #f5f7fb;
-        }
+{% extends "base.html" %}
 
-        .topbar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 24px;
-        }
+{% block title %}Usuarios activos{% endblock %}
 
-        h1 {
-            margin: 0;
-        }
-
-        button {
-            background: #2563eb;
-            color: white;
-            border: none;
-            padding: 10px 16px;
-            border-radius: 8px;
-            cursor: pointer;
-        }
-
-        .cards {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 16px;
-        }
-
-        .card {
-            background: white;
-            border-radius: 12px;
-            padding: 18px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
-        }
-
-        .card h3 {
-            margin-top: 0;
-            margin-bottom: 10px;
-        }
-
-        .metric {
-            margin: 8px 0;
-        }
-
-        .progress {
-            color: #444;
-            font-size: 14px;
-            margin-top: 10px;
-        }
-
-        .error {
-            color: red;
-            font-size: 14px;
-            margin-top: 10px;
-        }
-
-        .back {
-            display: inline-block;
-            margin-top: 24px;
-            text-decoration: none;
-        }
-    </style>
-</head>
-<body>
-    <div class="topbar">
+{% block content %}
+<div class="page-stack">
+  <section class="card page-hero">
+    <div class="page-section-title">
+      <div>
         <h1>Usuarios activos</h1>
-        <button onclick="actualizarDatos()">Actualizar</button>
+        <p>Consulta el estado consolidado de cada sistema y actualiza los datos sin salir de la vista.</p>
+        <p id="general-updated">Última actualización general: -</p>
+      </div>
+      <button type="button" id="actualizar-btn" onclick="actualizarDatos()">Actualizar</button>
     </div>
+  </section>
 
-    <div id="resultado" class="cards">
-        <div class="card" id="card-compinche">
-            <h3>Compinche</h3>
-            <div class="metric">Usuarios activos: <strong id="compinche-active">-</strong></div>
-            <div class="metric">Running users: <strong id="compinche-running">-</strong></div>
-            <div class="metric">Actualizado: <span id="compinche-updated">-</span></div>
-            <div class="progress" id="compinche-progress">Pendiente</div>
-            <div class="error" id="compinche-error"></div>
+  <section id="resultado" class="system-grid">
+    <article class="system-card" id="card-compinche">
+      <div class="system-card__header">
+        <div>
+          <h3 class="system-card__title">Compinche</h3>
+          <p class="system-card__meta">Estado actual del sistema</p>
         </div>
+      </div>
+      <div class="stat-list">
+        <div class="stat-line"><span>Usuarios activos</span><strong id="compinche-active">-</strong></div>
+        <div class="stat-line"><span>Running users</span><strong id="compinche-running">-</strong></div>
+      </div>
+      <div class="progress" id="compinche-progress">Pendiente</div>
+      <div class="error" id="compinche-error"></div>
+    </article>
 
-        <div class="card" id="card-paripe">
-            <h3>Paripe</h3>
-            <div class="metric">Usuarios activos: <strong id="paripe-good-standing">-</strong></div>
-            <div class="metric">Pool de fotos: <strong id="paripe-photo-pool">-</strong></div>
-            <div class="metric">Actualizado: <span id="paripe-updated">-</span></div>
-            <div class="progress" id="paripe-progress">Pendiente</div>
-            <div class="error" id="paripe-error"></div>
+    <article class="system-card" id="card-paripe">
+      <div class="system-card__header">
+        <div>
+          <h3 class="system-card__title">Paripe</h3>
+          <p class="system-card__meta">Estado actual del sistema</p>
         </div>
+      </div>
+      <div class="stat-list">
+        <div class="stat-line"><span>Usuarios activos</span><strong id="paripe-good-standing">-</strong></div>
+        <div class="stat-line"><span>Pool de fotos</span><strong id="paripe-photo-pool">-</strong></div>
+      </div>
+      <div class="progress" id="paripe-progress">Pendiente</div>
+      <div class="error" id="paripe-error"></div>
+    </article>
 
-        <div class="card" id="card-camarada">
-            <h3>camarada</h3>
-            <div class="metric">Usuarios activos: <strong id="camarada-active">-</strong></div>
-            <div class="metric">Running users: <strong id="camarada-running">-</strong></div>
-            <div class="metric">Actualizado: <span id="camarada-updated">-</span></div>
-            <div class="progress" id="camarada-progress">Pendiente</div>
-            <div class="error" id="camarada-error"></div>
+    <article class="system-card" id="card-camarada">
+      <div class="system-card__header">
+        <div>
+          <h3 class="system-card__title">Camarada</h3>
+          <p class="system-card__meta">Estado actual del sistema</p>
         </div>
+      </div>
+      <div class="stat-list">
+        <div class="stat-line"><span>Usuarios activos</span><strong id="camarada-active">-</strong></div>
+        <div class="stat-line"><span>Running users</span><strong id="camarada-running">-</strong></div>
+      </div>
+      <div class="progress" id="camarada-progress">Pendiente</div>
+      <div class="error" id="camarada-error"></div>
+    </article>
 
-        <div class="card" id="card-complice">
-            <h3>complice</h3>
-            <div class="metric">Usuarios activos: <strong id="complice-active">-</strong></div>
-            <div class="metric">Running users: <strong id="complice-running">-</strong></div>
-            <div class="metric">Actualizado: <span id="complice-updated">-</span></div>
-            <div class="progress" id="complice-progress">Pendiente</div>
-            <div class="error" id="complice-error"></div>
+    <article class="system-card" id="card-complice">
+      <div class="system-card__header">
+        <div>
+          <h3 class="system-card__title">Complice</h3>
+          <p class="system-card__meta">Estado actual del sistema</p>
         </div>
+      </div>
+      <div class="stat-list">
+        <div class="stat-line"><span>Usuarios activos</span><strong id="complice-active">-</strong></div>
+        <div class="stat-line"><span>Running users</span><strong id="complice-running">-</strong></div>
+      </div>
+      <div class="progress" id="complice-progress">Pendiente</div>
+      <div class="error" id="complice-error"></div>
+    </article>
 
-        <div class="card" id="card-secuaz">
-            <h3>secuaz</h3>
-            <div class="metric">Usuarios activos: <strong id="secuaz-active">-</strong></div>
-            <div class="metric">Running users: <strong id="secuaz-running">-</strong></div>
-            <div class="metric">Actualizado: <span id="secuaz-updated">-</span></div>
-            <div class="progress" id="secuaz-progress">Pendiente</div>
-            <div class="error" id="secuaz-error"></div>
+    <article class="system-card" id="card-secuaz">
+      <div class="system-card__header">
+        <div>
+          <h3 class="system-card__title">Secuaz</h3>
+          <p class="system-card__meta">Estado actual del sistema</p>
         </div>
+      </div>
+      <div class="stat-list">
+        <div class="stat-line"><span>Usuarios activos</span><strong id="secuaz-active">-</strong></div>
+        <div class="stat-line"><span>Running users</span><strong id="secuaz-running">-</strong></div>
+      </div>
+      <div class="progress" id="secuaz-progress">Pendiente</div>
+      <div class="error" id="secuaz-error"></div>
+    </article>
 
-        <div class="card" id="card-ready4drive">
-            <h3>ready4drive</h3>
-            <div class="metric">Usuarios activos: <strong id="ready4drive-active">-</strong></div>
-            <div class="metric">Running users: <strong id="ready4drive-running">-</strong></div>
-            <div class="metric">Actualizado: <span id="ready4drive-updated">-</span></div>
-            <div class="progress" id="ready4drive-progress">Pendiente</div>
-            <div class="error" id="ready4drive-error"></div>
+    <article class="system-card" id="card-ready4drive">
+      <div class="system-card__header">
+        <div>
+          <h3 class="system-card__title">Ready4Drive</h3>
+          <p class="system-card__meta">Estado actual del sistema</p>
         </div>
-    </div>
+      </div>
+      <div class="stat-list">
+        <div class="stat-line"><span>Usuarios activos</span><strong id="ready4drive-active">-</strong></div>
+        <div class="stat-line"><span>Running users</span><strong id="ready4drive-running">-</strong></div>
+      </div>
+      <div class="progress" id="ready4drive-progress">Pendiente</div>
+      <div class="error" id="ready4drive-error"></div>
+    </article>
+  </section>
+</div>
+{% endblock %}
 
-    <a href="/" class="back">â† Volver al panel principal</a>
+{% block scripts %}
+<script>
+function formatUpdatedAt(value) {
+  if (!value || value === "-") return "-";
 
-    <script>
-        function renderData(items) {
-            const compinche = items.find(item => item.system === "Compinche");
-            const paripe = items.find(item => item.system === "Paripe");
-            const camarada = items.find(item => item.system === "camarada");
-            const complice = items.find(item => item.system === "complice");
-            const secuaz = items.find(item => item.system === "secuaz");
-            const ready4drive = items.find(item => item.system === "ready4drive");
+  const match = String(value).match(/(?:\d{4}-\d{2}-\d{2}\s+)?(\d{1,2}):(\d{2})(?::\d{2})?/);
+  if (!match) return value;
 
-            if (compinche) {
-                document.getElementById("compinche-active").textContent = compinche.active_users ?? "-";
-                document.getElementById("compinche-running").textContent = compinche.running_users ?? "-";
-                document.getElementById("compinche-updated").textContent = compinche.updated_at ?? "-";
-                document.getElementById("compinche-progress").textContent = compinche.progress ?? "";
-                document.getElementById("compinche-error").textContent = compinche.error ? "Error: " + compinche.error : "";
-            }
+  let hours = Number(match[1]);
+  const minutes = match[2];
+  const suffix = hours >= 12 ? "PM" : "AM";
 
-            if (paripe) {
-                document.getElementById("paripe-good-standing").textContent = paripe.good_standing_users ?? "-";
-                document.getElementById("paripe-photo-pool").textContent = paripe.photo_pool ?? "-";
-                document.getElementById("paripe-updated").textContent = paripe.updated_at ?? "-";
-                document.getElementById("paripe-progress").textContent = paripe.progress ?? "";
-                document.getElementById("paripe-error").textContent = paripe.error ? "Error: " + paripe.error : "";
-            }
+  hours = hours % 12 || 12;
+  return `${hours}:${minutes} ${suffix}`;
+}
 
-            if (camarada) {
-                document.getElementById("camarada-active").textContent = camarada.active_users ?? "-";
-                document.getElementById("camarada-running").textContent = camarada.running_users ?? "-";
-                document.getElementById("camarada-updated").textContent = camarada.updated_at ?? "-";
-                document.getElementById("camarada-progress").textContent = camarada.progress ?? "";
-                document.getElementById("camarada-error").textContent = camarada.error ? "Error: " + camarada.error : "";
-            }
+function renderData(items, updatedAt) {
+  const compinche = items.find(item => item.system === "Compinche");
+  const paripe = items.find(item => item.system === "Paripe");
+  const camarada = items.find(item => item.system === "camarada");
+  const complice = items.find(item => item.system === "complice");
+  const secuaz = items.find(item => item.system === "secuaz");
+  const ready4drive = items.find(item => item.system === "ready4drive");
 
-            if (complice) {
-                document.getElementById("complice-active").textContent = complice.active_users ?? "-";
-                document.getElementById("complice-running").textContent = complice.running_users ?? "-";
-                document.getElementById("complice-updated").textContent = complice.updated_at ?? "-";
-                document.getElementById("complice-progress").textContent = complice.progress ?? "";
-                document.getElementById("complice-error").textContent = complice.error ? "Error: " + complice.error : "";
-            }
+  document.getElementById("general-updated").textContent = `Última actualización general: ${formatUpdatedAt(updatedAt)}`;
 
-            if (secuaz) {
-                document.getElementById("secuaz-active").textContent = secuaz.active_users ?? "-";
-                document.getElementById("secuaz-running").textContent = secuaz.running_users ?? "-";
-                document.getElementById("secuaz-updated").textContent = secuaz.updated_at ?? "-";
-                document.getElementById("secuaz-progress").textContent = secuaz.progress ?? "";
-                document.getElementById("secuaz-error").textContent = secuaz.error ? "Error: " + secuaz.error : "";
-            }
+  if (compinche) {
+    document.getElementById("compinche-active").textContent = compinche.active_users ?? "-";
+    document.getElementById("compinche-running").textContent = compinche.running_users ?? "-";
+    document.getElementById("compinche-progress").textContent = compinche.progress ?? "";
+    document.getElementById("compinche-error").textContent = compinche.error ? "Error: " + compinche.error : "";
+  }
 
-            if (ready4drive) {
-                document.getElementById("ready4drive-active").textContent = ready4drive.active_users ?? "-";
-                document.getElementById("ready4drive-running").textContent = ready4drive.running_users ?? "-";
-                document.getElementById("ready4drive-updated").textContent = ready4drive.updated_at ?? "-";
-                document.getElementById("ready4drive-progress").textContent = ready4drive.progress ?? "";
-                document.getElementById("ready4drive-error").textContent = ready4drive.error ? "Error: " + ready4drive.error : "";
-            }
+  if (paripe) {
+    document.getElementById("paripe-good-standing").textContent = paripe.good_standing_users ?? "-";
+    document.getElementById("paripe-photo-pool").textContent = paripe.photo_pool ?? "-";
+    document.getElementById("paripe-progress").textContent = paripe.progress ?? "";
+    document.getElementById("paripe-error").textContent = paripe.error ? "Error: " + paripe.error : "";
+  }
 
-        }
+  if (camarada) {
+    document.getElementById("camarada-active").textContent = camarada.active_users ?? "-";
+    document.getElementById("camarada-running").textContent = camarada.running_users ?? "-";
+    document.getElementById("camarada-progress").textContent = camarada.progress ?? "";
+    document.getElementById("camarada-error").textContent = camarada.error ? "Error: " + camarada.error : "";
+  }
 
-        async function consultarEstado() {
-            try {
-                const response = await fetch("/usuarios-activos/api");
-                const result = await response.json();
+  if (complice) {
+    document.getElementById("complice-active").textContent = complice.active_users ?? "-";
+    document.getElementById("complice-running").textContent = complice.running_users ?? "-";
+    document.getElementById("complice-progress").textContent = complice.progress ?? "";
+    document.getElementById("complice-error").textContent = complice.error ? "Error: " + complice.error : "";
+  }
 
-                if (result.success) {
-                    renderData(result.data);
-                }
-            } catch (error) {
-                console.error("Error consultando estado:", error);
-            }
-        }
+  if (secuaz) {
+    document.getElementById("secuaz-active").textContent = secuaz.active_users ?? "-";
+    document.getElementById("secuaz-running").textContent = secuaz.running_users ?? "-";
+    document.getElementById("secuaz-progress").textContent = secuaz.progress ?? "";
+    document.getElementById("secuaz-error").textContent = secuaz.error ? "Error: " + secuaz.error : "";
+  }
 
-        async function actualizarDatos() {
-            const sistemas = [
-                "compinche",
-                "paripe",
-                "camarada",
-                "complice",
-                "secuaz",
-                "ready4drive"
-            ];
+  if (ready4drive) {
+    document.getElementById("ready4drive-active").textContent = ready4drive.active_users ?? "-";
+    document.getElementById("ready4drive-running").textContent = ready4drive.running_users ?? "-";
+    document.getElementById("ready4drive-progress").textContent = ready4drive.progress ?? "";
+    document.getElementById("ready4drive-error").textContent = ready4drive.error ? "Error: " + ready4drive.error : "";
+  }
+}
 
-            sistemas.forEach(nombre => {
-                const progress = document.getElementById(`${nombre}-progress`);
-                const error = document.getElementById(`${nombre}-error`);
+async function consultarEstado() {
+  try {
+    const response = await fetch("/usuarios-activos/api");
+    const result = await response.json();
 
-                if (progress) progress.textContent = "Iniciando...";
-                if (error) error.textContent = "";
-            });
+    if (result.success) {
+      renderData(result.data, result.updated_at);
+    }
+  } catch (error) {
+    console.error("Error consultando estado:", error);
+  }
+}
 
-            try {
-                const response = await fetch("/usuarios-activos/actualizar", {
-                    method: "POST"
-                });
-                const result = await response.json();
+async function actualizarDatos() {
+  const sistemas = ["compinche", "paripe", "camarada", "complice", "secuaz", "ready4drive"];
+  const button = document.getElementById("actualizar-btn");
 
-                if (result.success) {
-                    renderData(result.data);
-                }
-            } catch (error) {
-                console.error("Error actualizando:", error);
-            }
-        }
+  sistemas.forEach(nombre => {
+    const progress = document.getElementById(`${nombre}-progress`);
+    const error = document.getElementById(`${nombre}-error`);
 
-        consultarEstado();
-    </script>
-</body>
-</html>
+    if (progress) progress.textContent = "Iniciando...";
+    if (error) error.textContent = "";
+  });
+
+  try {
+    if (button) {
+      button.disabled = true;
+      button.textContent = "Actualizando...";
+    }
+
+    const response = await fetch("/usuarios-activos/actualizar", {
+      method: "POST"
+    });
+    const result = await response.json();
+
+    if (result.success) {
+      renderData(result.data, result.updated_at);
+    }
+  } catch (error) {
+    console.error("Error actualizando:", error);
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = "Actualizar";
+    }
+  }
+}
+</script>
+{% endblock %}

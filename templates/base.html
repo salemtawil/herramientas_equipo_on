@@ -1,14 +1,51 @@
 <!doctype html>
-<html lang="es">
+<html lang="es" data-theme="light">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Herramientas{% endblock %}</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v='10') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v='12') }}">
+  <script src="{{ url_for('static', filename='app.js', v='1') }}" defer></script>
+  {% block head_extra %}{% endblock %}
 </head>
 <body>
-  <div class="wrap">
-    {% block content %}{% endblock %}
+  <div class="app-shell">
+    <header class="app-topbar">
+      <div class="app-topbar__brand">
+        <a class="app-brand" href="{{ url_for('inicio') }}">Herramientas Equipo</a>
+        <p class="app-subtitle">Panel server-rendered con tema global y UI consistente.</p>
+      </div>
+
+      <div class="app-topbar__actions">
+        {% if request.endpoint != 'inicio' %}
+          <button
+            type="button"
+            class="btn btn-ghost"
+            data-back-button
+            data-fallback="{{ url_for('inicio') }}"
+          >
+            Regresar
+          </button>
+        {% endif %}
+        <button type="button" class="btn btn-ghost" data-theme-toggle>Modo oscuro</button>
+      </div>
+    </header>
+
+    <main class="wrap app-main">
+      {% block content %}{% endblock %}
+    </main>
   </div>
+
+  <div id="global-processing-overlay" class="processing-overlay" aria-hidden="true">
+    <div class="processing-overlay__card">
+      <div class="processing-overlay__spinner" aria-hidden="true"></div>
+      <h3>Procesando</h3>
+      <p id="global-processing-text">
+        Estamos trabajando en tu solicitud. Esto puede tardar un poco si el archivo es grande.
+      </p>
+    </div>
+  </div>
+
+  {% block scripts %}{% endblock %}
 </body>
 </html>

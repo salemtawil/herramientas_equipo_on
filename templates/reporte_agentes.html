@@ -3,349 +3,277 @@
 {% block title %}Reporte de agentes{% endblock %}
 
 {% block content %}
-<div class="card">
-  <h1>Reporte de agentes</h1>
-  <p>Los turnos están definidos manualmente en el código. El CSV se procesa temporalmente y no se guarda.</p>
+<div class="page-stack">
+  <section class="card page-hero">
+    <h1>Reporte de agentes</h1>
+    <p>Los turnos estan definidos manualmente en el codigo. El CSV se procesa temporalmente y no se guarda.</p>
 
-  <div class="top-space acciones-barra">
-    <a class="btn secondary" href="{{ url_for('inicio') }}">Volver al inicio</a>
-    <button type="button" id="toggle-theme" class="btn secondary">Modo oscuro</button>
-  </div>
+    {% if mensaje %}
+      <div class="success">{{ mensaje }}</div>
+    {% endif %}
 
-  {% if mensaje %}
-    <div class="success">{{ mensaje }}</div>
-  {% endif %}
+    {% if advertencia %}
+      <div class="warning">{{ advertencia }}</div>
+    {% endif %}
+  </section>
 
-  {% if advertencia %}
-    <div class="warning">{{ advertencia }}</div>
-  {% endif %}
-</div>
+  <details class="card seccion-desplegable">
+    <summary class="titulo-desplegable">
+      <span>Configuracion fija de turnos</span>
+      <span class="small">{{ turnos_config|length }} turnos</span>
+    </summary>
 
-<details class="card seccion-desplegable">
-  <summary class="titulo-desplegable">
-    <span>Configuración fija de turnos</span>
-    <span class="small">{{ turnos_config|length }} turnos</span>
-  </summary>
+    <div class="top-space">
+      <p class="small">Para cambiar turnos, edita el archivo <strong>utils/config_turnos.py</strong>.</p>
 
-  <div class="top-space">
-    <p class="small">
-      Para cambiar turnos, edita el archivo <strong>utils/config_turnos.py</strong>.
-    </p>
+      <div class="turno-grid">
+        {% for turno, agentes in turnos_config.items() %}
+        <div class="card card-interno">
+          <div class="header-turno">
+            <h3>{{ turno }}</h3>
+            <span class="small">{{ agentes|length }} agentes</span>
+          </div>
 
-    <div class="turno-grid">
-      {% for turno, agentes in turnos_config.items() %}
-      <div class="card card-interno">
-        <div class="header-turno">
-          <h3>{{ turno }}</h3>
-          <span class="small">{{ agentes|length }} agentes</span>
+          <div class="agente-lista">
+            {% if agentes %}
+              {% for agente in agentes %}
+                <div class="agente-item">
+                  <label>{{ agente }}</label>
+                </div>
+              {% endfor %}
+            {% else %}
+              <p class="small">No hay agentes configurados en este turno.</p>
+            {% endif %}
+          </div>
         </div>
-
-        <div class="agente-lista">
-          {% if agentes %}
-            {% for agente in agentes %}
-              <div class="agente-item">
-                <label>{{ agente }}</label>
-              </div>
-            {% endfor %}
-          {% else %}
-            <p class="small">No hay agentes configurados en este turno.</p>
-          {% endif %}
-        </div>
+        {% endfor %}
       </div>
-      {% endfor %}
     </div>
-  </div>
-</details>
+  </details>
 
-<div class="card">
-  <h2>Cargar CSV</h2>
-  <form method="post" enctype="multipart/form-data">
-    <div class="row">
-      <div><input type="file" name="archivo" accept=".csv"></div>
-      <div><button type="submit">Procesar CSV</button></div>
+  <section class="card">
+    <h2>Cargar CSV</h2>
+    <form method="post" enctype="multipart/form-data">
+      <div class="row">
+        <div><input type="file" name="archivo" accept=".csv"></div>
+        <div><button type="submit">Procesar CSV</button></div>
+      </div>
+    </form>
+  </section>
+
+  {% if resumen %}
+  <details class="card seccion-desplegable">
+    <summary class="titulo-desplegable">
+      <span>Resumen general</span>
+      <span class="small">Ver detalles</span>
+    </summary>
+
+    <div class="top-space">
+      <div class="grid">
+        {% for nombre, valor in resumen.items() %}
+          <div class="metric">
+            <div class="label">{{ nombre }}</div>
+            <div class="value">{{ valor }}</div>
+          </div>
+        {% endfor %}
+      </div>
     </div>
-  </form>
-</div>
+  </details>
+  {% endif %}
 
-{% if resumen %}
-<details class="card seccion-desplegable">
-  <summary class="titulo-desplegable">
-    <span>Resumen general</span>
-    <span class="small">Ver detalles</span>
-  </summary>
+  {% if agentes_sin_asignar %}
+  <details class="card seccion-desplegable">
+    <summary class="titulo-desplegable">
+      <span>Agentes sin asignar</span>
+      <span class="small">{{ agentes_sin_asignar|length }} agentes</span>
+    </summary>
 
-  <div class="top-space">
-    <div class="grid">
-      {% for nombre, valor in resumen.items() %}
-        <div class="metric">
-          <div class="label">{{ nombre }}</div>
-          <div class="value">{{ valor }}</div>
-        </div>
-      {% endfor %}
+    <div class="top-space">
+      <div class="agente-lista">
+        {% for agente in agentes_sin_asignar %}
+          <div class="agente-item">
+            <label>{{ agente }}</label>
+          </div>
+        {% endfor %}
+      </div>
     </div>
-  </div>
-</details>
-{% endif %}
+  </details>
+  {% endif %}
 
-{% if agentes_sin_asignar %}
-<details class="card seccion-desplegable">
-  <summary class="titulo-desplegable">
-    <span>Agentes sin asignar</span>
-    <span class="small">{{ agentes_sin_asignar|length }} agentes</span>
-  </summary>
+  {% if tabla_general %}
+  <details class="card seccion-desplegable">
+    <summary class="titulo-desplegable">
+      <span>Tabla general</span>
+      <span class="small">{{ tabla_general|length }} filas</span>
+    </summary>
 
-  <div class="top-space">
-    <div class="agente-lista">
-      {% for agente in agentes_sin_asignar %}
-        <div class="agente-item">
-          <label>{{ agente }}</label>
-        </div>
-      {% endfor %}
-    </div>
-  </div>
-</details>
-{% endif %}
-
-{% if tabla_general %}
-<details class="card seccion-desplegable">
-  <summary class="titulo-desplegable">
-    <span>Tabla general</span>
-    <span class="small">{{ tabla_general|length }} filas</span>
-  </summary>
-
-  <div class="top-space">
-    <div class="table-wrap">
-      <table class="tabla-ordenable">
-        <thead>
-          <tr>
-            {% for col in columnas_visibles %}
-              <th>{{ col }}</th>
-            {% endfor %}
-          </tr>
-        </thead>
-        <tbody>
-          {% for fila in tabla_general %}
+    <div class="top-space">
+      <div class="table-wrap">
+        <table class="tabla-ordenable">
+          <thead>
             <tr>
               {% for col in columnas_visibles %}
-                <td>{{ fila[col] }}</td>
+                <th>{{ col }}</th>
               {% endfor %}
             </tr>
-          {% endfor %}
-        </tbody>
-        <tfoot>
-          <tr class="fila-total">
-            {% for col in columnas_visibles %}
-              <td>{{ totales_tabla_general[col] if totales_tabla_general else "" }}</td>
+          </thead>
+          <tbody>
+            {% for fila in tabla_general %}
+              <tr>
+                {% for col in columnas_visibles %}
+                  <td>{{ fila[col] }}</td>
+                {% endfor %}
+              </tr>
             {% endfor %}
-          </tr>
-        </tfoot>
-      </table>
+          </tbody>
+          <tfoot>
+            <tr class="fila-total">
+              {% for col in columnas_visibles %}
+                <td>{{ totales_tabla_general[col] if totales_tabla_general else "" }}</td>
+              {% endfor %}
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <p class="small">Haz clic en el nombre de una columna para ordenar.</p>
     </div>
-    <p class="small">Haz clic en el nombre de una columna para ordenar.</p>
-  </div>
-</details>
-{% endif %}
+  </details>
+  {% endif %}
 
-{% for seccion in secciones_turnos %}
-<details class="card seccion-desplegable">
-  <summary class="titulo-desplegable">
-    <span>{{ seccion.nombre }}</span>
-    <span class="small">{{ seccion.filas|length }} filas</span>
-  </summary>
+  {% for seccion in secciones_turnos %}
+  <details class="card seccion-desplegable">
+    <summary class="titulo-desplegable">
+      <span>{{ seccion.nombre }}</span>
+      <span class="small">{{ seccion.filas|length }} filas</span>
+    </summary>
 
-  <div class="top-space">
-    <div class="table-wrap">
-      <table class="tabla-ordenable">
-        <thead>
-          <tr>
-            {% for col in columnas_visibles if col != "Turno" %}
-              <th>{{ col }}</th>
-            {% endfor %}
-          </tr>
-        </thead>
-        <tbody>
-          {% for fila in seccion.filas %}
+    <div class="top-space">
+      <div class="table-wrap">
+        <table class="tabla-ordenable">
+          <thead>
             <tr>
               {% for col in columnas_visibles if col != "Turno" %}
-                <td>{{ fila[col] }}</td>
+                <th>{{ col }}</th>
               {% endfor %}
             </tr>
-          {% endfor %}
-        </tbody>
-        <tfoot>
-          <tr class="fila-total">
-            {% for col in columnas_visibles if col != "Turno" %}
-              <td>{{ seccion.totales[col] if seccion.totales else "" }}</td>
+          </thead>
+          <tbody>
+            {% for fila in seccion.filas %}
+              <tr>
+                {% for col in columnas_visibles if col != "Turno" %}
+                  <td>{{ fila[col] }}</td>
+                {% endfor %}
+              </tr>
             {% endfor %}
-          </tr>
-        </tfoot>
-      </table>
-    </div>
-  </div>
-</details>
-{% endfor %}
-
-{% if tabla_resumen_turnos %}
-<details class="card seccion-desplegable">
-  <summary class="titulo-desplegable">
-    <span>Resumen por turno</span>
-    <span class="small">{{ tabla_resumen_turnos|length }} turnos</span>
-  </summary>
-
-  <div class="top-space">
-    <div class="table-wrap">
-      <table class="tabla-ordenable">
-        <thead>
-          <tr>
-            <th>Turno</th>
-            <th>Agentes</th>
-            <th>Llamadas</th>
-            <th>Salientes</th>
-            <th>Perdidas</th>
-            <th>Mins llamadas</th>
-            <th>Mins salientes</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for fila in tabla_resumen_turnos %}
-            <tr>
-              <td>{{ fila["Turno"] }}</td>
-              <td>{{ fila["Agentes"] }}</td>
-              <td>{{ fila["Llamadas"] }}</td>
-              <td>{{ fila["Salientes"] }}</td>
-              <td>{{ fila["Perdidas"] }}</td>
-              <td>{{ fila["Mins llamadas"] }}</td>
-              <td>{{ fila["Mins salientes"] }}</td>
+          </tbody>
+          <tfoot>
+            <tr class="fila-total">
+              {% for col in columnas_visibles if col != "Turno" %}
+                <td>{{ seccion.totales[col] if seccion.totales else "" }}</td>
+              {% endfor %}
             </tr>
-          {% endfor %}
-        </tbody>
-        <tfoot>
-          <tr class="fila-total">
-            <td>{{ totales_resumen_turnos["Turno"] if totales_resumen_turnos else "" }}</td>
-            <td>{{ totales_resumen_turnos["Agentes"] if totales_resumen_turnos else "" }}</td>
-            <td>{{ totales_resumen_turnos["Llamadas"] if totales_resumen_turnos else "" }}</td>
-            <td>{{ totales_resumen_turnos["Salientes"] if totales_resumen_turnos else "" }}</td>
-            <td>{{ totales_resumen_turnos["Perdidas"] if totales_resumen_turnos else "" }}</td>
-            <td>{{ totales_resumen_turnos["Mins llamadas"] if totales_resumen_turnos else "" }}</td>
-            <td>{{ totales_resumen_turnos["Mins salientes"] if totales_resumen_turnos else "" }}</td>
-          </tr>
-        </tfoot>
-      </table>
-    </div>
-  </div>
-</details>
-{% endif %}
-
-{% if ranking_completo %}
-<details class="card seccion-desplegable" open>
-  <summary class="titulo-desplegable">
-    <span>Ranking visual de agentes</span>
-    <span class="small">Excluye Admin y Otros por defecto</span>
-  </summary>
-
-  <div class="top-space">
-    <label class="small">Excluir turnos del ranking</label>
-    <div class="turnos-filtro-grid" id="ranking-turnos-filtros">
-      {% for turno in turnos_ranking_disponibles %}
-        <label class="turno-filtro-item">
-          <input
-            type="checkbox"
-            class="ranking-turno-checkbox"
-            value="{{ turno }}"
-          >
-          <span>{{ turno }}</span>
-        </label>
-      {% endfor %}
-    </div>
-  </div>
-
-  <div class="top-space ranking-dual">
-    <div class="ranking-panel ranking-mejores">
-      <div class="ranking-header">
-        <h3>Top 5 mejores</h3>
-        <span class="ranking-badge">Mayor score</span>
+          </tfoot>
+        </table>
       </div>
-      <div class="ranking-lista" id="ranking-mejores-lista"></div>
     </div>
+  </details>
+  {% endfor %}
 
-    <div class="ranking-panel ranking-peores">
-      <div class="ranking-header">
-        <h3>Top 5 peores</h3>
-        <span class="ranking-badge ranking-badge-peor">Menor score</span>
+  {% if tabla_resumen_turnos %}
+  <details class="card seccion-desplegable">
+    <summary class="titulo-desplegable">
+      <span>Resumen por turno</span>
+      <span class="small">{{ tabla_resumen_turnos|length }} turnos</span>
+    </summary>
+
+    <div class="top-space">
+      <div class="table-wrap">
+        <table class="tabla-ordenable">
+          <thead>
+            <tr>
+              <th>Turno</th>
+              <th>Agentes</th>
+              <th>Llamadas</th>
+              <th>Salientes</th>
+              <th>Perdidas</th>
+              <th>Mins llamadas</th>
+              <th>Mins salientes</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for fila in tabla_resumen_turnos %}
+              <tr>
+                <td>{{ fila["Turno"] }}</td>
+                <td>{{ fila["Agentes"] }}</td>
+                <td>{{ fila["Llamadas"] }}</td>
+                <td>{{ fila["Salientes"] }}</td>
+                <td>{{ fila["Perdidas"] }}</td>
+                <td>{{ fila["Mins llamadas"] }}</td>
+                <td>{{ fila["Mins salientes"] }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+          <tfoot>
+            <tr class="fila-total">
+              <td>{{ totales_resumen_turnos["Turno"] if totales_resumen_turnos else "" }}</td>
+              <td>{{ totales_resumen_turnos["Agentes"] if totales_resumen_turnos else "" }}</td>
+              <td>{{ totales_resumen_turnos["Llamadas"] if totales_resumen_turnos else "" }}</td>
+              <td>{{ totales_resumen_turnos["Salientes"] if totales_resumen_turnos else "" }}</td>
+              <td>{{ totales_resumen_turnos["Perdidas"] if totales_resumen_turnos else "" }}</td>
+              <td>{{ totales_resumen_turnos["Mins llamadas"] if totales_resumen_turnos else "" }}</td>
+              <td>{{ totales_resumen_turnos["Mins salientes"] if totales_resumen_turnos else "" }}</td>
+            </tr>
+          </tfoot>
+        </table>
       </div>
-      <div class="ranking-lista" id="ranking-peores-lista"></div>
     </div>
-  </div>
-</details>
-{% endif %}
+  </details>
+  {% endif %}
 
+  {% if ranking_completo %}
+  <details class="card seccion-desplegable" open>
+    <summary class="titulo-desplegable">
+      <span>Ranking visual de agentes</span>
+      <span class="small">Excluye Admin y Otros por defecto</span>
+    </summary>
+
+    <div class="top-space">
+      <label class="small">Excluir turnos del ranking</label>
+      <div class="turnos-filtro-grid" id="ranking-turnos-filtros">
+        {% for turno in turnos_ranking_disponibles %}
+          <label class="turno-filtro-item">
+            <input type="checkbox" class="ranking-turno-checkbox" value="{{ turno }}">
+            <span>{{ turno }}</span>
+          </label>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="top-space ranking-dual">
+      <div class="ranking-panel ranking-mejores">
+        <div class="ranking-header">
+          <h3>Top 5 mejores</h3>
+          <span class="ranking-badge">Mayor score</span>
+        </div>
+        <div class="ranking-lista" id="ranking-mejores-lista"></div>
+      </div>
+
+      <div class="ranking-panel ranking-peores">
+        <div class="ranking-header">
+          <h3>Top 5 peores</h3>
+          <span class="ranking-badge ranking-badge-peor">Menor score</span>
+        </div>
+        <div class="ranking-lista" id="ranking-peores-lista"></div>
+      </div>
+    </div>
+  </details>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
 <script>
 document.addEventListener("DOMContentLoaded", function () {
-  const body = document.body;
-  const toggleThemeBtn = document.getElementById("toggle-theme");
-
-  function aplicarTextoBotonTema() {
-    if (!toggleThemeBtn) return;
-    toggleThemeBtn.textContent = body.classList.contains("dark-mode")
-      ? "Modo claro"
-      : "Modo oscuro";
-  }
-
-  const temaGuardado = localStorage.getItem("theme");
-  if (temaGuardado === "dark") {
-    body.classList.add("dark-mode");
-  }
-  aplicarTextoBotonTema();
-
-  if (toggleThemeBtn) {
-    toggleThemeBtn.addEventListener("click", function () {
-      body.classList.toggle("dark-mode");
-      localStorage.setItem(
-        "theme",
-        body.classList.contains("dark-mode") ? "dark" : "light"
-      );
-      aplicarTextoBotonTema();
-    });
-  }
-
-  const tablas = document.querySelectorAll(".tabla-ordenable");
-
-  tablas.forEach((tabla) => {
-    const headers = tabla.querySelectorAll("th");
-
-    headers.forEach((header, index) => {
-      header.style.cursor = "pointer";
-      header.addEventListener("click", () => {
-        const tbody = tabla.querySelector("tbody");
-        const rows = Array.from(tbody.querySelectorAll("tr"));
-        const asc = !header.classList.contains("asc");
-
-        headers.forEach(h => h.classList.remove("asc", "desc"));
-        header.classList.add(asc ? "asc" : "desc");
-
-        rows.sort((a, b) => {
-          const aText = a.children[index].innerText.trim().replace("%", "");
-          const bText = b.children[index].innerText.trim().replace("%", "");
-
-          const aNum = parseFloat(aText.replace(",", "."));
-          const bNum = parseFloat(bText.replace(",", "."));
-
-          const ambosNumeros = !isNaN(aNum) && !isNaN(bNum);
-
-          if (ambosNumeros) {
-            return asc ? aNum - bNum : bNum - aNum;
-          }
-
-          return asc
-            ? aText.localeCompare(bText, "es", { numeric: true })
-            : bText.localeCompare(aText, "es", { numeric: true });
-        });
-
-        rows.forEach(row => tbody.appendChild(row));
-      });
-    });
-  });
-
   const rankingData = {{ ranking_completo_json|safe if ranking_completo_json else '[]' }};
   const rankingCheckboxes = Array.from(document.querySelectorAll(".ranking-turno-checkbox"));
   const rankingMejoresLista = document.getElementById("ranking-mejores-lista");
@@ -363,18 +291,7 @@ document.addEventListener("DOMContentLoaded", function () {
   function renderRankingCard(fila, index, tipo) {
     const score = Number(fila.Score || 0);
     const scoreWidth = Math.max(0, Math.min(score, 100));
-
-    let posicion = `#${index + 1}`;
-    if (tipo === "mejor") {
-      if (index === 0) posicion = "🥇";
-      else if (index === 1) posicion = "🥈";
-      else if (index === 2) posicion = "🥉";
-    } else {
-      if (index === 0) posicion = "⚠️";
-      else if (index === 1) posicion = "⬇️";
-      else if (index === 2) posicion = "🔻";
-    }
-
+    const posicion = `#${index + 1}`;
     const scoreClass = tipo === "mejor" ? "ranking-score-alto" : "ranking-score-bajo";
     const barraClass = tipo === "mejor" ? "score-barra-fill-alto" : "score-barra-fill-bajo";
     const cardClass = tipo === "mejor" ? "ranking-card-mejor" : "ranking-card-peor";
