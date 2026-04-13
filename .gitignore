@@ -1,1 +1,33 @@
-.vercel
+.vercel/
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# Python cache and temp files
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# OS and editor artifacts
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Local environment files
+.env
+.env.*
