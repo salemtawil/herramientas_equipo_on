@@ -6,7 +6,8 @@ import unicodedata
 
 import pandas as pd
 import requests
-from flask import Blueprint, Response, render_template, request
+from flask import Blueprint, Response, current_app, render_template, request
+from itsdangerous import BadData, URLSafeSerializer
 
 from utils.turnos import cargar_turnos_fijos
 
@@ -610,13 +611,16 @@ def enviar_a_apps_script(df, nombre_hoja):
 
 
 def serializar_resultado(df, resumen, regiones_sin_tz):
-    return json.dumps(
+    serializer = URLSafeSerializer(
+        current_app.secret_key,
+        salt="usuarios-a-sheets-payload",
+    )
+    return serializer.dumps(
         {
             "df_json": df.to_json(orient="records", force_ascii=False),
             "resumen": resumen,
             "regiones_sin_tz": regiones_sin_tz,
-        },
-        ensure_ascii=False,
+        }
     )
 
 
@@ -624,7 +628,16 @@ def cargar_desde_payload(payload):
     if not payload:
         return None, None, []
 
-    item = json.loads(payload)
+    serializer = URLSafeSerializer(
+        current_app.secret_key,
+        salt="usuarios-a-sheets-payload",
+    )
+
+    try:
+        item = serializer.loads(payload)
+    except BadData:
+        return None, None, []
+
     if not item or "df_json" not in item:
         return None, None, []
 
