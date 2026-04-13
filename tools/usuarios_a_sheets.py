@@ -2,6 +2,7 @@ import io
 import os
 import re
 import json
+import logging
 import unicodedata
 
 import pandas as pd
@@ -9,9 +10,11 @@ import requests
 from flask import Blueprint, Response, current_app, render_template, request
 from itsdangerous import BadData, URLSafeSerializer
 
+from utils.archivos import _leer_csv_desde_bytes
 from utils.turnos import cargar_turnos_fijos
 
 usuarios_a_sheets_bp = Blueprint("usuarios_a_sheets", __name__)
+logger = logging.getLogger(__name__)
 
 FORM_KEY_PAYLOAD = "usuarios_a_sheets_payload"
 
@@ -344,6 +347,17 @@ def leer_csv_generico(archivo):
                 ultimo_error = e
 
     raise ValueError(f"No se pudo interpretar el CSV: {ultimo_error}")
+
+
+def leer_csv_generico(archivo):
+    if not archivo:
+        raise ValueError("No se recibió ningún archivo.")
+
+    contenido = archivo.read()
+    if hasattr(archivo, "seek"):
+        archivo.seek(0)
+
+    return _leer_csv_desde_bytes(contenido)
 
 
 def normalizar_texto(texto):
@@ -707,6 +721,7 @@ def usuarios_a_sheets():
                     tabla_previa = df_final.head(80).to_dict(orient="records")
 
         except Exception as e:
+            logger.exception("Error procesando usuarios_a_sheets con accion=%s", accion)
             advertencia = f"No se pudo procesar el archivo: {e}"
             if payload_cache:
                 try:

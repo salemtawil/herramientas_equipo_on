@@ -1,3 +1,4 @@
+import logging
 import os
 from flask import Flask, render_template
 from tools.reporte_agentes import reporte_agentes_bp
@@ -6,6 +7,10 @@ from tools.comparar_csv import comparar_csv_bp
 from tools.usuarios_a_sheets import usuarios_a_sheets_bp
 
 app = Flask(__name__)
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
 
 flask_secret_key = os.getenv("FLASK_SECRET_KEY")
 is_production = (

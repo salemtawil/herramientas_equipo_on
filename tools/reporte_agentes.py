@@ -1,4 +1,5 @@
 import json
+import logging
 import pandas as pd
 from flask import Blueprint, render_template, request
 
@@ -15,6 +16,8 @@ from utils.transformaciones import (
 from utils.turnos import cargar_turnos_fijos, detectar_repetidos, obtener_turno
 
 reporte_agentes_bp = Blueprint("reporte_agentes", __name__)
+logger = logging.getLogger(__name__)
+MAX_FILAS_VISTA_PREVIA = 500
 
 TURNOS_EXCLUIDOS_RANKING = [
     "Admin",
@@ -56,7 +59,7 @@ def preparar_dataframe(df, turnos_config):
 def html_tabla(df):
     if df.empty:
         return None
-    return df.to_dict(orient="records")
+    return df.head(MAX_FILAS_VISTA_PREVIA).to_dict(orient="records")
 
 
 def construir_fila_totales(df, columnas, etiqueta="TOTAL"):
@@ -314,8 +317,11 @@ def reporte_agentes():
                 agentes_sin_asignar = [ag for ag in lista_agentes if ag not in agentes_configurados]
 
                 mensaje = "CSV procesado correctamente."
+                if len(df_tabla_general) > MAX_FILAS_VISTA_PREVIA:
+                    mensaje += f" Mostrando las primeras {MAX_FILAS_VISTA_PREVIA} filas en la vista previa."
 
         except Exception as e:
+            logger.exception("Error procesando reporte_agentes")
             advertencia = f"No se pudo procesar el archivo: {e}"
 
     return render_template(

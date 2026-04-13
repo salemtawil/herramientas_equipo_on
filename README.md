@@ -20,6 +20,12 @@ python app.py
 
 La app levanta en modo local con la `FLASK_SECRET_KEY` por defecto de desarrollo si no defines una propia.
 
+## Pruebas
+
+```bash
+python -m unittest discover -s tests -v
+```
+
 ## Variables de entorno importantes
 
 Obligatoria en produccion:
@@ -39,6 +45,7 @@ Opcionales segun funcionalidad:
 - `AWS_ACCESS_KEY_ID`
 - `AWS_SECRET_ACCESS_KEY`
 - `AWS_DEFAULT_REGION`
+- `LOG_LEVEL`
 
 ## Deploy en Vercel
 

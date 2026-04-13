@@ -1,4 +1,5 @@
 import io
+import logging
 import os
 import re
 import unicodedata
@@ -16,6 +17,8 @@ from utils.transformaciones import (
 from utils.turnos import cargar_turnos_fijos, obtener_turno
 
 comparar_csv_bp = Blueprint("comparar_csv", __name__)
+logger = logging.getLogger(__name__)
+MAX_FILAS_VISTA_PREVIA = 500
 
 # Turnos que NO deben aparecer en la comparativa
 TURNOS_EXCLUIDOS_COMPARATIVA = [
@@ -350,6 +353,12 @@ def respuesta_csv_desde_df(df, nombre_archivo):
     )
 
 
+def tabla_preview(df):
+    if df is None or df.empty:
+        return None
+    return df.head(MAX_FILAS_VISTA_PREVIA).to_dict(orient="records")
+
+
 @comparar_csv_bp.route("/comparar-csv", methods=["GET", "POST"])
 def comparar_csv():
     mensaje = ""
@@ -392,7 +401,7 @@ def comparar_csv():
                     etiqueta_actual=etiqueta_actual,
                 )
                 columnas_comparativa_turnos = list(df_tabla_comparativa_turnos.columns)
-                tabla_comparativa_turnos = df_tabla_comparativa_turnos.to_dict(orient="records")
+                tabla_comparativa_turnos = tabla_preview(df_tabla_comparativa_turnos)
                 totales_comparativa_turnos = construir_fila_totales(
                     df_tabla_comparativa_turnos,
                     columnas_comparativa_turnos,
@@ -406,7 +415,7 @@ def comparar_csv():
                     etiqueta_actual=etiqueta_actual,
                 )
                 columnas_comparativa = list(df_tabla_comparativa.columns)
-                tabla_comparativa = df_tabla_comparativa.to_dict(orient="records")
+                tabla_comparativa = tabla_preview(df_tabla_comparativa)
                 totales_comparativa = construir_fila_totales(
                     df_tabla_comparativa,
                     columnas_comparativa,
@@ -417,8 +426,11 @@ def comparar_csv():
                     return respuesta_csv_desde_df(df_tabla_comparativa, "comparativa_agentes.csv")
 
                 mensaje = "Comparativa generada correctamente."
+                if len(df_tabla_comparativa) > MAX_FILAS_VISTA_PREVIA:
+                    mensaje += f" Mostrando las primeras {MAX_FILAS_VISTA_PREVIA} filas en la vista previa."
 
         except Exception as e:
+            logger.exception("Error procesando comparar_csv con accion=%s", accion)
             advertencia = f"No se pudo procesar el archivo: {e}"
 
     return render_template(
