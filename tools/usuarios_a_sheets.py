@@ -2,23 +2,17 @@ import io
 import os
 import re
 import json
-import uuid
 import unicodedata
-from datetime import datetime, timedelta
 
 import pandas as pd
 import requests
-from flask import Blueprint, Response, render_template, request, session
+from flask import Blueprint, Response, render_template, request
 
 from utils.turnos import cargar_turnos_fijos
 
 usuarios_a_sheets_bp = Blueprint("usuarios_a_sheets", __name__)
 
-SESSION_KEY_CACHE_ID = "usuarios_a_sheets_cache_id"
-
-# Cache temporal en memoria para desarrollo local
-USUARIOS_SHEETS_CACHE = {}
-CACHE_TTL_MINUTES = 60
+FORM_KEY_PAYLOAD = "usuarios_a_sheets_payload"
 
 COLUMNAS_FINALES = [
     "Nombre",
@@ -318,17 +312,6 @@ STATE_TIMEZONE_MAP = {
 }
 
 
-def limpiar_cache_expirado():
-    ahora = datetime.utcnow()
-    expirados = [
-        cache_id
-        for cache_id, item in USUARIOS_SHEETS_CACHE.items()
-        if item["expires_at"] < ahora
-    ]
-    for cache_id in expirados:
-        USUARIOS_SHEETS_CACHE.pop(cache_id, None)
-
-
 def leer_csv_generico(archivo):
     if not archivo:
         raise ValueError("No se recibió ningún archivo.")
@@ -626,39 +609,27 @@ def enviar_a_apps_script(df, nombre_hoja):
     return data.get("spreadsheet_url", ""), data.get("spreadsheet_name", "")
 
 
-def guardar_en_cache(df, resumen, regiones_sin_tz):
-    limpiar_cache_expirado()
-
-    cache_id = str(uuid.uuid4())
-    USUARIOS_SHEETS_CACHE[cache_id] = {
-        "df_json": df.to_json(orient="records", force_ascii=False),
-        "resumen": resumen,
-        "regiones_sin_tz": regiones_sin_tz,
-        "expires_at": datetime.utcnow() + timedelta(minutes=CACHE_TTL_MINUTES),
-    }
-    session[SESSION_KEY_CACHE_ID] = cache_id
+def serializar_resultado(df, resumen, regiones_sin_tz):
+    return json.dumps(
+        {
+            "df_json": df.to_json(orient="records", force_ascii=False),
+            "resumen": resumen,
+            "regiones_sin_tz": regiones_sin_tz,
+        },
+        ensure_ascii=False,
+    )
 
 
-def cargar_desde_cache():
-    limpiar_cache_expirado()
-
-    cache_id = session.get(SESSION_KEY_CACHE_ID)
-    if not cache_id:
+def cargar_desde_payload(payload):
+    if not payload:
         return None, None, []
 
-    item = USUARIOS_SHEETS_CACHE.get(cache_id)
-    if not item:
+    item = json.loads(payload)
+    if not item or "df_json" not in item:
         return None, None, []
 
     df = pd.DataFrame(json.loads(item["df_json"]))
     return df, item["resumen"], item["regiones_sin_tz"]
-
-
-def limpiar_cache_actual():
-    cache_id = session.get(SESSION_KEY_CACHE_ID)
-    if cache_id:
-        USUARIOS_SHEETS_CACHE.pop(cache_id, None)
-    session.pop(SESSION_KEY_CACHE_ID, None)
 
 
 @usuarios_a_sheets_bp.route("/usuarios-a-sheets", methods=["GET", "POST"])
@@ -671,6 +642,7 @@ def usuarios_a_sheets():
     spreadsheet_url = ""
     spreadsheet_title = ""
     regiones_sin_tz = []
+    payload_cache = ""
     apps_script_configurado = bool((os.getenv("APPS_SCRIPT_WEBHOOK_URL") or "").strip())
 
     if request.method == "POST":
@@ -685,12 +657,13 @@ def usuarios_a_sheets():
                 else:
                     df = leer_csv_generico(archivo)
                     df_final, resumen, regiones_sin_tz = preparar_dataframe_usuarios(df)
-                    guardar_en_cache(df_final, resumen, regiones_sin_tz)
+                    payload_cache = serializar_resultado(df_final, resumen, regiones_sin_tz)
                     tabla_previa = df_final.head(80).to_dict(orient="records")
                     mensaje = "CSV analizado correctamente."
 
             elif accion == "descargar_csv":
-                df_final, resumen, regiones_sin_tz = cargar_desde_cache()
+                payload_cache = (request.form.get(FORM_KEY_PAYLOAD) or "").strip()
+                df_final, resumen, regiones_sin_tz = cargar_desde_payload(payload_cache)
                 if df_final is None:
                     advertencia = "Primero analiza un CSV."
                 else:
@@ -698,7 +671,8 @@ def usuarios_a_sheets():
 
             elif accion == "crear_sheet":
                 nombre_hoja = (request.form.get("nombre_hoja") or "").strip()
-                df_final, resumen, regiones_sin_tz = cargar_desde_cache()
+                payload_cache = (request.form.get(FORM_KEY_PAYLOAD) or "").strip()
+                df_final, resumen, regiones_sin_tz = cargar_desde_payload(payload_cache)
 
                 if df_final is None:
                     advertencia = "Primero analiza un CSV."
@@ -711,21 +685,23 @@ def usuarios_a_sheets():
                     mensaje = "Google Sheet creado correctamente."
 
             elif accion == "limpiar":
-                limpiar_cache_actual()
                 mensaje = "Se limpió la previsualización actual."
 
             else:
-                df_final, resumen, regiones_sin_tz = cargar_desde_cache()
+                payload_cache = (request.form.get(FORM_KEY_PAYLOAD) or "").strip()
+                df_final, resumen, regiones_sin_tz = cargar_desde_payload(payload_cache)
                 if df_final is not None:
                     tabla_previa = df_final.head(80).to_dict(orient="records")
 
         except Exception as e:
             advertencia = f"No se pudo procesar el archivo: {e}"
-
-    else:
-        df_final, resumen, regiones_sin_tz = cargar_desde_cache()
-        if df_final is not None:
-            tabla_previa = df_final.head(80).to_dict(orient="records")
+            if payload_cache:
+                try:
+                    df_final, resumen, regiones_sin_tz = cargar_desde_payload(payload_cache)
+                    if df_final is not None:
+                        tabla_previa = df_final.head(80).to_dict(orient="records")
+                except Exception:
+                    pass
 
     return render_template(
         "usuarios_a_sheets.html",
@@ -738,4 +714,5 @@ def usuarios_a_sheets():
         spreadsheet_title=spreadsheet_title,
         apps_script_configurado=apps_script_configurado,
         regiones_sin_tz=regiones_sin_tz,
+        payload_cache=payload_cache,
     )

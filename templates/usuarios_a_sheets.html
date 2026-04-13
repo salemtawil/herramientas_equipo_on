@@ -271,6 +271,7 @@
     <h2><span class="sheet-step-badge">2</span>Acciones finales</h2>
 
     <form id="acciones-form" method="post" data-processing-message="Preparando la acción solicitada...">
+      <textarea name="usuarios_a_sheets_payload" hidden>{{ payload_cache }}</textarea>
       <div class="sheet-action-grid">
         <div>
           <label class="small">Nombre del Google Sheet</label>

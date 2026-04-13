@@ -20,7 +20,8 @@ def api():
 
 @usuarios_activos_bp.route("/actualizar", methods=["POST"])
 def actualizar():
-    iniciar_actualizacion()
+    data = iniciar_actualizacion()
     return jsonify({
-        "success": True
+        "success": True,
+        "data": data
     })

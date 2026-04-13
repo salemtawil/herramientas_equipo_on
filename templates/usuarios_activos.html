@@ -133,11 +133,9 @@
         </div>
     </div>
 
-    <a href="/" class="back">← Volver al panel principal</a>
+    <a href="/" class="back">â† Volver al panel principal</a>
 
     <script>
-        let polling = null;
-
         function renderData(items) {
             const compinche = items.find(item => item.system === "Compinche");
             const paripe = items.find(item => item.system === "Paripe");
@@ -194,14 +192,6 @@
                 document.getElementById("ready4drive-error").textContent = ready4drive.error ? "Error: " + ready4drive.error : "";
             }
 
-            const todosFinalizados = items.every(item =>
-                item.progress === "Completado" || item.progress === "Error"
-            );
-
-            if (todosFinalizados && polling) {
-                clearInterval(polling);
-                polling = null;
-            }
         }
 
         async function consultarEstado() {
@@ -236,17 +226,14 @@
             });
 
             try {
-                await fetch("/usuarios-activos/actualizar", {
+                const response = await fetch("/usuarios-activos/actualizar", {
                     method: "POST"
                 });
+                const result = await response.json();
 
-                await consultarEstado();
-
-                if (polling) {
-                    clearInterval(polling);
+                if (result.success) {
+                    renderData(result.data);
                 }
-
-                polling = setInterval(consultarEstado, 1000);
             } catch (error) {
                 console.error("Error actualizando:", error);
             }

@@ -1,6 +1,7 @@
 from playwright.sync_api import sync_playwright
 import re
 import time
+import os
 
 def limpiar_numero(texto):
     match = re.search(r"\d[\d,\.]*", texto)
@@ -80,10 +81,18 @@ def hacer_login_paripe(page, callback_progreso=None):
     if callback_progreso:
         callback_progreso("Completando credenciales Paripe...")
 
-    page.locator("#phone-number").fill("4148020203")
+    phone_number = os.getenv("ARCHIVED_PARIPE_PHONE", "")
+    password = os.getenv("ARCHIVED_PARIPE_PASSWORD", "")
+
+    if not phone_number or not password:
+        raise RuntimeError(
+            "Set ARCHIVED_PARIPE_PHONE and ARCHIVED_PARIPE_PASSWORD to run this archived scraper."
+        )
+
+    page.locator("#phone-number").fill(phone_number)
     page.wait_for_timeout(300)
 
-    page.locator("#password").fill("compi123.")
+    page.locator("#password").fill(password)
     page.wait_for_timeout(300)
 
     if callback_progreso:

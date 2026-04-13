@@ -1,6 +1,7 @@
 from playwright.sync_api import sync_playwright
 import re
 import time
+import os
 
 def limpiar_numero(texto):
     match = re.search(r"\d[\d,\.]*", texto)
@@ -48,8 +49,8 @@ def hacer_login_compinche(page, telefono, password, callback_progreso=None):
     phone_input = inputs.nth(0)
     password_input = page.locator('input[type="password"]')
 
-    phone_input.fill("4148020203")
-    password_input.fill("123456987")
+    phone_input.fill(telefono)
+    password_input.fill(password)
 
     if callback_progreso:
         callback_progreso("Iniciando sesion...")
@@ -58,11 +59,19 @@ def hacer_login_compinche(page, telefono, password, callback_progreso=None):
     page.wait_for_timeout(4000)
 
 def obtener_metricas_compinche(callback_progreso=None):
+    telefono = os.getenv("ARCHIVED_COMPINCHE_PHONE", "")
+    password = os.getenv("ARCHIVED_COMPINCHE_PASSWORD", "")
+
+    if not telefono or not password:
+        raise RuntimeError(
+            "Set ARCHIVED_COMPINCHE_PHONE and ARCHIVED_COMPINCHE_PASSWORD to run this archived scraper."
+        )
+
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
 
-        hacer_login_compinche(page, "4148020203", "123456987", callback_progreso=callback_progreso)
+        hacer_login_compinche(page, telefono, password, callback_progreso=callback_progreso)
 
         if callback_progreso:
             callback_progreso("Entrando al admin...")
