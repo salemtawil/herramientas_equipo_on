@@ -1,12 +1,31 @@
 {% extends "base.html" %}
 
 {% block title %}Comparar CSV{% endblock %}
+{% block page_name %}Comparar CSV{% endblock %}
 
 {% block content %}
 <div class="page-stack">
   <section class="card page-hero">
-    <h1>Comparar CSV</h1>
-    <p>Compara dos archivos CSV de agentes y revisa diferencias en llamadas, salientes, minutos y perdidas.</p>
+    <div class="page-section-title">
+      <div>
+        <h1>Comparar CSV</h1>
+        <p>Compara dos archivos CSV de agentes y revisa diferencias en llamadas, salientes, minutos y perdidas.</p>
+      </div>
+      <span class="hero-badge">Comparativa operativa</span>
+    </div>
+
+    <div class="dashboard-highlight-grid top-space">
+      <article class="dashboard-highlight-card dashboard-highlight-card--primary">
+        <span class="dashboard-highlight-card__eyebrow">Control</span>
+        <strong>Lectura por turnos y por agente</strong>
+        <p>La comparativa mantiene el foco en variaciones absolutas y porcentuales sin salir de la misma vista.</p>
+      </article>
+      <article class="dashboard-highlight-card">
+        <span class="dashboard-highlight-card__eyebrow">Filtro visual</span>
+        <strong>Columnas expandibles</strong>
+        <p>Los toggles permiten mostrar detalles solo cuando hacen falta, sin saturar la tabla base.</p>
+      </article>
+    </div>
 
     {% if mensaje %}
       <div class="success">{{ mensaje }}</div>
@@ -18,9 +37,15 @@
   </section>
 
   <section class="card">
-    <h2>Cargar archivos para comparar</h2>
+    <div class="page-section-title">
+      <div>
+        <h2>Cargar archivos para comparar</h2>
+        <p class="small">Sube el CSV base y luego el CSV actual para obtener una comparativa consistente.</p>
+      </div>
+      <span class="hero-badge hero-badge-soft">2 archivos</span>
+    </div>
 
-    <form method="post" enctype="multipart/form-data">
+    <form method="post" enctype="multipart/form-data" data-processing-message="Comparando archivos y calculando diferencias...">
       <div class="row-2">
         <div>
           <label class="small">CSV base</label>
@@ -30,6 +55,10 @@
           <label class="small">CSV a comparar</label>
           <input type="file" name="archivo_actual" accept=".csv">
         </div>
+      </div>
+
+      <div class="top-space contextual-note">
+        <p>Las tablas conservan cantidades base, diferencia absoluta y porcentaje. Usa los toggles para expandir solo el detalle necesario.</p>
       </div>
 
       <div class="top-space acciones-barra">
@@ -104,11 +133,35 @@
                   >
                     {% if c.startswith('%') %}
                       {% if valor > 0 %}
-                        <span class="pct-up">+{{ valor }}%</span>
+                        {% if 'perdidas' in c %}
+                          <span class="pct-down">+{{ valor }}%</span>
+                        {% else %}
+                          <span class="pct-up">+{{ valor }}%</span>
+                        {% endif %}
                       {% elif valor < 0 %}
-                        <span class="pct-down">{{ valor }}%</span>
+                        {% if 'perdidas' in c %}
+                          <span class="pct-up">{{ valor }}%</span>
+                        {% else %}
+                          <span class="pct-down">{{ valor }}%</span>
+                        {% endif %}
                       {% else %}
                         {{ valor }}%
+                      {% endif %}
+                    {% elif c.startswith('dif.') %}
+                      {% if valor > 0 %}
+                        {% if 'perdidas' in c %}
+                          <span class="cell-value-bad">+{{ valor }}</span>
+                        {% else %}
+                          <span class="cell-value-good">+{{ valor }}</span>
+                        {% endif %}
+                      {% elif valor < 0 %}
+                        {% if 'perdidas' in c %}
+                          <span class="cell-value-good">{{ valor }}</span>
+                        {% else %}
+                          <span class="cell-value-bad">{{ valor }}</span>
+                        {% endif %}
+                      {% else %}
+                        {{ valor }}
                       {% endif %}
                     {% else %}
                       {{ valor }}
@@ -141,6 +194,7 @@
           </tfoot>
         </table>
       </div>
+      <p class="small top-space">En diferencias, verde indica mejora y rojo indica deterioro segun la metrica.</p>
     </div>
   </details>
   {% endif %}
@@ -208,11 +262,35 @@
                   >
                     {% if c.startswith('%') %}
                       {% if valor > 0 %}
-                        <span class="pct-up">+{{ valor }}%</span>
+                        {% if 'perdidas' in c %}
+                          <span class="pct-down">+{{ valor }}%</span>
+                        {% else %}
+                          <span class="pct-up">+{{ valor }}%</span>
+                        {% endif %}
                       {% elif valor < 0 %}
-                        <span class="pct-down">{{ valor }}%</span>
+                        {% if 'perdidas' in c %}
+                          <span class="pct-up">{{ valor }}%</span>
+                        {% else %}
+                          <span class="pct-down">{{ valor }}%</span>
+                        {% endif %}
                       {% else %}
                         {{ valor }}%
+                      {% endif %}
+                    {% elif c.startswith('dif.') %}
+                      {% if valor > 0 %}
+                        {% if 'perdidas' in c %}
+                          <span class="cell-value-bad">+{{ valor }}</span>
+                        {% else %}
+                          <span class="cell-value-good">+{{ valor }}</span>
+                        {% endif %}
+                      {% elif valor < 0 %}
+                        {% if 'perdidas' in c %}
+                          <span class="cell-value-good">{{ valor }}</span>
+                        {% else %}
+                          <span class="cell-value-bad">{{ valor }}</span>
+                        {% endif %}
+                      {% else %}
+                        {{ valor }}
                       {% endif %}
                     {% else %}
                       {{ valor }}
@@ -245,6 +323,7 @@
           </tfoot>
         </table>
       </div>
+      <p class="small top-space">En diferencias, verde indica mejora y rojo indica deterioro segun la metrica.</p>
     </div>
   </details>
   {% endif %}

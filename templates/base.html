@@ -4,36 +4,73 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Herramientas{% endblock %}</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v='12') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v='14') }}">
   <script src="{{ url_for('static', filename='app.js', v='1') }}" defer></script>
   {% block head_extra %}{% endblock %}
 </head>
 <body>
+  {% set endpoint = request.endpoint or '' %}
   <div class="app-shell">
-    <header class="app-topbar">
-      <div class="app-topbar__brand">
+    <aside class="app-sidebar">
+      <div class="app-sidebar__header">
         <a class="app-brand" href="{{ url_for('inicio') }}">Herramientas Equipo</a>
-        <p class="app-subtitle">Panel server-rendered con tema global y UI consistente.</p>
+        <p class="app-subtitle">Dashboard server-rendered con UI consistente y tema global.</p>
       </div>
 
-      <div class="app-topbar__actions">
-        {% if request.endpoint != 'inicio' %}
-          <button
-            type="button"
-            class="btn btn-ghost"
-            data-back-button
-            data-fallback="{{ url_for('inicio') }}"
-          >
-            Regresar
-          </button>
-        {% endif %}
-        <button type="button" class="btn btn-ghost" data-theme-toggle>Modo oscuro</button>
-      </div>
-    </header>
+      <nav class="app-sidebar__nav" aria-label="Navegacion principal">
+        <a class="sidebar-link {% if endpoint == 'inicio' %}is-active{% endif %}" href="{{ url_for('inicio') }}">
+          <span class="sidebar-link__eyebrow">Inicio</span>
+          <strong>Panel principal</strong>
+        </a>
+        <a class="sidebar-link {% if endpoint == 'usuarios_activos.index' %}is-active{% endif %}" href="{{ url_for('usuarios_activos.index') }}">
+          <span class="sidebar-link__eyebrow">Monitoreo</span>
+          <strong>Usuarios activos</strong>
+        </a>
+        <a class="sidebar-link {% if endpoint == 'reporte_agentes.reporte_agentes' %}is-active{% endif %}" href="{{ url_for('reporte_agentes.reporte_agentes') }}">
+          <span class="sidebar-link__eyebrow">Reporte</span>
+          <strong>Reporte de agentes</strong>
+        </a>
+        <a class="sidebar-link {% if endpoint == 'comparar_csv.comparar_csv' %}is-active{% endif %}" href="{{ url_for('comparar_csv.comparar_csv') }}">
+          <span class="sidebar-link__eyebrow">Analisis</span>
+          <strong>Comparar CSV</strong>
+        </a>
+        <a class="sidebar-link {% if endpoint == 'usuarios_a_sheets.usuarios_a_sheets' %}is-active{% endif %}" href="{{ url_for('usuarios_a_sheets.usuarios_a_sheets') }}">
+          <span class="sidebar-link__eyebrow">Exportacion</span>
+          <strong>Usuarios a Sheets</strong>
+        </a>
+      </nav>
 
-    <main class="wrap app-main">
-      {% block content %}{% endblock %}
-    </main>
+      <div class="app-sidebar__footer">
+        <p class="small">Tema global y acceso rapido a las vistas principales.</p>
+      </div>
+    </aside>
+
+    <div class="app-content-shell">
+      <header class="app-topbar">
+        <div class="app-topbar__brand">
+          <p class="app-topbar__eyebrow">Dashboard</p>
+          <p class="app-topbar__current">{% block page_name %}Herramientas{% endblock %}</p>
+        </div>
+
+        <div class="app-topbar__actions">
+          {% if endpoint != 'inicio' %}
+            <button
+              type="button"
+              class="btn btn-ghost"
+              data-back-button
+              data-fallback="{{ url_for('inicio') }}"
+            >
+              Regresar
+            </button>
+          {% endif %}
+          <button type="button" class="btn btn-ghost" data-theme-toggle>Modo oscuro</button>
+        </div>
+      </header>
+
+      <main class="wrap app-main">
+        {% block content %}{% endblock %}
+      </main>
+    </div>
   </div>
 
   <div id="global-processing-overlay" class="processing-overlay" aria-hidden="true">

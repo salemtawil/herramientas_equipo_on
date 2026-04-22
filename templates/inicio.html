@@ -1,15 +1,33 @@
 {% extends "base.html" %}
 
 {% block title %}Panel principal{% endblock %}
+{% block page_name %}Panel principal{% endblock %}
 
 {% block content %}
 <div class="page-stack">
   <section class="card page-hero">
-    <h1>Panel principal</h1>
-    <p>
-      Aqui puedes elegir la herramienta que necesitas usar en cada momento.
-      Todas las vistas comparten el mismo sistema visual, tema global y navegacion consistente.
-    </p>
+    <div class="page-section-title">
+      <div>
+        <h1>Panel principal</h1>
+        <p>
+          Aqui puedes elegir la herramienta que necesitas usar en cada momento.
+          Todas las vistas comparten el mismo sistema visual, tema global, sidebar y navegacion consistente.
+        </p>
+      </div>
+      <span class="hero-badge">Vista general</span>
+    </div>
+    <div class="dashboard-highlight-grid top-space">
+      <article class="dashboard-highlight-card dashboard-highlight-card--primary">
+        <span class="dashboard-highlight-card__eyebrow">Operacion</span>
+        <strong>Monitoreo centralizado</strong>
+        <p>Usuarios activos y reportes en un mismo layout con lectura rapida.</p>
+      </article>
+      <article class="dashboard-highlight-card">
+        <span class="dashboard-highlight-card__eyebrow">Datos</span>
+        <strong>Herramientas server-rendered</strong>
+        <p>Flujos directos, formularios claros y tablas consistentes para CSV y paneles.</p>
+      </article>
+    </div>
   </section>
 
   <section class="card">
@@ -19,7 +37,7 @@
     </div>
 
     <div class="tool-grid">
-      <article class="subherramienta">
+      <article class="subherramienta subherramienta-acento subherramienta-acento--reportes">
         <div>
           <h3>Reporte de stats</h3>
           <p>Carga un CSV y genera el reporte general por agente, turnos, resumen y ranking.</p>
@@ -27,7 +45,7 @@
         <a class="btn" href="{{ url_for('reporte_agentes.reporte_agentes') }}">Abrir reporte</a>
       </article>
 
-      <article class="subherramienta subherramienta-destacada">
+      <article class="subherramienta subherramienta-destacada subherramienta-acento subherramienta-acento--comparativa">
         <div>
           <h3>Comparar CSV</h3>
           <p>Compara un CSV contra el reporte base y visualiza diferencias en llamadas, salientes, minutos y perdidas.</p>
@@ -35,7 +53,7 @@
         <a class="btn secondary" href="/comparar-csv">Abrir comparador</a>
       </article>
 
-      <article class="subherramienta">
+      <article class="subherramienta subherramienta-acento subherramienta-acento--sheets">
         <div>
           <h3>Usuarios a Google Sheets</h3>
           <p>Limpia una lista de usuarios desde CSV, elimina duplicados y la deja lista para descargar o crear en Google Sheets.</p>
@@ -43,7 +61,7 @@
         <a class="btn" href="{{ url_for('usuarios_a_sheets.usuarios_a_sheets') }}">Abrir herramienta</a>
       </article>
 
-      <article class="subherramienta">
+      <article class="subherramienta subherramienta-acento subherramienta-acento--activos">
         <div>
           <h3>Usuarios activos</h3>
           <p>Consulta usuarios activos de distintos sistemas en un solo lugar.</p>

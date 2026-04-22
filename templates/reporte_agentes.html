@@ -1,12 +1,18 @@
 {% extends "base.html" %}
 
 {% block title %}Reporte de agentes{% endblock %}
+{% block page_name %}Reporte de agentes{% endblock %}
 
 {% block content %}
 <div class="page-stack">
   <section class="card page-hero">
-    <h1>Reporte de agentes</h1>
-    <p>Los turnos estan definidos manualmente en el codigo. El CSV se procesa temporalmente y no se guarda.</p>
+    <div class="page-section-title">
+      <div>
+        <h1>Reporte de agentes</h1>
+        <p>Los turnos estan definidos manualmente en el codigo. El CSV se procesa temporalmente y no se guarda.</p>
+      </div>
+      <span class="hero-badge">CSV operativo</span>
+    </div>
 
     {% if mensaje %}
       <div class="success">{{ mensaje }}</div>
@@ -52,8 +58,14 @@
   </details>
 
   <section class="card">
-    <h2>Cargar CSV</h2>
-    <form method="post" enctype="multipart/form-data">
+    <div class="page-section-title">
+      <div>
+        <h2>Cargar CSV</h2>
+        <p class="small">Solo se muestran agentes con tiempo de trabajo real mayor a 0 en la columna Worktime.</p>
+      </div>
+      <span class="hero-badge hero-badge-soft">Filtro backend</span>
+    </div>
+    <form method="post" enctype="multipart/form-data" data-processing-message="Procesando CSV y construyendo el reporte...">
       <div class="row">
         <div><input type="file" name="archivo" accept=".csv"></div>
         <div><button type="submit">Procesar CSV</button></div>
@@ -121,7 +133,13 @@
             {% for fila in tabla_general %}
               <tr>
                 {% for col in columnas_visibles %}
-                  <td>{{ fila[col] }}</td>
+                  {% set valor = fila[col] %}
+                  <td class="
+                    {% if col == 'Salientes' %}
+                      {% if valor|float >= 60 %}cell-good{% elif valor|float >= 11 %}cell-warn{% else %}cell-bad{% endif %}
+                    {% elif col in ['Llamadas', 'Mins llamadas', 'Mins salientes'] and valor|float > 0 %}cell-good{% endif %}
+                    {% if col == 'Perdidas' and valor|float > 0 %}cell-bad{% endif %}
+                  ">{{ valor }}</td>
                 {% endfor %}
               </tr>
             {% endfor %}
@@ -129,13 +147,20 @@
           <tfoot>
             <tr class="fila-total">
               {% for col in columnas_visibles %}
-                <td>{{ totales_tabla_general[col] if totales_tabla_general else "" }}</td>
+                {% set valor = totales_tabla_general[col] if totales_tabla_general else "" %}
+                <td class="
+                  {% if col == 'Salientes' and valor != '' %}
+                    {% if valor|float >= 60 %}cell-good{% elif valor|float >= 11 %}cell-warn{% else %}cell-bad{% endif %}
+                  {% elif col in ['Llamadas', 'Mins llamadas', 'Mins salientes'] and valor != '' and valor|float > 0 %}cell-good{% endif %}
+                  {% if col == 'Perdidas' and valor != '' and valor|float > 0 %}cell-bad{% endif %}
+                ">{{ valor }}</td>
               {% endfor %}
             </tr>
           </tfoot>
         </table>
       </div>
       <p class="small">Haz clic en el nombre de una columna para ordenar.</p>
+      <p class="small top-space">Salientes: verde desde 60, amarillo entre 11 y 59, rojo entre 0 y 10.</p>
     </div>
   </details>
   {% endif %}
@@ -161,7 +186,13 @@
             {% for fila in seccion.filas %}
               <tr>
                 {% for col in columnas_visibles if col != "Turno" %}
-                  <td>{{ fila[col] }}</td>
+                  {% set valor = fila[col] %}
+                  <td class="
+                    {% if col == 'Salientes' %}
+                      {% if valor|float >= 60 %}cell-good{% elif valor|float >= 11 %}cell-warn{% else %}cell-bad{% endif %}
+                    {% elif col in ['Llamadas', 'Mins llamadas', 'Mins salientes'] and valor|float > 0 %}cell-good{% endif %}
+                    {% if col == 'Perdidas' and valor|float > 0 %}cell-bad{% endif %}
+                  ">{{ valor }}</td>
                 {% endfor %}
               </tr>
             {% endfor %}
@@ -169,7 +200,13 @@
           <tfoot>
             <tr class="fila-total">
               {% for col in columnas_visibles if col != "Turno" %}
-                <td>{{ seccion.totales[col] if seccion.totales else "" }}</td>
+                {% set valor = seccion.totales[col] if seccion.totales else "" %}
+                <td class="
+                  {% if col == 'Salientes' and valor != '' %}
+                    {% if valor|float >= 60 %}cell-good{% elif valor|float >= 11 %}cell-warn{% else %}cell-bad{% endif %}
+                  {% elif col in ['Llamadas', 'Mins llamadas', 'Mins salientes'] and valor != '' and valor|float > 0 %}cell-good{% endif %}
+                  {% if col == 'Perdidas' and valor != '' and valor|float > 0 %}cell-bad{% endif %}
+                ">{{ valor }}</td>
               {% endfor %}
             </tr>
           </tfoot>
@@ -204,28 +241,30 @@
             {% for fila in tabla_resumen_turnos %}
               <tr>
                 <td>{{ fila["Turno"] }}</td>
-                <td>{{ fila["Agentes"] }}</td>
-                <td>{{ fila["Llamadas"] }}</td>
-                <td>{{ fila["Salientes"] }}</td>
-                <td>{{ fila["Perdidas"] }}</td>
-                <td>{{ fila["Mins llamadas"] }}</td>
-                <td>{{ fila["Mins salientes"] }}</td>
+                <td class="{% if fila['Agentes']|float > 0 %}cell-good{% endif %}">{{ fila["Agentes"] }}</td>
+                <td class="{% if fila['Llamadas']|float > 0 %}cell-good{% endif %}">{{ fila["Llamadas"] }}</td>
+                <td class="{% if fila['Salientes']|float >= 60 %}cell-good{% elif fila['Salientes']|float >= 11 %}cell-warn{% else %}cell-bad{% endif %}">{{ fila["Salientes"] }}</td>
+                <td class="{% if fila['Perdidas']|float > 0 %}cell-bad{% endif %}">{{ fila["Perdidas"] }}</td>
+                <td class="{% if fila['Mins llamadas']|float > 0 %}cell-good{% endif %}">{{ fila["Mins llamadas"] }}</td>
+                <td class="{% if fila['Mins salientes']|float > 0 %}cell-good{% endif %}">{{ fila["Mins salientes"] }}</td>
               </tr>
             {% endfor %}
           </tbody>
           <tfoot>
             <tr class="fila-total">
               <td>{{ totales_resumen_turnos["Turno"] if totales_resumen_turnos else "" }}</td>
-              <td>{{ totales_resumen_turnos["Agentes"] if totales_resumen_turnos else "" }}</td>
-              <td>{{ totales_resumen_turnos["Llamadas"] if totales_resumen_turnos else "" }}</td>
-              <td>{{ totales_resumen_turnos["Salientes"] if totales_resumen_turnos else "" }}</td>
-              <td>{{ totales_resumen_turnos["Perdidas"] if totales_resumen_turnos else "" }}</td>
-              <td>{{ totales_resumen_turnos["Mins llamadas"] if totales_resumen_turnos else "" }}</td>
-              <td>{{ totales_resumen_turnos["Mins salientes"] if totales_resumen_turnos else "" }}</td>
+              <td class="{% if totales_resumen_turnos and totales_resumen_turnos['Agentes']|float > 0 %}cell-good{% endif %}">{{ totales_resumen_turnos["Agentes"] if totales_resumen_turnos else "" }}</td>
+              <td class="{% if totales_resumen_turnos and totales_resumen_turnos['Llamadas']|float > 0 %}cell-good{% endif %}">{{ totales_resumen_turnos["Llamadas"] if totales_resumen_turnos else "" }}</td>
+              <td class="{% if totales_resumen_turnos %}{% if totales_resumen_turnos['Salientes']|float >= 60 %}cell-good{% elif totales_resumen_turnos['Salientes']|float >= 11 %}cell-warn{% else %}cell-bad{% endif %}{% endif %}">{{ totales_resumen_turnos["Salientes"] if totales_resumen_turnos else "" }}</td>
+              <td class="{% if totales_resumen_turnos and totales_resumen_turnos['Perdidas']|float > 0 %}cell-bad{% endif %}">{{ totales_resumen_turnos["Perdidas"] if totales_resumen_turnos else "" }}</td>
+              <td class="{% if totales_resumen_turnos and totales_resumen_turnos['Mins llamadas']|float > 0 %}cell-good{% endif %}">{{ totales_resumen_turnos["Mins llamadas"] if totales_resumen_turnos else "" }}</td>
+              <td class="{% if totales_resumen_turnos and totales_resumen_turnos['Mins salientes']|float > 0 %}cell-good{% endif %}">{{ totales_resumen_turnos["Mins salientes"] if totales_resumen_turnos else "" }}</td>
             </tr>
           </tfoot>
         </table>
       </div>
+      <p class="small top-space">Verde resalta volumen positivo. Rojo resalta perdidas y valores desfavorables.</p>
+      <p class="small">Salientes: verde desde 60, amarillo entre 11 y 59, rojo entre 0 y 10.</p>
     </div>
   </details>
   {% endif %}

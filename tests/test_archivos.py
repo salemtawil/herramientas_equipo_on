@@ -39,6 +39,18 @@ class LeerCsvSubidoTests(unittest.TestCase):
         self.assertEqual("José", df.iloc[0]["First Name"])
         self.assertEqual(5, int(df.iloc[0]["Calls"]))
 
+    def test_normaliza_worktime_si_viene_en_csv(self):
+        contenido = (
+            "First Name,Last Name,Calls,Outgoing calls,Missed calls,Call seconds,Outgoing call seconds,Tiempo de trabajo\n"
+            "Ana,Perez,3,1,0,120,60,01:15:00\n"
+        ).encode("utf-8")
+        archivo = FileStorage(stream=io.BytesIO(contenido), filename="reporte.csv")
+
+        df = leer_csv_subido(archivo)
+
+        self.assertIn("Worktime", df.columns)
+        self.assertEqual("01:15:00", df.iloc[0]["Worktime"])
+
 
 if __name__ == "__main__":
     unittest.main()

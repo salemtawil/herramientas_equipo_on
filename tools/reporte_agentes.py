@@ -3,12 +3,13 @@ import logging
 import pandas as pd
 from flask import Blueprint, render_template, request
 
-from utils.archivos import extraer_agentes, leer_csv_subido
+from utils.archivos import leer_csv_subido
 from utils.config_ranking import obtener_pesos_turno
 from utils.transformaciones import (
     COLUMNAS_VISIBLES,
     TRADUCCIONES,
     convertir_a_numero,
+    convertir_worktime_a_segundos,
     limpiar_texto,
     segundos_a_minutos,
     validar_columnas,
@@ -25,6 +26,12 @@ TURNOS_EXCLUIDOS_RANKING = [
 ]
 
 
+def filtrar_agentes_con_horas_reales(df):
+    trabajo_por_agente = df.groupby("Agente", dropna=False)["Worktime seconds"].sum()
+    agentes_validos = trabajo_por_agente[trabajo_por_agente > 0].index
+    return df[df["Agente"].isin(agentes_validos)].copy()
+
+
 def preparar_dataframe(df, turnos_config):
     df = df.copy()
     df = validar_columnas(df)
@@ -33,9 +40,14 @@ def preparar_dataframe(df, turnos_config):
     df["Last Name"] = df["Last Name"].apply(limpiar_texto)
     df["Agente"] = (df["First Name"] + " " + df["Last Name"]).str.strip()
 
+    if "Worktime" not in df.columns:
+        raise ValueError("Falta la columna Worktime en el CSV.")
+
     for col in ["Calls", "Outgoing calls", "Missed calls", "Call seconds", "Outgoing call seconds"]:
         df[col] = convertir_a_numero(df[col])
 
+    df["Worktime seconds"] = convertir_worktime_a_segundos(df["Worktime"])
+    df = filtrar_agentes_con_horas_reales(df)
     df["Call minutes"] = df["Call seconds"].apply(segundos_a_minutos)
     df["Outgoing call minutes"] = df["Outgoing call seconds"].apply(segundos_a_minutos)
     df["Turno"] = df["Agente"].apply(lambda nombre: obtener_turno(nombre, turnos_config))
@@ -243,8 +255,8 @@ def reporte_agentes():
                 advertencia = "Selecciona un archivo CSV."
             else:
                 df = leer_csv_subido(archivo)
-                lista_agentes = extraer_agentes(df)
                 df_final = preparar_dataframe(df, turnos_config)
+                lista_agentes = sorted(df_final["Agente"].dropna().unique().tolist())
 
                 resumen = {
                     "Agentes": int(df_final["Agente"].nunique()),

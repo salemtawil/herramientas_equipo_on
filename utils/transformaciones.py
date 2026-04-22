@@ -46,6 +46,12 @@ MAPEO_COLUMNAS = {
     "Segundos en llamadas": "Call seconds",
     "Outgoing call seconds": "Outgoing call seconds",
     "Segundos en salientes": "Outgoing call seconds",
+    "Worktime": "Worktime",
+    "worktime": "Worktime",
+    "Work time": "Worktime",
+    "Working time": "Worktime",
+    "Tiempo de trabajo": "Worktime",
+    "Horas trabajadas": "Worktime",
 }
 
 
@@ -57,6 +63,41 @@ def limpiar_texto(valor):
 
 def convertir_a_numero(serie):
     return pd.to_numeric(serie, errors="coerce").fillna(0)
+
+
+def convertir_worktime_a_segundos(serie):
+    def convertir_valor(valor):
+        if pd.isna(valor):
+            return 0
+
+        texto = str(valor).strip()
+        if not texto:
+            return 0
+
+        if ":" in texto:
+            partes = texto.split(":")
+            try:
+                partes = [float(parte) for parte in partes]
+            except ValueError:
+                return 0
+
+            if len(partes) == 3:
+                horas, minutos, segundos = partes
+            elif len(partes) == 2:
+                horas = 0
+                minutos, segundos = partes
+            else:
+                return 0
+
+            return int((horas * 3600) + (minutos * 60) + segundos)
+
+        numero = pd.to_numeric(texto, errors="coerce")
+        if pd.isna(numero):
+            return 0
+
+        return int(float(numero))
+
+    return serie.apply(convertir_valor)
 
 
 def segundos_a_minutos(valor):

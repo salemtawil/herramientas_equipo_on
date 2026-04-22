@@ -1,15 +1,34 @@
 {% extends "base.html" %}
 
 {% block title %}Usuarios a Google Sheets{% endblock %}
+{% block page_name %}Usuarios a Google Sheets{% endblock %}
 
 {% block content %}
 <div class="page-stack">
   <section class="card page-hero">
-    <h1>Usuarios a Google Sheets</h1>
-    <p>
-      Carga un CSV de usuarios, analizalo primero, revisa el resumen y la vista previa,
-      y luego decide si quieres descargarlo o crear un Google Sheet compartible.
-    </p>
+    <div class="page-section-title">
+      <div>
+        <h1>Usuarios a Google Sheets</h1>
+        <p>
+          Carga un CSV de usuarios, analizalo primero, revisa el resumen y la vista previa,
+          y luego decide si quieres descargarlo o crear un Google Sheet compartible.
+        </p>
+      </div>
+      <span class="hero-badge">Exportacion guiada</span>
+    </div>
+
+    <div class="dashboard-highlight-grid top-space">
+      <article class="dashboard-highlight-card dashboard-highlight-card--primary">
+        <span class="dashboard-highlight-card__eyebrow">Preparacion</span>
+        <strong>Pipeline en dos pasos</strong>
+        <p>Analiza el CSV, revisa el resumen y luego ejecuta la accion final sin perder contexto.</p>
+      </article>
+      <article class="dashboard-highlight-card">
+        <span class="dashboard-highlight-card__eyebrow">Salida</span>
+        <strong>CSV listo o Google Sheet</strong>
+        <p>El mismo bloque de acciones concentra descarga, limpieza y creacion del sheet compartible.</p>
+      </article>
+    </div>
 
     {% if mensaje %}
       <div class="success">{{ mensaje }}</div>
@@ -21,7 +40,13 @@
   </section>
 
   <section class="card">
-    <h2><span class="sheet-step-badge">1</span>Analizar CSV</h2>
+    <div class="page-section-title">
+      <div>
+        <h2><span class="sheet-step-badge">1</span>Analizar CSV</h2>
+        <p class="small">Carga el archivo y valida la estructura antes de generar el resultado final.</p>
+      </div>
+      <span class="hero-badge hero-badge-soft">Paso 1</span>
+    </div>
 
     <form
       id="analizar-form"
@@ -41,7 +66,7 @@
       </div>
     </form>
 
-    <div class="top-space sheet-note">
+    <div class="top-space sheet-note contextual-note">
       <p>Se prioriza <strong>Telefono</strong> para deduplicar. Si no existe, se usa <strong>Preferido</strong> como respaldo.</p>
       <p>El nombre se deja vacio si viene vacio.</p>
     </div>
@@ -49,7 +74,13 @@
 
   {% if resumen %}
   <section class="card">
-    <h2><span class="sheet-step-badge">2</span>Acciones finales</h2>
+    <div class="page-section-title">
+      <div>
+        <h2><span class="sheet-step-badge">2</span>Acciones finales</h2>
+        <p class="small">Elige el formato de salida una vez validada la previsualizacion.</p>
+      </div>
+      <span class="hero-badge hero-badge-soft">Paso 2</span>
+    </div>
 
     <form id="acciones-form" method="post" data-processing-message="Preparando la accion solicitada...">
       <textarea name="usuarios_a_sheets_payload" hidden>{{ payload_cache }}</textarea>
@@ -66,7 +97,7 @@
         </div>
       </div>
 
-      <div class="sheet-inline-actions">
+      <div class="sheet-inline-actions action-surface top-space">
         {% if apps_script_configurado %}
           <button
             type="submit"

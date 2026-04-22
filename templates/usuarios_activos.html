@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 
 {% block title %}Usuarios activos{% endblock %}
+{% block page_name %}Usuarios activos{% endblock %}
 
 {% block content %}
 <div class="page-stack">
@@ -9,100 +10,160 @@
       <div>
         <h1>Usuarios activos</h1>
         <p>Consulta el estado consolidado de cada sistema y actualiza los datos sin salir de la vista.</p>
-        <p id="general-updated">Última actualización general: -</p>
+        <p id="general-updated">Ultima actualizacion general: -</p>
       </div>
       <button type="button" id="actualizar-btn" onclick="actualizarDatos()">Actualizar</button>
     </div>
   </section>
 
   <section id="resultado" class="system-grid">
-    <article class="system-card" id="card-compinche">
+    <article class="system-card system-card--compinche" id="card-compinche">
       <div class="system-card__header">
-        <div>
-          <h3 class="system-card__title">Compinche</h3>
-          <p class="system-card__meta">Estado actual del sistema</p>
+        <div class="system-card__brand">
+          <div class="system-card__logo-wrap">
+            <img class="system-card__logo-image" src="{{ url_for('static', filename='system-logos/compinche_48.svg') }}" alt="Logo de Compinche" hidden onload="this.hidden=false; this.nextElementSibling.hidden=true;" onerror="this.hidden=true; this.nextElementSibling.hidden=false;">
+            <div class="system-card__logo" aria-hidden="true">CP</div>
+          </div>
+          <div>
+            <h3 class="system-card__title">Compinche</h3>
+            <p class="system-card__meta">Vista de actividad principal</p>
+          </div>
         </div>
+        <span class="system-card__tag">Core</span>
       </div>
       <div class="stat-list">
         <div class="stat-line"><span>Usuarios activos</span><strong id="compinche-active">-</strong></div>
         <div class="stat-line"><span>Running users</span><strong id="compinche-running">-</strong></div>
       </div>
-      <div class="progress" id="compinche-progress">Pendiente</div>
+      <div class="system-card__footer">
+        <span class="system-card__status" id="compinche-status">Pendiente</span>
+        <span class="system-card__updated" id="compinche-updated">Sin actualizacion</span>
+      </div>
       <div class="error" id="compinche-error"></div>
     </article>
 
-    <article class="system-card" id="card-paripe">
+    <article class="system-card system-card--paripe" id="card-paripe">
       <div class="system-card__header">
-        <div>
-          <h3 class="system-card__title">Paripe</h3>
-          <p class="system-card__meta">Estado actual del sistema</p>
+        <div class="system-card__brand">
+          <div class="system-card__logo-wrap">
+            <img class="system-card__logo-image" src="{{ url_for('static', filename='system-logos/paripe_48.svg') }}" alt="Logo de Paripe" hidden onload="this.hidden=false; this.nextElementSibling.hidden=true;" onerror="this.hidden=true; this.nextElementSibling.hidden=false;">
+            <div class="system-card__logo" aria-hidden="true">PA</div>
+          </div>
+          <div>
+            <h3 class="system-card__title">Paripe</h3>
+            <p class="system-card__meta">Monitoreo comercial y fotos</p>
+          </div>
         </div>
+        <span class="system-card__tag">Ops</span>
       </div>
       <div class="stat-list">
         <div class="stat-line"><span>Usuarios activos</span><strong id="paripe-good-standing">-</strong></div>
         <div class="stat-line"><span>Pool de fotos</span><strong id="paripe-photo-pool">-</strong></div>
       </div>
-      <div class="progress" id="paripe-progress">Pendiente</div>
+      <div class="system-card__footer">
+        <span class="system-card__status" id="paripe-status">Pendiente</span>
+        <span class="system-card__updated" id="paripe-updated">Sin actualizacion</span>
+      </div>
       <div class="error" id="paripe-error"></div>
     </article>
 
-    <article class="system-card" id="card-camarada">
+    <article class="system-card system-card--camarada" id="card-camarada">
       <div class="system-card__header">
-        <div>
-          <h3 class="system-card__title">Camarada</h3>
-          <p class="system-card__meta">Estado actual del sistema</p>
+        <div class="system-card__brand">
+          <div class="system-card__logo-wrap">
+            <img class="system-card__logo-image" src="{{ url_for('static', filename='system-logos/camarada_48.svg') }}" alt="Logo de Camarada" hidden onload="this.hidden=false; this.nextElementSibling.hidden=true;" onerror="this.hidden=true; this.nextElementSibling.hidden=false;">
+            <div class="system-card__logo" aria-hidden="true">CA</div>
+          </div>
+          <div>
+            <h3 class="system-card__title">Camarada</h3>
+            <p class="system-card__meta">Seguimiento multiadmin</p>
+          </div>
         </div>
+        <span class="system-card__tag">MA</span>
       </div>
       <div class="stat-list">
         <div class="stat-line"><span>Usuarios activos</span><strong id="camarada-active">-</strong></div>
         <div class="stat-line"><span>Running users</span><strong id="camarada-running">-</strong></div>
       </div>
-      <div class="progress" id="camarada-progress">Pendiente</div>
+      <div class="system-card__footer">
+        <span class="system-card__status" id="camarada-status">Pendiente</span>
+        <span class="system-card__updated" id="camarada-updated">Sin actualizacion</span>
+      </div>
       <div class="error" id="camarada-error"></div>
     </article>
 
-    <article class="system-card" id="card-complice">
+    <article class="system-card system-card--complice" id="card-complice">
       <div class="system-card__header">
-        <div>
-          <h3 class="system-card__title">Complice</h3>
-          <p class="system-card__meta">Estado actual del sistema</p>
+        <div class="system-card__brand">
+          <div class="system-card__logo-wrap">
+            <img class="system-card__logo-image" src="{{ url_for('static', filename='system-logos/complice_48.svg') }}" alt="Logo de Complice" hidden onload="this.hidden=false; this.nextElementSibling.hidden=true;" onerror="this.hidden=true; this.nextElementSibling.hidden=false;">
+            <div class="system-card__logo" aria-hidden="true">CL</div>
+          </div>
+          <div>
+            <h3 class="system-card__title">Complice</h3>
+            <p class="system-card__meta">Seguimiento multiadmin</p>
+          </div>
         </div>
+        <span class="system-card__tag">MA</span>
       </div>
       <div class="stat-list">
         <div class="stat-line"><span>Usuarios activos</span><strong id="complice-active">-</strong></div>
         <div class="stat-line"><span>Running users</span><strong id="complice-running">-</strong></div>
       </div>
-      <div class="progress" id="complice-progress">Pendiente</div>
+      <div class="system-card__footer">
+        <span class="system-card__status" id="complice-status">Pendiente</span>
+        <span class="system-card__updated" id="complice-updated">Sin actualizacion</span>
+      </div>
       <div class="error" id="complice-error"></div>
     </article>
 
-    <article class="system-card" id="card-secuaz">
+    <article class="system-card system-card--secuaz" id="card-secuaz">
       <div class="system-card__header">
-        <div>
-          <h3 class="system-card__title">Secuaz</h3>
-          <p class="system-card__meta">Estado actual del sistema</p>
+        <div class="system-card__brand">
+          <div class="system-card__logo-wrap">
+            <img class="system-card__logo-image" src="{{ url_for('static', filename='system-logos/secuaz.svg') }}" alt="Logo de Secuaz" hidden onload="this.hidden=false; this.nextElementSibling.hidden=true;" onerror="this.hidden=true; this.nextElementSibling.hidden=false;">
+            <div class="system-card__logo" aria-hidden="true">SE</div>
+          </div>
+          <div>
+            <h3 class="system-card__title">Secuaz</h3>
+            <p class="system-card__meta">Seguimiento multiadmin</p>
+          </div>
         </div>
+        <span class="system-card__tag">MA</span>
       </div>
       <div class="stat-list">
         <div class="stat-line"><span>Usuarios activos</span><strong id="secuaz-active">-</strong></div>
         <div class="stat-line"><span>Running users</span><strong id="secuaz-running">-</strong></div>
       </div>
-      <div class="progress" id="secuaz-progress">Pendiente</div>
+      <div class="system-card__footer">
+        <span class="system-card__status" id="secuaz-status">Pendiente</span>
+        <span class="system-card__updated" id="secuaz-updated">Sin actualizacion</span>
+      </div>
       <div class="error" id="secuaz-error"></div>
     </article>
 
-    <article class="system-card" id="card-ready4drive">
+    <article class="system-card system-card--ready4drive" id="card-ready4drive">
       <div class="system-card__header">
-        <div>
-          <h3 class="system-card__title">Ready4Drive</h3>
-          <p class="system-card__meta">Estado actual del sistema</p>
+        <div class="system-card__brand">
+          <div class="system-card__logo-wrap">
+            <img class="system-card__logo-image" src="{{ url_for('static', filename='system-logos/ready4drive_48.svg') }}" alt="Logo de Ready4Drive" hidden onload="this.hidden=false; this.nextElementSibling.hidden=true;" onerror="this.hidden=true; this.nextElementSibling.hidden=false;">
+            <div class="system-card__logo" aria-hidden="true">R4</div>
+          </div>
+          <div>
+            <h3 class="system-card__title">Ready4Drive</h3>
+            <p class="system-card__meta">Seguimiento multiadmin</p>
+          </div>
         </div>
+        <span class="system-card__tag">Fleet</span>
       </div>
       <div class="stat-list">
         <div class="stat-line"><span>Usuarios activos</span><strong id="ready4drive-active">-</strong></div>
         <div class="stat-line"><span>Running users</span><strong id="ready4drive-running">-</strong></div>
       </div>
-      <div class="progress" id="ready4drive-progress">Pendiente</div>
+      <div class="system-card__footer">
+        <span class="system-card__status" id="ready4drive-status">Pendiente</span>
+        <span class="system-card__updated" id="ready4drive-updated">Sin actualizacion</span>
+      </div>
       <div class="error" id="ready4drive-error"></div>
     </article>
   </section>
@@ -125,6 +186,32 @@ function formatUpdatedAt(value) {
   return `${hours}:${minutes} ${suffix}`;
 }
 
+function renderSystemState(prefix, item) {
+  const status = document.getElementById(`${prefix}-status`);
+  const updated = document.getElementById(`${prefix}-updated`);
+  const error = document.getElementById(`${prefix}-error`);
+  const card = document.getElementById(`card-${prefix}`);
+  const hasError = Boolean(item?.error);
+
+  if (status) {
+    status.textContent = hasError ? "Con error" : "Actualizado";
+  }
+
+  if (updated) {
+    updated.textContent = item?.updated_at && item.updated_at !== "-"
+      ? formatUpdatedAt(item.updated_at)
+      : "Sin actualizacion";
+  }
+
+  if (error) {
+    error.textContent = hasError ? "Error: " + item.error : "";
+  }
+
+  if (card) {
+    card.classList.toggle("system-card--error", hasError);
+  }
+}
+
 function renderData(items, updatedAt) {
   const compinche = items.find(item => item.system === "Compinche");
   const paripe = items.find(item => item.system === "Paripe");
@@ -133,48 +220,42 @@ function renderData(items, updatedAt) {
   const secuaz = items.find(item => item.system === "secuaz");
   const ready4drive = items.find(item => item.system === "ready4drive");
 
-  document.getElementById("general-updated").textContent = `Última actualización general: ${formatUpdatedAt(updatedAt)}`;
+  document.getElementById("general-updated").textContent = `Ultima actualizacion general: ${formatUpdatedAt(updatedAt)}`;
 
   if (compinche) {
     document.getElementById("compinche-active").textContent = compinche.active_users ?? "-";
     document.getElementById("compinche-running").textContent = compinche.running_users ?? "-";
-    document.getElementById("compinche-progress").textContent = compinche.progress ?? "";
-    document.getElementById("compinche-error").textContent = compinche.error ? "Error: " + compinche.error : "";
+    renderSystemState("compinche", compinche);
   }
 
   if (paripe) {
     document.getElementById("paripe-good-standing").textContent = paripe.good_standing_users ?? "-";
     document.getElementById("paripe-photo-pool").textContent = paripe.photo_pool ?? "-";
-    document.getElementById("paripe-progress").textContent = paripe.progress ?? "";
-    document.getElementById("paripe-error").textContent = paripe.error ? "Error: " + paripe.error : "";
+    renderSystemState("paripe", paripe);
   }
 
   if (camarada) {
     document.getElementById("camarada-active").textContent = camarada.active_users ?? "-";
     document.getElementById("camarada-running").textContent = camarada.running_users ?? "-";
-    document.getElementById("camarada-progress").textContent = camarada.progress ?? "";
-    document.getElementById("camarada-error").textContent = camarada.error ? "Error: " + camarada.error : "";
+    renderSystemState("camarada", camarada);
   }
 
   if (complice) {
     document.getElementById("complice-active").textContent = complice.active_users ?? "-";
     document.getElementById("complice-running").textContent = complice.running_users ?? "-";
-    document.getElementById("complice-progress").textContent = complice.progress ?? "";
-    document.getElementById("complice-error").textContent = complice.error ? "Error: " + complice.error : "";
+    renderSystemState("complice", complice);
   }
 
   if (secuaz) {
     document.getElementById("secuaz-active").textContent = secuaz.active_users ?? "-";
     document.getElementById("secuaz-running").textContent = secuaz.running_users ?? "-";
-    document.getElementById("secuaz-progress").textContent = secuaz.progress ?? "";
-    document.getElementById("secuaz-error").textContent = secuaz.error ? "Error: " + secuaz.error : "";
+    renderSystemState("secuaz", secuaz);
   }
 
   if (ready4drive) {
     document.getElementById("ready4drive-active").textContent = ready4drive.active_users ?? "-";
     document.getElementById("ready4drive-running").textContent = ready4drive.running_users ?? "-";
-    document.getElementById("ready4drive-progress").textContent = ready4drive.progress ?? "";
-    document.getElementById("ready4drive-error").textContent = ready4drive.error ? "Error: " + ready4drive.error : "";
+    renderSystemState("ready4drive", ready4drive);
   }
 }
 
@@ -196,11 +277,13 @@ async function actualizarDatos() {
   const button = document.getElementById("actualizar-btn");
 
   sistemas.forEach(nombre => {
-    const progress = document.getElementById(`${nombre}-progress`);
+    const status = document.getElementById(`${nombre}-status`);
     const error = document.getElementById(`${nombre}-error`);
+    const card = document.getElementById(`card-${nombre}`);
 
-    if (progress) progress.textContent = "Iniciando...";
+    if (status) status.textContent = "Actualizando";
     if (error) error.textContent = "";
+    if (card) card.classList.remove("system-card--error");
   });
 
   try {
@@ -226,5 +309,36 @@ async function actualizarDatos() {
     }
   }
 }
+
+function initSystemLogos() {
+  document.querySelectorAll(".system-card__logo-wrap").forEach((wrap) => {
+    const image = wrap.querySelector(".system-card__logo-image");
+    const fallback = wrap.querySelector(".system-card__logo");
+    if (!image || !fallback) return;
+
+    image.addEventListener("load", () => {
+      image.hidden = false;
+      fallback.hidden = true;
+    });
+
+    image.addEventListener("error", () => {
+      image.hidden = true;
+      fallback.hidden = false;
+    });
+
+    if (image.complete) {
+      if (image.naturalWidth > 0) {
+        image.hidden = false;
+        fallback.hidden = true;
+      } else {
+        image.hidden = true;
+        fallback.hidden = false;
+      }
+    }
+  });
+}
+
+initSystemLogos();
+consultarEstado();
 </script>
 {% endblock %}
