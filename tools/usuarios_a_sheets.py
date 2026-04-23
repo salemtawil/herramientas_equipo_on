@@ -395,6 +395,23 @@ def solo_digitos(valor):
     return re.sub(r"\D+", "", limpiar_valor(valor))
 
 
+def normalizar_identificador_paripe(valor):
+    valor_limpio = limpiar_valor(valor)
+    if not valor_limpio:
+        return ""
+
+    mantener_prefijo = valor_limpio.startswith("+")
+    digitos = re.sub(r"\D+", "", valor_limpio)
+
+    if not digitos:
+        return ""
+
+    if mantener_prefijo:
+        return f"+{digitos}"
+
+    return digitos
+
+
 def nombre_columna_normalizado(columna):
     columna = normalizar_texto(columna)
     columna = re.sub(r"\s+", " ", columna)
@@ -478,7 +495,7 @@ def resolver_sistema_perfil(sistema):
 def construir_link_perfil(identificador, sistema=SISTEMA_DEFAULT):
     sistema_resuelto = resolver_sistema_perfil(sistema)
     if sistema_resuelto == "paripe":
-        identificador_final = limpiar_valor(identificador)
+        identificador_final = normalizar_identificador_paripe(identificador)
     else:
         identificador_final = solo_digitos(identificador)
 
