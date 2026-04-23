@@ -59,6 +59,14 @@
           <label class="small">Archivo CSV</label>
           <input type="file" name="archivo" accept=".csv">
         </div>
+        <div>
+          <label class="small">Sistema</label>
+          <select name="sistema">
+            {% for system_key, system_data in sistemas_perfil.items() %}
+              <option value="{{ system_key }}" {% if sistema_seleccionado == system_key %}selected{% endif %}>{{ system_data.label }}</option>
+            {% endfor %}
+          </select>
+        </div>
         <div class="acciones-columna">
           <label class="small">&nbsp;</label>
           <button type="submit" name="accion" value="analizar_csv">Analizar CSV</button>
@@ -84,11 +92,17 @@
 
     <form id="acciones-form" method="post" data-processing-message="Preparando la accion solicitada...">
       <textarea name="usuarios_a_sheets_payload" hidden>{{ payload_cache }}</textarea>
+      <input type="hidden" name="sistema" value="{{ sistema_seleccionado }}">
 
       <div class="sheet-action-grid">
         <div>
           <label class="small">Nombre del Google Sheet</label>
           <input type="text" name="nombre_hoja" placeholder="Ej. Seguimiento usuarios abril">
+        </div>
+
+        <div>
+          <label class="small">Sistema</label>
+          <input type="text" value="{{ sistemas_perfil[sistema_seleccionado].label }}" readonly>
         </div>
 
         <div class="acciones-columna">

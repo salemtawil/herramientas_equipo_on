@@ -17,6 +17,24 @@ usuarios_a_sheets_bp = Blueprint("usuarios_a_sheets", __name__)
 logger = logging.getLogger(__name__)
 
 FORM_KEY_PAYLOAD = "usuarios_a_sheets_payload"
+FORM_KEY_SISTEMA = "sistema"
+
+SISTEMAS_PERFIL = {
+    "compinche": {
+        "label": "Compinche",
+        "base_url": "https://old.compinche.io/admin/users/{}",
+    },
+    "ready4drive": {
+        "label": "Ready4Drive",
+        "base_url": "https://ready4drive.com/admin/users/{}",
+    },
+    "paripe": {
+        "label": "Paripe",
+        "base_url": "https://paripe.io/admin/users/{}",
+    },
+}
+
+SISTEMA_DEFAULT = "compinche"
 
 COLUMNAS_FINALES = [
     "Nombre",
@@ -450,11 +468,24 @@ def timezone_desde_region(region):
     return "Sin asignar"
 
 
-def construir_link_perfil(telefono):
-    telefono_limpio = solo_digitos(telefono)
-    if not telefono_limpio:
+def resolver_sistema_perfil(sistema):
+    sistema_limpio = limpiar_valor(sistema).lower()
+    if sistema_limpio in SISTEMAS_PERFIL:
+        return sistema_limpio
+    return SISTEMA_DEFAULT
+
+
+def construir_link_perfil(identificador, sistema=SISTEMA_DEFAULT):
+    sistema_resuelto = resolver_sistema_perfil(sistema)
+    if sistema_resuelto == "paripe":
+        identificador_final = limpiar_valor(identificador)
+    else:
+        identificador_final = solo_digitos(identificador)
+
+    if not identificador_final:
         return ""
-    return f"https://old.compinche.io/admin/users/{telefono_limpio}"
+
+    return SISTEMAS_PERFIL[sistema_resuelto]["base_url"].format(identificador_final)
 
 
 def telefono_llamable(row):
@@ -495,7 +526,7 @@ def obtener_agentes_configurados():
     return [""] + sorted(set(agentes), key=lambda x: x.lower())
 
 
-def preparar_dataframe_usuarios(df):
+def preparar_dataframe_usuarios(df, sistema=SISTEMA_DEFAULT):
     df = df.copy()
     columnas_resueltas, faltantes = resolver_columnas(df)
 
@@ -530,10 +561,13 @@ def preparar_dataframe_usuarios(df):
     filas_sin_nombre = int((df_salida["Nombre"] == "").sum())
     filas_sin_telefono = int((df_salida["llamable"] == "").sum())
 
+    sistema_resuelto = resolver_sistema_perfil(sistema)
+    df_salida["Perfil"] = df_salida["Telefono"].apply(
+        lambda telefono: construir_link_perfil(telefono, sistema=sistema_resuelto)
+    )
     df_salida["Telefono"] = df_salida["telefono_limpio"]
     df_salida["Preferido"] = df_salida["preferencial_limpio"]
     df_salida["TZ"] = df_salida["Region"].apply(timezone_desde_region)
-    df_salida["Perfil"] = df_salida["Telefono"].apply(construir_link_perfil)
     df_salida["Agente"] = ""
     df_salida["Contesto"] = False
     df_salida["SMS"] = False
@@ -624,7 +658,7 @@ def enviar_a_apps_script(df, nombre_hoja):
     return data.get("spreadsheet_url", ""), data.get("spreadsheet_name", "")
 
 
-def serializar_resultado(df, resumen, regiones_sin_tz):
+def serializar_resultado(df, resumen, regiones_sin_tz, sistema):
     serializer = URLSafeSerializer(
         current_app.secret_key,
         salt="usuarios-a-sheets-payload",
@@ -634,13 +668,14 @@ def serializar_resultado(df, resumen, regiones_sin_tz):
             "df_json": df.to_json(orient="records", force_ascii=False),
             "resumen": resumen,
             "regiones_sin_tz": regiones_sin_tz,
+            "sistema": resolver_sistema_perfil(sistema),
         }
     )
 
 
 def cargar_desde_payload(payload):
     if not payload:
-        return None, None, []
+        return None, None, [], SISTEMA_DEFAULT
 
     serializer = URLSafeSerializer(
         current_app.secret_key,
@@ -650,13 +685,14 @@ def cargar_desde_payload(payload):
     try:
         item = serializer.loads(payload)
     except BadData:
-        return None, None, []
+        return None, None, [], SISTEMA_DEFAULT
 
     if not item or "df_json" not in item:
-        return None, None, []
+        return None, None, [], SISTEMA_DEFAULT
 
     df = pd.DataFrame(json.loads(item["df_json"]))
-    return df, item["resumen"], item["regiones_sin_tz"]
+    sistema = resolver_sistema_perfil(item.get("sistema"))
+    return df, item["resumen"], item["regiones_sin_tz"], sistema
 
 
 @usuarios_a_sheets_bp.route("/usuarios-a-sheets", methods=["GET", "POST"])
@@ -670,10 +706,12 @@ def usuarios_a_sheets():
     spreadsheet_title = ""
     regiones_sin_tz = []
     payload_cache = ""
+    sistema_seleccionado = SISTEMA_DEFAULT
     apps_script_configurado = bool((os.getenv("APPS_SCRIPT_WEBHOOK_URL") or "").strip())
 
     if request.method == "POST":
         accion = (request.form.get("accion") or "").strip()
+        sistema_seleccionado = resolver_sistema_perfil(request.form.get(FORM_KEY_SISTEMA))
 
         try:
             if accion == "analizar_csv":
@@ -683,14 +721,22 @@ def usuarios_a_sheets():
                     advertencia = "Selecciona un archivo CSV."
                 else:
                     df = leer_csv_generico(archivo)
-                    df_final, resumen, regiones_sin_tz = preparar_dataframe_usuarios(df)
-                    payload_cache = serializar_resultado(df_final, resumen, regiones_sin_tz)
+                    df_final, resumen, regiones_sin_tz = preparar_dataframe_usuarios(
+                        df,
+                        sistema=sistema_seleccionado,
+                    )
+                    payload_cache = serializar_resultado(
+                        df_final,
+                        resumen,
+                        regiones_sin_tz,
+                        sistema=sistema_seleccionado,
+                    )
                     tabla_previa = df_final.head(80).to_dict(orient="records")
                     mensaje = "CSV analizado correctamente."
 
             elif accion == "descargar_csv":
                 payload_cache = (request.form.get(FORM_KEY_PAYLOAD) or "").strip()
-                df_final, resumen, regiones_sin_tz = cargar_desde_payload(payload_cache)
+                df_final, resumen, regiones_sin_tz, sistema_seleccionado = cargar_desde_payload(payload_cache)
                 if df_final is None:
                     advertencia = "Primero analiza un CSV."
                 else:
@@ -699,7 +745,7 @@ def usuarios_a_sheets():
             elif accion == "crear_sheet":
                 nombre_hoja = (request.form.get("nombre_hoja") or "").strip()
                 payload_cache = (request.form.get(FORM_KEY_PAYLOAD) or "").strip()
-                df_final, resumen, regiones_sin_tz = cargar_desde_payload(payload_cache)
+                df_final, resumen, regiones_sin_tz, sistema_seleccionado = cargar_desde_payload(payload_cache)
 
                 if df_final is None:
                     advertencia = "Primero analiza un CSV."
@@ -716,7 +762,7 @@ def usuarios_a_sheets():
 
             else:
                 payload_cache = (request.form.get(FORM_KEY_PAYLOAD) or "").strip()
-                df_final, resumen, regiones_sin_tz = cargar_desde_payload(payload_cache)
+                df_final, resumen, regiones_sin_tz, sistema_seleccionado = cargar_desde_payload(payload_cache)
                 if df_final is not None:
                     tabla_previa = df_final.head(80).to_dict(orient="records")
 
@@ -725,7 +771,7 @@ def usuarios_a_sheets():
             advertencia = f"No se pudo procesar el archivo: {e}"
             if payload_cache:
                 try:
-                    df_final, resumen, regiones_sin_tz = cargar_desde_payload(payload_cache)
+                    df_final, resumen, regiones_sin_tz, sistema_seleccionado = cargar_desde_payload(payload_cache)
                     if df_final is not None:
                         tabla_previa = df_final.head(80).to_dict(orient="records")
                 except Exception:
@@ -743,4 +789,6 @@ def usuarios_a_sheets():
         apps_script_configurado=apps_script_configurado,
         regiones_sin_tz=regiones_sin_tz,
         payload_cache=payload_cache,
+        sistema_seleccionado=sistema_seleccionado,
+        sistemas_perfil=SISTEMAS_PERFIL,
     )
