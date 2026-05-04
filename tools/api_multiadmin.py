@@ -1,6 +1,6 @@
 import requests
 
-ENDPOINT_MULTIADMIN = "https://r80aom36fl.execute-api.us-east-1.amazonaws.com/shared-admin/public/stats"
+ENDPOINT_MULTIADMIN = "https://pti24ew7fbrhm55ftbbbc5hk6i0meyek.lambda-url.us-east-1.on.aws/"
 
 def obtener_metricas_multiadmin():
     response = requests.get(ENDPOINT_MULTIADMIN, timeout=30)
@@ -9,6 +9,8 @@ def obtener_metricas_multiadmin():
     data = response.json()
 
     return {
+        "Compinche": data.get("shipt", {}),
+        "Paripe": data.get("shipt", {}),
         "camarada": data.get("shipt", {}),
         "complice": data.get("veho", {}),
         "secuaz": data.get("zifty", {}),
