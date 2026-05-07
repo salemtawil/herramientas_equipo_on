@@ -20,17 +20,17 @@ TURNOS_FIJOS = {
     "Madrugada": [
         "Caridad",
         "Maria",
-        "Mariana",
+        "Camila Paez",
         "Nathali",
     ],
     "Media noche": [
         "Antonio",
-        "Francis",
-        "Nicolas",
+        "Zahra",
+        "Rigoberto",
     ],
     "Tarde/Noche": [
         "Alex",
-        "Camila Paez",
+        
         "Luis",
         "Mary",
         "Maykro",
@@ -60,11 +60,11 @@ TURNOS_FIJOS = {
     "Ventas": [
         "Ana",
         "Augusto",
-        "Jeimy",
+        
         "Julio",
         "Simon",
         "Valentina",
-        "Zahra",
+        
     ],
     "Shift Leaders": [
         "Adriana",
