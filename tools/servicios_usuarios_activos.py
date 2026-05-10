@@ -1,5 +1,6 @@
 from datetime import datetime
 
+from tools.api_compinche import obtener_metricas_compinche_api
 from tools.api_multiadmin import obtener_metricas_multiadmin
 
 
@@ -64,17 +65,28 @@ def _proceso_actualizacion_unica(estado):
     ahora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     try:
-        metricas = obtener_metricas_multiadmin()
+        metricas_compinche = obtener_metricas_compinche_api()
 
         _actualizar_estado(
             estado,
             "Compinche",
-            active_users=metricas.get("Compinche", {}).get("active_users", 0),
-            running_users=metricas.get("Compinche", {}).get("running_users", 0),
+            active_users=metricas_compinche.get("active_users", 0),
+            running_users=metricas_compinche.get("running_users", 0),
             updated_at=ahora,
             progress="Completado",
             error=None,
         )
+    except Exception as e:
+        _actualizar_estado(
+            estado,
+            "Compinche",
+            updated_at=ahora,
+            progress="Error",
+            error=str(e),
+        )
+
+    try:
+        metricas = obtener_metricas_multiadmin()
 
         _actualizar_estado(
             estado,
@@ -128,8 +140,6 @@ def _proceso_actualizacion_unica(estado):
 
     except Exception as e:
         error = str(e)
-
-        _actualizar_estado(estado, "Compinche", updated_at=ahora, progress="Error", error=error)
         _actualizar_estado(estado, "Paripe", updated_at=ahora, progress="Error", error=error)
         _actualizar_estado(estado, "camarada", updated_at=ahora, progress="Error", error=error)
         _actualizar_estado(estado, "complice", updated_at=ahora, progress="Error", error=error)
