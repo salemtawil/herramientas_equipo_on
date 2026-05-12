@@ -1,6 +1,7 @@
 import logging
 import os
 from flask import Flask, render_template
+from tools.auditoria_salientes import auditoria_salientes_bp
 from tools.reporte_agentes import reporte_agentes_bp
 from tools.usuarios_activos import usuarios_activos_bp
 from tools.comparar_csv import comparar_csv_bp
@@ -27,6 +28,7 @@ app.register_blueprint(reporte_agentes_bp)
 app.register_blueprint(usuarios_activos_bp)
 app.register_blueprint(comparar_csv_bp)
 app.register_blueprint(usuarios_a_sheets_bp)
+app.register_blueprint(auditoria_salientes_bp)
 
 
 @app.route("/")

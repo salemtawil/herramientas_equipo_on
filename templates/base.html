@@ -34,6 +34,10 @@
           <span class="sidebar-link__eyebrow">Analisis</span>
           <strong>Comparar CSV</strong>
         </a>
+        <a class="sidebar-link {% if endpoint == 'auditoria_salientes.auditoria_salientes' %}is-active{% endif %}" href="{{ url_for('auditoria_salientes.auditoria_salientes') }}">
+          <span class="sidebar-link__eyebrow">Cumplimiento</span>
+          <strong>Auditoria de salientes</strong>
+        </a>
         <a class="sidebar-link {% if endpoint == 'usuarios_a_sheets.usuarios_a_sheets' %}is-active{% endif %}" href="{{ url_for('usuarios_a_sheets.usuarios_a_sheets') }}">
           <span class="sidebar-link__eyebrow">Exportacion</span>
           <strong>Usuarios a Sheets</strong>
