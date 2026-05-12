@@ -10,12 +10,14 @@ TURNOS_FIJOS = {
         "Alejandro",
         "Alvaro",
         "Andreina",
+        "Simeon",
         "Diego",
         "Eva",
         "Genessis Marin",
         "Homero",
         "Jolmarys",
         "Oscar Chirino",
+        "Simon",
     ],
     "Madrugada": [
         "Caridad",
@@ -30,7 +32,10 @@ TURNOS_FIJOS = {
     ],
     "Tarde/Noche": [
         "Alex",
-        
+        "Ana",
+        "Augusto",
+        "Julio",
+        "Valentina",
         "Luis",
         "Mary",
         "Maykro",
@@ -40,7 +45,7 @@ TURNOS_FIJOS = {
         "Paola",
         "Roberth",
         "Rolmer",
-        "Simeon",
+        
     ],
     "Admin": [
         "Andrea",
@@ -57,15 +62,7 @@ TURNOS_FIJOS = {
         "Rene",
         "Thiago",
     ],
-    "Ventas": [
-        "Ana",
-        "Augusto",
-        
-        "Julio",
-        "Simon",
-        "Valentina",
-        
-    ],
+    
     "Shift Leaders": [
         "Adriana",
         "Gaby",
