@@ -3,8 +3,80 @@
 {% block title %}Auditoria de salientes{% endblock %}
 {% block page_name %}Auditoria de salientes{% endblock %}
 
+{% block head %}
+  {{ super() }}
+  <style>
+    .auditoria-salientes-page,
+    .auditoria-salientes-page > *,
+    .auditoria-salientes-page .card,
+    .auditoria-salientes-page .seccion-desplegable,
+    .auditoria-salientes-page .table-wrap,
+    .auditoria-salientes-page .table-wrap table,
+    .auditoria-salientes-page form,
+    .auditoria-salientes-page .row > div {
+      min-width: 0;
+    }
+
+    .auditoria-salientes-page .page-section-title,
+    .auditoria-salientes-page .titulo-desplegable,
+    .auditoria-salientes-page .acciones-barra {
+      flex-wrap: wrap;
+    }
+
+    .auditoria-salientes-page .table-wrap {
+      width: 100%;
+      max-width: 100%;
+      overflow-x: auto;
+      overflow-y: auto;
+    }
+
+    .auditoria-salientes-page .tabla-auditoria {
+      font-size: 11px;
+    }
+
+    .auditoria-salientes-page .tabla-auditoria th,
+    .auditoria-salientes-page .tabla-auditoria td {
+      padding: 9px 8px;
+    }
+
+    .auditoria-salientes-page .tabla-auditoria th {
+      white-space: normal;
+      line-height: 1.25;
+    }
+
+    .auditoria-salientes-page .turnos-filtro-grid {
+      margin-top: 0;
+    }
+
+    .auditoria-salientes-page .turno-filtro-item {
+      min-width: 0;
+    }
+
+    .auditoria-salientes-page .auditoria-upload-row {
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .auditoria-salientes-page .auditoria-upload-row input[type="file"] {
+      width: 100%;
+      max-width: 100%;
+    }
+
+    @media (max-width: 900px) {
+      .auditoria-salientes-page .auditoria-upload-row {
+        grid-template-columns: 1fr;
+      }
+
+      .auditoria-salientes-page .auditoria-upload-row button,
+      .auditoria-salientes-page .acciones-barra button,
+      .auditoria-salientes-page .acciones-barra .btn {
+        width: 100%;
+      }
+    }
+  </style>
+{% endblock %}
+
 {% block content %}
-<div class="page-stack">
+<div class="page-stack auditoria-salientes-page">
   <section class="card page-hero">
     <div class="page-section-title">
       <div>
@@ -46,7 +118,8 @@
     </div>
 
     <form method="post" enctype="multipart/form-data" data-processing-message="Analizando historial de llamadas y agrupando casos...">
-      <div class="row">
+      <input type="hidden" name="accion" value="analizar_csv">
+      <div class="row auditoria-upload-row">
         <div><input type="file" name="archivo" accept=".csv"></div>
         <div><button type="submit">Analizar CSV</button></div>
       </div>
@@ -91,28 +164,55 @@
     </summary>
 
     <div class="top-space">
-      <label for="buscador-resumen-agente" class="small">Que quieres buscar?</label>
+      {% if payload_cache %}
+      <form method="post" class="acciones-barra" data-processing-message="Preparando CSV del analisis..." data-sync-turnos="true">
+        <textarea name="auditoria_salientes_payload" hidden>{{ payload_cache }}</textarea>
+        <input type="hidden" name="usar_filtro_turnos" value="1">
+        <div data-turnos-hidden-target></div>
+        <button type="submit" name="accion" value="descargar_resumen_agente">
+          Descargar resumen por agente
+        </button>
+      </form>
+      {% endif %}
+
+      <div class="top-space">
+        <label for="buscador-resumen-agente" class="small">Que quieres buscar?</label>
+      </div>
       <div class="top-space">
         <input
           type="text"
           id="buscador-resumen-agente"
-          placeholder="Buscar por nombre del agente"
+          placeholder="Buscar por agente o turno"
           data-table-filter="resumen-agente"
         >
       </div>
 
       <div class="table-wrap">
-        <table class="tabla-ordenable tabla-compacta" data-filter-table="resumen-agente" data-filter-columns="Agente">
+        <table class="tabla-ordenable tabla-compacta tabla-auditoria" data-filter-table="resumen-agente" data-filter-columns="Agente,Turno" data-turno-table="true">
           <thead>
             <tr>
               {% for col in columnas_resumen_agente %}
-                <th>{{ col }}</th>
+                <th>
+                  {% if col == "Cumple por contestada" %}
+                    Contestada
+                  {% elif col == "Cumple completo" %}
+                    Completo
+                  {% elif col == "Cumple segundo intento sin voicemail probable" %}
+                    2do intento s/ VM
+                  {% elif col == "Porcentaje de cumplimiento" %}
+                    % cumplimiento
+                  {% elif col == "Turno" %}
+                    Turno
+                  {% else %}
+                    {{ col }}
+                  {% endif %}
+                </th>
               {% endfor %}
             </tr>
           </thead>
           <tbody>
             {% for fila in resumen_agente %}
-              <tr>
+              <tr data-turno="{{ fila['Turno'] }}">
                 {% for col in columnas_resumen_agente %}
                   <td>
                     {% if "Porcentaje" in col %}
@@ -139,7 +239,18 @@
     </summary>
 
     <div class="top-space">
-      <label for="buscador-detalle-casos" class="small">Que quieres buscar?</label>
+      {% if payload_cache %}
+      <form method="post" class="acciones-barra" data-processing-message="Preparando CSV del analisis...">
+        <textarea name="auditoria_salientes_payload" hidden>{{ payload_cache }}</textarea>
+        <button type="submit" name="accion" value="descargar_detalle_casos" class="btn secondary">
+          Descargar detalle de casos
+        </button>
+      </form>
+      {% endif %}
+
+      <div class="top-space">
+        <label for="buscador-detalle-casos" class="small">Que quieres buscar?</label>
+      </div>
       <div class="top-space">
         <input
           type="text"
@@ -150,11 +261,27 @@
       </div>
 
       <div class="table-wrap">
-        <table class="tabla-ordenable tabla-compacta" data-filter-table="detalle-casos" data-filter-columns="TicketId,Agente,Numero,Estado final">
+        <table class="tabla-ordenable tabla-compacta tabla-auditoria" data-filter-table="detalle-casos" data-filter-columns="TicketId,Agente,Numero,Estado final">
           <thead>
             <tr>
               {% for col in columnas_detalle %}
-                <th>{{ col }}</th>
+                <th>
+                  {% if col == "Hora primera llamada" %}
+                    Hora inicial
+                  {% elif col == "Llamadas en ventana" %}
+                    Llamadas
+                  {% elif col == "Duraciones intentos" %}
+                    Duraciones
+                  {% elif col == "Hubo contestada" %}
+                    Contestada
+                  {% elif col == "Voicemail probable" %}
+                    VM probable
+                  {% elif col == "Estado final" %}
+                    Estado
+                  {% else %}
+                    {{ col }}
+                  {% endif %}
+                </th>
               {% endfor %}
             </tr>
           </thead>
@@ -172,6 +299,96 @@
     </div>
   </details>
   {% endif %}
+
+  {% if resumen_turno %}
+  <details class="card seccion-desplegable" open>
+    <summary class="titulo-desplegable">
+      <span>Resumen por turno</span>
+      <span class="small">{{ resumen_turno|length }} turnos</span>
+    </summary>
+
+    <div class="top-space">
+      {% if payload_cache %}
+      <form method="post" data-processing-message="Aplicando filtro de turnos..." data-turnos-form="true">
+        <textarea name="auditoria_salientes_payload" hidden>{{ payload_cache }}</textarea>
+        <input type="hidden" name="usar_filtro_turnos" value="1">
+
+        <div class="turnos-filtro-grid">
+          {% for turno in turnos_disponibles %}
+            <label class="turno-filtro-item">
+              <input
+                type="checkbox"
+                name="turnos"
+                value="{{ turno }}"
+                {% if turno in turnos_seleccionados %}checked{% endif %}
+              >
+              <span>{{ turno }}</span>
+            </label>
+          {% endfor %}
+        </div>
+
+        <div class="acciones-barra top-space">
+          <button type="submit" name="accion" value="descargar_resumen_turno">
+            Descargar resumen por turno
+          </button>
+        </div>
+      </form>
+      {% endif %}
+
+      <div class="top-space">
+        <label for="buscador-resumen-turno" class="small">Que quieres buscar?</label>
+      </div>
+      <div class="top-space">
+        <input
+          type="text"
+          id="buscador-resumen-turno"
+          placeholder="Buscar por turno"
+          data-table-filter="resumen-turno"
+        >
+      </div>
+
+      <div class="table-wrap">
+        <table class="tabla-ordenable tabla-compacta tabla-auditoria" data-filter-table="resumen-turno" data-filter-columns="Turno" data-turno-table="true">
+          <thead>
+            <tr>
+              {% for col in columnas_resumen_turno %}
+                <th>
+                  {% if col == "Cumple por contestada" %}
+                    Contestada
+                  {% elif col == "Cumple completo" %}
+                    Completo
+                  {% elif col == "Cumple segundo intento sin voicemail probable" %}
+                    2do intento s/ VM
+                  {% elif col == "Porcentaje de cumplimiento" %}
+                    % cumplimiento
+                  {% else %}
+                    {{ col }}
+                  {% endif %}
+                </th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for fila in resumen_turno %}
+              <tr data-turno="{{ fila['Turno'] }}">
+                {% for col in columnas_resumen_turno %}
+                  <td>
+                    {% if "Porcentaje" in col %}
+                      {{ fila[col] }}%
+                    {% else %}
+                      {{ fila[col] }}
+                    {% endif %}
+                  </td>
+                {% endfor %}
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </details>
+  {% endif %}
+
 </div>
 {% endblock %}
 
@@ -182,11 +399,35 @@
       return (texto || "").toString().trim().toLowerCase();
     }
 
-    function configurarFiltroTabla(input) {
-      const tableId = input.dataset.tableFilter;
-      const table = document.querySelector(`[data-filter-table="${tableId}"]`);
+    function obtenerTurnosSeleccionados() {
+      return Array.from(document.querySelectorAll('[data-turnos-form="true"] input[name="turnos"]:checked'))
+        .map((input) => normalizarBusqueda(input.value));
+    }
+
+    function sincronizarTurnosEnFormularios() {
+      const turnos = obtenerTurnosSeleccionados();
+
+      document.querySelectorAll("form[data-sync-turnos='true']").forEach((form) => {
+        const target = form.querySelector("[data-turnos-hidden-target]");
+        if (!target) return;
+
+        target.innerHTML = "";
+        turnos.forEach((turno) => {
+          const input = document.createElement("input");
+          input.type = "hidden";
+          input.name = "turnos";
+          input.value = turno;
+          target.appendChild(input);
+        });
+      });
+    }
+
+    function aplicarFiltrosTabla(table) {
       if (!table) return;
 
+      const tableId = table.dataset.filterTable;
+      const input = document.querySelector(`input[data-table-filter="${tableId}"]`);
+      const termino = normalizarBusqueda(input ? input.value : "");
       const headers = Array.from(table.querySelectorAll("thead th")).map((th) =>
         normalizarBusqueda(th.textContent)
       );
@@ -194,30 +435,47 @@
         .split(",")
         .map((col) => normalizarBusqueda(col))
         .filter(Boolean);
-      const indices = columnasObjetivo
+      const indicesBusqueda = columnasObjetivo
         .map((columna) => headers.indexOf(columna))
         .filter((indice) => indice >= 0);
+      const turnosSeleccionados = obtenerTurnosSeleccionados();
       const rows = Array.from(table.querySelectorAll("tbody tr"));
 
-      input.addEventListener("input", () => {
-        const termino = normalizarBusqueda(input.value);
+      rows.forEach((row) => {
+        const cells = Array.from(row.children);
+        const matchBusqueda = !termino || indicesBusqueda.some((indice) =>
+          normalizarBusqueda(cells[indice] ? cells[indice].textContent : "").includes(termino)
+        );
+        const turnoFila = normalizarBusqueda(row.dataset.turno || "");
+        const matchTurno = !turnoFila || turnosSeleccionados.includes(turnoFila);
 
-        rows.forEach((row) => {
-          if (!termino) {
-            row.style.display = "";
-            return;
-          }
-
-          const cells = Array.from(row.children);
-          const match = indices.some((indice) =>
-            normalizarBusqueda(cells[indice] ? cells[indice].textContent : "").includes(termino)
-          );
-
-          row.style.display = match ? "" : "none";
-        });
+        row.style.display = matchBusqueda && matchTurno ? "" : "none";
       });
     }
 
+    function configurarFiltroTabla(input) {
+      const table = document.querySelector(`[data-filter-table="${input.dataset.tableFilter}"]`);
+      if (!table) return;
+      input.addEventListener("input", () => aplicarFiltrosTabla(table));
+      aplicarFiltrosTabla(table);
+    }
+
+    function configurarFiltroTurnos() {
+      const turnos = document.querySelectorAll('[data-turnos-form="true"] input[name="turnos"]');
+      if (!turnos.length) return;
+
+      turnos.forEach((input) => {
+        input.addEventListener("change", () => {
+          sincronizarTurnosEnFormularios();
+          document.querySelectorAll("table[data-turno-table='true']").forEach(aplicarFiltrosTabla);
+        });
+      });
+
+      sincronizarTurnosEnFormularios();
+      document.querySelectorAll("table[data-turno-table='true']").forEach(aplicarFiltrosTabla);
+    }
+
     document.querySelectorAll("input[data-table-filter]").forEach(configurarFiltroTabla);
+    configurarFiltroTurnos();
   </script>
 {% endblock %}

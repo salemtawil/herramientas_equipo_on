@@ -1,16 +1,22 @@
+import io
+import json
 import logging
 import re
 import unicodedata
 
 import pandas as pd
-from flask import Blueprint, render_template, request
+from flask import Blueprint, Response, current_app, render_template, request
+from itsdangerous import BadData, URLSafeSerializer
 
 from utils.archivos import _leer_csv_desde_bytes
+from utils.config_turnos import obtener_turnos_fijos
 
 auditoria_salientes_bp = Blueprint("auditoria_salientes", __name__)
 logger = logging.getLogger(__name__)
+FORM_KEY_PAYLOAD = "auditoria_salientes_payload"
 MAX_FILAS_VISTA_PREVIA = 500
 VENTANA_CASO_MINUTOS = 10
+TURNO_SIN_TURNO = "Sin turno"
 
 ESTADO_CONTESTADA = "Cumple por contestada"
 ESTADO_COMPLETO = "Cumple completo"
@@ -27,6 +33,16 @@ COLUMNAS_DETALLE = [
     "Voicemail probable",
     "Estado final",
     "TicketId",
+]
+
+COLUMNAS_RESUMEN_TURNO = [
+    "Turno",
+    "Total de casos",
+    "Cumple por contestada",
+    "Cumple completo",
+    "Cumple segundo intento sin voicemail probable",
+    "No cumple",
+    "Porcentaje de cumplimiento",
 ]
 
 ALIAS_COLUMNAS = {
@@ -448,6 +464,7 @@ def construir_resumen_por_agente(df_casos):
     if df_casos.empty:
         return pd.DataFrame(
             columns=[
+                "Turno",
                 "Agente",
                 "Total de casos",
                 "Cumple por contestada",
@@ -470,6 +487,7 @@ def construir_resumen_por_agente(df_casos):
 
         filas.append(
             {
+                "Turno": grupo["_turno"].iloc[0] if "_turno" in grupo.columns and not grupo.empty else TURNO_SIN_TURNO,
                 "Agente": agente,
                 "Total de casos": total,
                 "Cumple por contestada": contestada,
@@ -486,42 +504,222 @@ def construir_resumen_por_agente(df_casos):
     )
 
 
+def obtener_orden_turnos():
+    return list(obtener_turnos_fijos().keys()) + [TURNO_SIN_TURNO]
+
+
+def construir_mapa_agente_turno():
+    mapa = {}
+
+    for turno, agentes in obtener_turnos_fijos().items():
+        for agente in agentes:
+            clave = normalizar_texto(agente)
+            if clave:
+                mapa[clave] = turno
+
+    return mapa
+
+
+def asignar_turnos_a_casos(df_casos):
+    if df_casos.empty:
+        df_resultado = df_casos.copy()
+        df_resultado["_turno"] = []
+        return df_resultado
+
+    mapa_agente_turno = construir_mapa_agente_turno()
+    df_resultado = df_casos.copy()
+    df_resultado["_turno"] = df_resultado["_agente"].apply(
+        lambda agente: mapa_agente_turno.get(normalizar_texto(agente), TURNO_SIN_TURNO)
+    )
+    return df_resultado
+
+
+def filtrar_casos_por_turnos(df_casos, turnos_seleccionados):
+    if df_casos.empty:
+        return df_casos
+    if turnos_seleccionados is None:
+        return df_casos
+    return df_casos[df_casos["_turno"].isin(turnos_seleccionados)].copy()
+
+
+def construir_resumen_por_turno(df_casos):
+    if df_casos.empty:
+        return pd.DataFrame(columns=COLUMNAS_RESUMEN_TURNO)
+
+    filas = []
+
+    for turno, grupo in df_casos.groupby("_turno", dropna=False):
+        total = int(len(grupo))
+        contestada = int((grupo["_estado"] == ESTADO_CONTESTADA).sum())
+        completo = int((grupo["_estado"] == ESTADO_COMPLETO).sum())
+        segundo = int((grupo["_estado"] == ESTADO_SEGUNDO_INTENTO).sum())
+        no_cumple = int((grupo["_estado"] == ESTADO_NO_CUMPLE).sum())
+        cumplidos = contestada + completo + segundo
+
+        filas.append(
+            {
+                "Turno": turno,
+                "Total de casos": total,
+                "Cumple por contestada": contestada,
+                "Cumple completo": completo,
+                "Cumple segundo intento sin voicemail probable": segundo,
+                "No cumple": no_cumple,
+                "Porcentaje de cumplimiento": porcentaje_cumplimiento(cumplidos, total),
+            }
+        )
+
+    df_resumen = pd.DataFrame(filas)
+    orden_turnos = obtener_orden_turnos()
+    df_resumen["__orden_turno"] = df_resumen["Turno"].apply(
+        lambda turno: orden_turnos.index(turno) if turno in orden_turnos else len(orden_turnos)
+    )
+    return df_resumen.sort_values(by=["__orden_turno", "Turno"]).drop(columns=["__orden_turno"]).reset_index(drop=True)
+
+
+def respuesta_csv_desde_df(df, nombre_archivo):
+    salida = io.StringIO()
+    df.to_csv(salida, index=False, encoding="utf-8-sig")
+    csv_texto = salida.getvalue()
+
+    return Response(
+        csv_texto,
+        mimetype="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename={nombre_archivo}"},
+    )
+
+
+def serializar_resultado_auditoria(df_casos):
+    serializer = URLSafeSerializer(
+        current_app.secret_key,
+        salt="auditoria-salientes-payload",
+    )
+    return serializer.dumps(
+        {
+            "df_casos_json": df_casos.to_json(orient="records", force_ascii=False),
+        }
+    )
+
+
+def cargar_resultado_auditoria_desde_payload(payload):
+    if not payload:
+        return None
+
+    serializer = URLSafeSerializer(
+        current_app.secret_key,
+        salt="auditoria-salientes-payload",
+    )
+
+    try:
+        item = serializer.loads(payload)
+    except BadData:
+        return None
+
+    if not item or "df_casos_json" not in item:
+        return None
+
+    df_casos = pd.DataFrame(json.loads(item["df_casos_json"]))
+    if df_casos.empty:
+        return pd.DataFrame(columns=COLUMNAS_DETALLE + ["_estado", "_agente"])
+
+    return df_casos
+
+
 @auditoria_salientes_bp.route("/auditoria-salientes", methods=["GET", "POST"])
 def auditoria_salientes():
     mensaje = ""
     advertencia = ""
     resumen_general = None
     resumen_agente = None
+    resumen_turno = None
     detalle_casos = None
     columnas_resumen_agente = None
+    columnas_resumen_turno = COLUMNAS_RESUMEN_TURNO
     columnas_detalle = COLUMNAS_DETALLE
+    payload_cache = ""
+    turnos_disponibles = obtener_orden_turnos()
+    turnos_seleccionados = turnos_disponibles.copy()
 
     if request.method == "POST":
-        archivo = request.files.get("archivo")
+        accion = (request.form.get("accion") or "analizar_csv").strip()
 
         try:
-            if not archivo or not archivo.filename:
-                advertencia = "Selecciona un archivo CSV."
+            if accion == "analizar_csv":
+                archivo = request.files.get("archivo")
+
+                if not archivo or not archivo.filename:
+                    advertencia = "Selecciona un archivo CSV."
+                else:
+                    df = leer_csv_historial(archivo)
+                    df_preparado, _columnas = preparar_dataframe_historial(df)
+                    df_casos = asignar_turnos_a_casos(analizar_casos(df_preparado))
+                    payload_cache = serializar_resultado_auditoria(df_casos)
+
+                    resumen_general = construir_resumen_general(df_casos)
+
+                    df_resumen_agente = construir_resumen_por_agente(df_casos)
+                    columnas_resumen_agente = list(df_resumen_agente.columns)
+                    resumen_agente = df_resumen_agente.to_dict(orient="records")
+
+                    detalle_casos = (
+                        df_casos[COLUMNAS_DETALLE]
+                        .head(MAX_FILAS_VISTA_PREVIA)
+                        .to_dict(orient="records")
+                    )
+
+                    mensaje = "CSV analizado correctamente."
+                    if len(df_casos) > MAX_FILAS_VISTA_PREVIA:
+                        mensaje += f" Mostrando los primeros {MAX_FILAS_VISTA_PREVIA} casos en el detalle."
+
             else:
-                df = leer_csv_historial(archivo)
-                df_preparado, _columnas = preparar_dataframe_historial(df)
-                df_casos = analizar_casos(df_preparado)
+                payload_cache = (request.form.get(FORM_KEY_PAYLOAD) or "").strip()
+                df_casos = cargar_resultado_auditoria_desde_payload(payload_cache)
+                if request.form.get("usar_filtro_turnos") == "1":
+                    turnos_seleccionados = request.form.getlist("turnos")
+                elif accion == "limpiar_filtro_turnos":
+                    turnos_seleccionados = turnos_disponibles.copy()
+                else:
+                    turnos_seleccionados = request.form.getlist("turnos") or turnos_disponibles.copy()
+                df_casos_filtrado_turnos = filtrar_casos_por_turnos(df_casos, turnos_seleccionados) if df_casos is not None else None
+                if df_casos is None:
+                    advertencia = "Primero analiza un CSV."
+                elif accion == "descargar_resumen_agente":
+                    df_resumen_agente = construir_resumen_por_agente(df_casos)
+                    return respuesta_csv_desde_df(
+                        df_resumen_agente,
+                        "auditoria_salientes_resumen_agente.csv",
+                    )
+                elif accion == "descargar_detalle_casos":
+                    return respuesta_csv_desde_df(
+                        df_casos[COLUMNAS_DETALLE],
+                        "auditoria_salientes_detalle_casos.csv",
+                    )
+                elif accion == "descargar_resumen_turno":
+                    return respuesta_csv_desde_df(
+                        construir_resumen_por_turno(df_casos_filtrado_turnos),
+                        "auditoria_salientes_resumen_turno.csv",
+                    )
+                elif accion == "filtrar_turnos":
+                    pass
+                elif accion == "limpiar_filtro_turnos":
+                    pass
+                else:
+                    advertencia = "Accion no valida."
 
-                resumen_general = construir_resumen_general(df_casos)
-
-                df_resumen_agente = construir_resumen_por_agente(df_casos)
-                columnas_resumen_agente = list(df_resumen_agente.columns)
-                resumen_agente = df_resumen_agente.to_dict(orient="records")
-
-                detalle_casos = (
-                    df_casos[COLUMNAS_DETALLE]
-                    .head(MAX_FILAS_VISTA_PREVIA)
-                    .to_dict(orient="records")
-                )
-
-                mensaje = "CSV analizado correctamente."
-                if len(df_casos) > MAX_FILAS_VISTA_PREVIA:
-                    mensaje += f" Mostrando los primeros {MAX_FILAS_VISTA_PREVIA} casos en el detalle."
+            if payload_cache:
+                df_casos = cargar_resultado_auditoria_desde_payload(payload_cache)
+                if df_casos is not None:
+                    resumen_general = construir_resumen_general(df_casos)
+                    df_resumen_agente = construir_resumen_por_agente(df_casos)
+                    columnas_resumen_agente = list(df_resumen_agente.columns)
+                    resumen_agente = df_resumen_agente.to_dict(orient="records")
+                    df_casos_filtrado_turnos = filtrar_casos_por_turnos(df_casos, turnos_seleccionados)
+                    df_resumen_turno = construir_resumen_por_turno(df_casos_filtrado_turnos)
+                    resumen_turno = df_resumen_turno.to_dict(orient="records")
+                    detalle_casos = (
+                        df_casos[COLUMNAS_DETALLE]
+                        .head(MAX_FILAS_VISTA_PREVIA)
+                        .to_dict(orient="records")
+                    )
 
         except Exception as e:
             logger.exception("Error procesando auditoria_salientes")
@@ -534,6 +732,11 @@ def auditoria_salientes():
         resumen_general=resumen_general,
         resumen_agente=resumen_agente,
         columnas_resumen_agente=columnas_resumen_agente,
+        resumen_turno=resumen_turno,
+        columnas_resumen_turno=columnas_resumen_turno,
         detalle_casos=detalle_casos,
         columnas_detalle=columnas_detalle,
+        payload_cache=payload_cache,
+        turnos_disponibles=turnos_disponibles,
+        turnos_seleccionados=turnos_seleccionados,
     )
