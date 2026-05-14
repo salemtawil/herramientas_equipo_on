@@ -6,3 +6,4 @@ boto3
 gspread>=6.0.0
 google-auth>=2.29.0
 google-api-python-client>=2.126.0
+supabase>=2.15.3

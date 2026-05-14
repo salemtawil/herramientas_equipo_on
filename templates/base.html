@@ -42,6 +42,10 @@
           <span class="sidebar-link__eyebrow">Exportacion</span>
           <strong>Usuarios a Sheets</strong>
         </a>
+        <a class="sidebar-link {% if endpoint == 'break_admin.break_admin' %}is-active{% endif %}" href="{{ url_for('break_admin.break_admin') }}">
+          <span class="sidebar-link__eyebrow">Administracion</span>
+          <strong>Breaks reservables</strong>
+        </a>
       </nav>
 
       <div class="app-sidebar__footer">

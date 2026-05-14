@@ -1,0 +1,753 @@
+{% extends "base.html" %}
+
+{% block title %}Admin de breaks{% endblock %}
+{% block page_name %}Admin de breaks{% endblock %}
+
+{% block head_extra %}
+  <style>
+    .break-admin-page .break-chip-list,
+    .break-admin-page .slot-forms-grid,
+    .break-admin-page .shift-forms-grid,
+    .break-admin-page .break-summary-grid,
+    .break-admin-page .break-slot-config-grid {
+      display: grid;
+      gap: 12px;
+    }
+
+    .break-admin-page .slot-forms-grid,
+    .break-admin-page .shift-forms-grid {
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    }
+
+    .break-admin-page .break-chip-list {
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    }
+
+    .break-admin-page .break-summary-grid {
+      grid-template-columns: minmax(0, 1.4fr) minmax(320px, 1fr);
+      align-items: start;
+    }
+
+    .break-admin-page .break-slot-config-grid {
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    }
+
+    .break-admin-page .break-filter-card,
+    .break-admin-page .break-summary-panel,
+    .break-admin-page .break-form-card,
+    .break-admin-page .break-slot-editor,
+    .break-admin-page .break-reservation-item,
+    .break-admin-page .break-reservation-empty {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: var(--surface-strong);
+    }
+
+    .break-admin-page .break-filter-card,
+    .break-admin-page .break-summary-panel,
+    .break-admin-page .break-form-card,
+    .break-admin-page .break-slot-editor {
+      padding: 16px;
+    }
+
+    .break-admin-page .break-filter-card {
+      background:
+        linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 94%, transparent), var(--surface-strong)),
+        radial-gradient(circle at top right, color-mix(in srgb, var(--primary-soft) 88%, transparent), transparent 42%);
+    }
+
+    .break-admin-page .break-summary-panel {
+      background: var(--surface-muted);
+    }
+
+    .break-admin-page .break-summary-grid h3,
+    .break-admin-page .break-form-card h3,
+    .break-admin-page .break-slot-editor h3 {
+      margin-bottom: 8px;
+    }
+
+    .break-admin-page .break-selection-title {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .break-admin-page .break-selection-title strong {
+      color: var(--title);
+      font-size: 18px;
+    }
+
+    .break-admin-page .break-chip {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: var(--surface-strong);
+      padding: 14px;
+    }
+
+    .break-admin-page .break-chip strong,
+    .break-admin-page .break-stat-card strong {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--title);
+    }
+
+    .break-admin-page .break-chip .small {
+      display: block;
+      margin-top: 4px;
+    }
+
+    .break-admin-page .break-stat-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .break-admin-page .break-stat-card {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--surface-strong);
+      padding: 12px;
+    }
+
+    .break-admin-page .break-stat-value {
+      color: var(--title);
+      font-size: 24px;
+      font-weight: 800;
+      line-height: 1;
+    }
+
+    .break-admin-page .break-state-tag,
+    .break-admin-page .break-slot-state,
+    .break-admin-page .break-capacity-pill {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 999px;
+      padding: 5px 10px;
+      font-size: 11px;
+      font-weight: 800;
+      line-height: 1.2;
+    }
+
+    .break-admin-page .break-state-tag,
+    .break-admin-page .break-slot-state {
+      background: var(--primary-soft);
+      color: var(--title);
+      border: 1px solid color-mix(in srgb, var(--primary) 20%, var(--border));
+    }
+
+    .break-admin-page .break-state-tag.is-inactive,
+    .break-admin-page .break-slot-state.is-inactive {
+      background: var(--warning-bg);
+      color: var(--warning-text);
+      border-color: var(--warning-border);
+    }
+
+    .break-admin-page .break-capacity-pill {
+      border: 1px solid var(--border);
+      background: var(--surface-strong);
+      color: var(--title);
+    }
+
+    .break-admin-page .break-capacity-pill.is-full {
+      background: var(--danger-bg);
+      color: var(--danger-text);
+      border-color: var(--danger-border);
+    }
+
+    .break-admin-page .break-capacity-pill.is-available {
+      background: var(--success-bg);
+      color: var(--success-text);
+      border-color: var(--success-border);
+    }
+
+    .break-admin-page .break-table {
+      min-width: 980px;
+    }
+
+    .break-admin-page .break-table th {
+      white-space: normal;
+    }
+
+    .break-admin-page .break-table td {
+      vertical-align: top;
+      white-space: normal;
+    }
+
+    .break-admin-page .break-slot-meta {
+      display: grid;
+      gap: 8px;
+    }
+
+    .break-admin-page .break-slot-name {
+      color: var(--title);
+      font-size: 17px;
+      font-weight: 800;
+    }
+
+    .break-admin-page .break-reservation-list {
+      display: grid;
+      gap: 12px;
+      min-width: 300px;
+    }
+
+    .break-admin-page .break-reservation-item {
+      padding: 12px;
+      background: var(--surface-muted);
+    }
+
+    .break-admin-page .break-reservation-item.inactive-slot {
+      opacity: 0.78;
+      border-style: dashed;
+    }
+
+    .break-admin-page .break-reservation-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: flex-start;
+      margin-bottom: 8px;
+    }
+
+    .break-admin-page .break-reservation-name {
+      color: var(--title);
+      font-size: 15px;
+      font-weight: 800;
+    }
+
+    .break-admin-page .break-reservation-meta {
+      display: grid;
+      gap: 8px;
+    }
+
+    .break-admin-page .break-reservation-actions {
+      display: grid;
+      gap: 8px;
+    }
+
+    .break-admin-page .break-move-form {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .break-admin-page .break-move-form select,
+    .break-admin-page .break-delete-form button,
+    .break-admin-page .break-slot-toggle-form button {
+      width: 100%;
+    }
+
+    .break-admin-page .break-reservation-empty {
+      padding: 14px;
+      background: var(--surface-muted);
+      color: var(--muted);
+      font-style: italic;
+    }
+
+    .break-admin-page .break-capacity-stack,
+    .break-admin-page .break-action-stack {
+      display: grid;
+      gap: 10px;
+      min-width: 170px;
+    }
+
+    .break-admin-page .break-capacity-value {
+      color: var(--title);
+      font-size: 24px;
+      font-weight: 800;
+      line-height: 1;
+    }
+
+    .break-admin-page .break-action-stack .small {
+      display: block;
+    }
+
+    .break-admin-page .break-form-card--muted {
+      background: var(--surface-muted);
+    }
+
+    .break-admin-page .break-section-note {
+      margin-top: 6px;
+    }
+
+    .break-admin-page .break-slot-editor {
+      display: grid;
+      gap: 14px;
+      background: var(--surface-muted);
+    }
+
+    .break-admin-page .break-slot-editor-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .break-admin-page .break-slot-editor-status {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .break-admin-page .break-slot-editor .acciones-barra {
+      margin-top: 0;
+    }
+
+    @media (max-width: 1100px) {
+      .break-admin-page .break-summary-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 900px) {
+      .break-admin-page .break-stat-grid,
+      .break-admin-page .break-move-form {
+        grid-template-columns: 1fr;
+      }
+
+      .break-admin-page .break-reservation-head,
+      .break-admin-page .break-slot-editor-header {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+    }
+  </style>
+{% endblock %}
+
+{% block content %}
+<div class="page-stack break-admin-page">
+  <section class="card page-hero">
+    <div class="page-section-title">
+      <div>
+        <h1>Admin de breaks reservables</h1>
+        <p>Administra turnos, horarios y reservas desde esta app Flask. La app externa solo consume los datos compartidos en Supabase.</p>
+      </div>
+      <span class="hero-badge">Supabase backend-only</span>
+    </div>
+
+    <div class="dashboard-highlight-grid top-space">
+      <article class="dashboard-highlight-card dashboard-highlight-card--primary">
+        <span class="dashboard-highlight-card__eyebrow">Control</span>
+        <strong>Turnos, cupos y movimientos</strong>
+        <p>La administracion completa de breaks vive aqui, con validaciones de cupo y duplicados por fecha y turno.</p>
+      </article>
+      <article class="dashboard-highlight-card">
+        <span class="dashboard-highlight-card__eyebrow">Seguridad</span>
+        <strong>Clave service role solo en backend</strong>
+        <p>La UI nunca expone `SUPABASE_SERVICE_ROLE_KEY`; todas las operaciones pasan por Flask.</p>
+      </article>
+    </div>
+
+    {% with mensajes = get_flashed_messages(with_categories=true) %}
+      {% if mensajes %}
+        {% for categoria, texto in mensajes %}
+          <div class="{% if categoria == 'success' %}success{% else %}warning{% endif %} top-space">{{ texto }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    {% if config_error %}
+      <div class="warning top-space">{{ config_error }}</div>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <div class="page-section-title">
+      <div>
+        <h2>Vista principal</h2>
+        <p class="small">Filtra por fecha y turno para abrir una vista operativa del break del dia, con cupos, estado de horarios y acciones sobre reservas.</p>
+      </div>
+      <span class="hero-badge hero-badge-soft">Operacion diaria</span>
+    </div>
+
+    <div class="break-summary-grid top-space">
+      <article class="break-filter-card">
+        <div class="break-selection-title">
+          <strong>Que quieres revisar?</strong>
+          {% if selected_shift_id and day_view %}
+            <span class="break-state-tag {% if not day_view.shift.is_active %}is-inactive{% endif %}">
+              {% if day_view.shift.is_active %}Turno activo{% else %}Turno inactivo{% endif %}
+            </span>
+          {% endif %}
+        </div>
+
+        <form method="get">
+          <div class="row-2">
+            <div>
+              <label class="small" for="fecha">Fecha</label>
+              <input type="date" id="fecha" name="fecha" value="{{ fecha_seleccionada }}">
+            </div>
+            <div>
+              <label class="small" for="turno">Turno</label>
+              <select id="turno" name="turno">
+                <option value="">Selecciona un turno</option>
+                {% for shift in shifts %}
+                  <option value="{{ shift.id }}" {% if shift.id == selected_shift_id %}selected{% endif %}>
+                    {{ shift.label }}{% if not shift.is_active %} (inactivo){% endif %}
+                  </option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+          <div class="acciones-barra top-space">
+            <button type="submit">Ver reservas</button>
+          </div>
+        </form>
+
+        {% if day_view %}
+          <div class="break-chip-list top-space">
+            <article class="break-chip">
+              <strong>Turno visible</strong>
+              <span>{{ day_view.shift.label }}</span>
+              <span class="small">Clave interna: {{ day_view.shift.shift_key }}</span>
+            </article>
+            <article class="break-chip">
+              <strong>Fecha visible</strong>
+              <span>{{ fecha_seleccionada }}</span>
+              <span class="small">Base de la administracion diaria</span>
+            </article>
+          </div>
+        {% endif %}
+      </article>
+
+      <article class="break-summary-panel">
+        {% if day_view %}
+          {% set resumen = namespace(llenos=0, disponibles=0, inactivos=0) %}
+          {% for fila in day_view.rows %}
+            {% if fila.is_full %}
+              {% set resumen.llenos = resumen.llenos + 1 %}
+            {% else %}
+              {% set resumen.disponibles = resumen.disponibles + 1 %}
+            {% endif %}
+            {% if not fila.slot.is_active %}
+              {% set resumen.inactivos = resumen.inactivos + 1 %}
+            {% endif %}
+          {% endfor %}
+
+          <h3>Resumen operativo</h3>
+          <p class="small break-section-note">Lectura rapida del turno seleccionado para saber si hay saturacion, espacio disponible o configuraciones inactivas.</p>
+
+          <div class="break-stat-grid top-space">
+            <article class="break-stat-card">
+              <strong>Horarios</strong>
+              <div class="break-stat-value">{{ day_view.rows|length }}</div>
+            </article>
+            <article class="break-stat-card">
+              <strong>Reservas</strong>
+              <div class="break-stat-value">{{ day_view.reservations|length }}</div>
+            </article>
+            <article class="break-stat-card">
+              <strong>Llenos</strong>
+              <div class="break-stat-value">{{ resumen.llenos }}</div>
+            </article>
+            <article class="break-stat-card">
+              <strong>Con cupos</strong>
+              <div class="break-stat-value">{{ resumen.disponibles }}</div>
+            </article>
+          </div>
+
+          <div class="acciones-barra top-space">
+            <span class="break-capacity-pill {% if resumen.llenos %}is-full{% endif %}">{{ resumen.llenos }} horarios llenos</span>
+            <span class="break-capacity-pill {% if resumen.disponibles %}is-available{% endif %}">{{ resumen.disponibles }} con disponibilidad</span>
+            {% if resumen.inactivos %}
+              <span class="break-state-tag is-inactive">{{ resumen.inactivos }} inactivos</span>
+            {% endif %}
+          </div>
+        {% else %}
+          <h3>Resumen operativo</h3>
+          <p class="small">Selecciona fecha y turno para ver de inmediato cuantos horarios hay, cuantos estan llenos y donde quedan cupos disponibles.</p>
+        {% endif %}
+      </article>
+    </div>
+
+    {% if day_view %}
+      <div class="table-wrap top-space">
+        <table class="break-table">
+          <thead>
+            <tr>
+              <th>Horario</th>
+              <th>Agentes asignados</th>
+              <th>Cupos</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for fila in day_view.rows %}
+              <tr>
+                <td>
+                  <div class="break-slot-meta">
+                    <div class="break-slot-name">{{ fila.slot.time_slot }}</div>
+                    <div class="acciones-barra">
+                      <span class="break-slot-state {% if not fila.slot.is_active %}is-inactive{% endif %}">
+                        {% if fila.slot.is_active %}Activo{% else %}Inactivo{% endif %}
+                      </span>
+                      <span class="break-capacity-pill {% if fila.is_full %}is-full{% else %}is-available{% endif %}">
+                        {% if fila.is_full %}Lleno{% else %}Disponible{% endif %}
+                      </span>
+                    </div>
+                    <span class="small">Orden visual {{ fila.slot.display_order }} · Cupo maximo {{ fila.slot.max_agents }}</span>
+                  </div>
+                </td>
+                <td>
+                  {% if fila.reservations %}
+                    <div class="break-reservation-list">
+                      {% for reservation in fila.reservations %}
+                        <article class="break-reservation-item {% if not fila.slot.is_active %}inactive-slot{% endif %}">
+                          <div class="break-reservation-head">
+                            <div>
+                              <div class="break-reservation-name">{{ reservation.agent_name }}</div>
+                              <span class="small">Creada: {{ reservation.created_at[:16] if reservation.created_at else "sin fecha" }}</span>
+                            </div>
+                            <span class="break-capacity-pill">Reserva activa</span>
+                          </div>
+
+                          <div class="break-reservation-meta">
+                            <form method="post" action="{{ url_for('break_admin.move_reservation', reservation_id=reservation.id) }}" class="break-move-form">
+                              <input type="hidden" name="return_date" value="{{ fecha_seleccionada }}">
+                              <input type="hidden" name="return_shift_id" value="{{ selected_shift_id }}">
+                              <select name="new_slot_id" aria-label="Mover reserva de {{ reservation.agent_name }}">
+                                <option value="">Mover a otro horario...</option>
+                                {% for slot in slots_for_selected_shift %}
+                                  <option value="{{ slot.id }}" {% if slot.id == reservation.slot_id %}selected{% endif %}>
+                                    {{ slot.time_slot }}{% if not slot.is_active %} (inactivo){% endif %}
+                                  </option>
+                                {% endfor %}
+                              </select>
+                              <button type="submit" class="btn secondary btn-mini">Mover</button>
+                            </form>
+
+                            <form method="post" action="{{ url_for('break_admin.delete_reservation', reservation_id=reservation.id) }}" class="break-delete-form">
+                              <input type="hidden" name="return_date" value="{{ fecha_seleccionada }}">
+                              <input type="hidden" name="return_shift_id" value="{{ selected_shift_id }}">
+                              <button type="submit" class="btn danger btn-mini">Eliminar reserva</button>
+                            </form>
+                          </div>
+                        </article>
+                      {% endfor %}
+                    </div>
+                  {% else %}
+                    <div class="break-reservation-empty">
+                      Sin reservas en este horario.
+                    </div>
+                  {% endif %}
+                </td>
+                <td>
+                  <div class="break-capacity-stack">
+                    <div class="break-capacity-value">{{ fila.taken }} / {{ fila.slot.max_agents }}</div>
+                    <span class="break-capacity-pill {% if fila.is_full %}is-full{% else %}is-available{% endif %}">
+                      {% if fila.is_full %}
+                        Horario lleno
+                      {% else %}
+                        {{ fila.remaining }} cupos disponibles
+                      {% endif %}
+                    </span>
+                    <span class="small">
+                      {% if not fila.slot.is_active %}
+                        El horario esta inactivo, pero sigue visible para administracion.
+                      {% elif fila.taken == 0 %}
+                        Sin agentes asignados todavia.
+                      {% else %}
+                        {{ fila.reservations|length }} reserva{% if fila.reservations|length != 1 %}s{% endif %} cargada{% if fila.reservations|length != 1 %}s{% endif %}.
+                      {% endif %}
+                    </span>
+                  </div>
+                </td>
+                <td>
+                  <div class="break-action-stack">
+                    <form method="post" action="{{ url_for('break_admin.toggle_slot', slot_id=fila.slot.id) }}" class="break-slot-toggle-form">
+                      <input type="hidden" name="return_date" value="{{ fecha_seleccionada }}">
+                      <input type="hidden" name="return_shift_id" value="{{ selected_shift_id }}">
+                      <input type="hidden" name="activate" value="{{ 0 if fila.slot.is_active else 1 }}">
+                      <button type="submit" class="btn secondary btn-mini">
+                        {% if fila.slot.is_active %}Desactivar horario{% else %}Activar horario{% endif %}
+                      </button>
+                    </form>
+                    <span class="small">Usa esta accion para sacar el horario de circulacion sin eliminar su configuracion.</span>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% elif not config_error %}
+      <div class="contextual-note top-space">
+        <p>Primero selecciona un turno para ver la tabla principal de reservas y administrar el break del dia con contexto operativo.</p>
+      </div>
+    {% endif %}
+  </section>
+
+  <details class="card seccion-desplegable" open>
+    <summary class="titulo-desplegable">
+      <span>Gestion de turnos</span>
+      <span class="small">{{ shifts|length }} registrados</span>
+    </summary>
+
+    <div class="shift-forms-grid top-space">
+      <article class="break-form-card break-form-card--muted">
+        <h3>Crear turno</h3>
+        <p class="small break-section-note">Define la clave interna, el nombre visible, el orden y si el turno nace activo.</p>
+        <form method="post" action="{{ url_for('break_admin.create_shift') }}">
+          <input type="hidden" name="return_date" value="{{ fecha_seleccionada }}">
+          <input type="hidden" name="return_shift_id" value="{{ selected_shift_id }}">
+          <label class="small" for="shift_key">Clave interna</label>
+          <input type="text" id="shift_key" name="shift_key" placeholder="morning">
+          <label class="small top-space" for="label">Nombre visible</label>
+          <input type="text" id="label" name="label" placeholder="Turno manana">
+          <div class="row-2 top-space">
+            <div>
+              <label class="small" for="display_order">Orden</label>
+              <input type="text" id="display_order" name="display_order" value="0">
+            </div>
+            <div>
+              <label class="small" for="is_active">Estado inicial</label>
+              <select id="is_active" name="is_active">
+                <option value="1">Activo</option>
+                <option value="0">Inactivo</option>
+              </select>
+            </div>
+          </div>
+          <div class="acciones-barra top-space">
+            <button type="submit">Crear turno</button>
+          </div>
+        </form>
+      </article>
+
+      {% for shift in shifts %}
+        <article class="break-form-card">
+          <div class="break-slot-editor-header">
+            <div>
+              <h3>{{ shift.label }}</h3>
+              <p class="small">Clave: {{ shift.shift_key }}{% if not shift.is_active %} · Inactivo{% endif %}</p>
+            </div>
+            <span class="break-state-tag {% if not shift.is_active %}is-inactive{% endif %}">
+              {% if shift.is_active %}Visible{% else %}Inactivo{% endif %}
+            </span>
+          </div>
+
+          <form method="post" action="{{ url_for('break_admin.update_shift', shift_id=shift.id) }}">
+            <input type="hidden" name="return_date" value="{{ fecha_seleccionada }}">
+            <input type="hidden" name="return_shift_id" value="{{ shift.id }}">
+            <label class="small" for="label-{{ shift.id }}">Nombre visible</label>
+            <input type="text" id="label-{{ shift.id }}" name="label" value="{{ shift.label }}">
+            <label class="small top-space" for="display-order-{{ shift.id }}">Orden</label>
+            <input type="text" id="display-order-{{ shift.id }}" name="display_order" value="{{ shift.display_order }}">
+            <div class="acciones-barra top-space">
+              <button type="submit">Guardar cambios</button>
+            </div>
+          </form>
+
+          <form method="post" action="{{ url_for('break_admin.toggle_shift', shift_id=shift.id) }}" class="top-space">
+            <input type="hidden" name="return_date" value="{{ fecha_seleccionada }}">
+            <input type="hidden" name="return_shift_id" value="{{ shift.id }}">
+            <input type="hidden" name="activate" value="{{ 0 if shift.is_active else 1 }}">
+            <button type="submit" class="btn secondary">
+              {% if shift.is_active %}Desactivar turno{% else %}Activar turno{% endif %}
+            </button>
+          </form>
+        </article>
+      {% endfor %}
+    </div>
+  </details>
+
+  <details class="card seccion-desplegable" open>
+    <summary class="titulo-desplegable">
+      <span>Gestion de horarios</span>
+      <span class="small">
+        {% if day_view %}{{ day_view.shift.label }}{% else %}Selecciona un turno{% endif %}
+      </span>
+    </summary>
+
+    {% if selected_shift_id %}
+      <div class="slot-forms-grid top-space">
+        <article class="break-form-card break-form-card--muted">
+          <h3>Crear horario</h3>
+          <p class="small break-section-note">Agrega un horario al turno visible y define cupo, orden y estado inicial.</p>
+          <form method="post" action="{{ url_for('break_admin.create_slot') }}">
+            <input type="hidden" name="return_date" value="{{ fecha_seleccionada }}">
+            <input type="hidden" name="return_shift_id" value="{{ selected_shift_id }}">
+            <input type="hidden" name="shift_id" value="{{ selected_shift_id }}">
+            <label class="small" for="time_slot">Horario</label>
+            <input type="text" id="time_slot" name="time_slot" placeholder="10:30 AM">
+            <div class="row-2 top-space">
+              <div>
+                <label class="small" for="max_agents">Cupo maximo</label>
+                <input type="text" id="max_agents" name="max_agents" value="2">
+              </div>
+              <div>
+                <label class="small" for="slot_order">Orden</label>
+                <input type="text" id="slot_order" name="display_order" value="0">
+              </div>
+            </div>
+            <label class="small top-space" for="slot_active">Estado inicial</label>
+            <select id="slot_active" name="is_active">
+              <option value="1">Activo</option>
+              <option value="0">Inactivo</option>
+            </select>
+            <div class="acciones-barra top-space">
+              <button type="submit">Crear horario</button>
+            </div>
+          </form>
+        </article>
+
+        {% for slot in slots_for_selected_shift %}
+          <article class="break-slot-editor">
+            <div class="break-slot-editor-header">
+              <div>
+                <h3>{{ slot.time_slot }}</h3>
+                <p class="small">Edita rapidamente nombre, cupo y orden del horario.</p>
+              </div>
+              <div class="break-slot-editor-status">
+                <span class="break-slot-state {% if not slot.is_active %}is-inactive{% endif %}">
+                  {% if slot.is_active %}Activo{% else %}Inactivo{% endif %}
+                </span>
+                <span class="break-capacity-pill">Cupo {{ slot.max_agents }}</span>
+              </div>
+            </div>
+
+            <form method="post" action="{{ url_for('break_admin.update_slot', slot_id=slot.id) }}">
+              <input type="hidden" name="return_date" value="{{ fecha_seleccionada }}">
+              <input type="hidden" name="return_shift_id" value="{{ selected_shift_id }}">
+              <div class="break-slot-config-grid">
+                <div>
+                  <label class="small" for="slot-time-{{ slot.id }}">Horario</label>
+                  <input type="text" id="slot-time-{{ slot.id }}" name="time_slot" value="{{ slot.time_slot }}">
+                </div>
+                <div>
+                  <label class="small" for="slot-max-{{ slot.id }}">Cupo maximo</label>
+                  <input type="text" id="slot-max-{{ slot.id }}" name="max_agents" value="{{ slot.max_agents }}">
+                </div>
+                <div>
+                  <label class="small" for="slot-order-{{ slot.id }}">Orden</label>
+                  <input type="text" id="slot-order-{{ slot.id }}" name="display_order" value="{{ slot.display_order }}">
+                </div>
+              </div>
+              <div class="acciones-barra top-space">
+                <button type="submit">Guardar cambios</button>
+              </div>
+            </form>
+
+            <form method="post" action="{{ url_for('break_admin.toggle_slot', slot_id=slot.id) }}">
+              <input type="hidden" name="return_date" value="{{ fecha_seleccionada }}">
+              <input type="hidden" name="return_shift_id" value="{{ selected_shift_id }}">
+              <input type="hidden" name="activate" value="{{ 0 if slot.is_active else 1 }}">
+              <button type="submit" class="btn secondary">
+                {% if slot.is_active %}Desactivar horario{% else %}Activar horario{% endif %}
+              </button>
+            </form>
+          </article>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="contextual-note top-space">
+        <p>Selecciona un turno en la parte superior para gestionar sus horarios.</p>
+      </div>
+    {% endif %}
+  </details>
+</div>
+{% endblock %}

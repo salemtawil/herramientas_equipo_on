@@ -46,6 +46,8 @@ Opcionales segun funcionalidad:
 - `AWS_SECRET_ACCESS_KEY`
 - `AWS_DEFAULT_REGION`
 - `LOG_LEVEL`
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
 
 ## Deploy en Vercel
 
@@ -60,7 +62,10 @@ Antes de desplegar:
 1. Configura `FLASK_SECRET_KEY` en Vercel.
 2. Si usaras `usuarios_a_sheets`, configura `APPS_SCRIPT_WEBHOOK_URL` y, si aplica, `APPS_SCRIPT_WEBHOOK_TOKEN`.
 3. Si usaras `usuarios_activos`, configura los tokens de Compinche y Paripe.
-4. Si esperas refresco automatico de tokens via Cognito, configura tambien:
+4. Si usaras el modulo `break_admin`, configura:
+   - `SUPABASE_URL`
+   - `SUPABASE_SERVICE_ROLE_KEY`
+5. Si esperas refresco automatico de tokens via Cognito, configura tambien:
    - `AWS_ACCESS_KEY_ID`
    - `AWS_SECRET_ACCESS_KEY`
    - `AWS_DEFAULT_REGION=us-east-1`
