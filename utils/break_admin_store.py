@@ -72,13 +72,13 @@ class BreakAdminStore:
         return " ".join(str(valor or "").strip().lower().split())
 
     def list_shifts(self, include_inactive=True):
-        query = self.client.table("break_shifts").select("*").order("display_order").order("label")
+        query = self.client.table("agent_break_shifts").select("*").order("display_order").order("label")
         if not include_inactive:
             query = query.eq("is_active", True)
         return self._obtener_data(self._execute(query))
 
     def get_shift(self, shift_id):
-        query = self.client.table("break_shifts").select("*").eq("id", shift_id).limit(1)
+        query = self.client.table("agent_break_shifts").select("*").eq("id", shift_id).limit(1)
         return self._primer_registro(self._execute(query))
 
     def create_shift(self, shift_key, label, display_order, is_active=True):
@@ -88,14 +88,14 @@ class BreakAdminStore:
             "display_order": display_order,
             "is_active": is_active,
         }
-        self._execute(self.client.table("break_shifts").insert(payload))
+        self._execute(self.client.table("agent_break_shifts").insert(payload))
 
     def update_shift(self, shift_id, label, display_order):
         if not self.get_shift(shift_id):
             raise BreakAdminValidationError("El turno indicado no existe.")
 
         query = (
-            self.client.table("break_shifts")
+            self.client.table("agent_break_shifts")
             .update({"label": label, "display_order": display_order})
             .eq("id", shift_id)
         )
@@ -106,14 +106,14 @@ class BreakAdminStore:
             raise BreakAdminValidationError("El turno indicado no existe.")
 
         query = (
-            self.client.table("break_shifts")
+            self.client.table("agent_break_shifts")
             .update({"is_active": is_active})
             .eq("id", shift_id)
         )
         self._execute(query)
 
     def list_slots(self, shift_id=None, include_inactive=True):
-        query = self.client.table("break_slots").select("*").order("display_order").order("time_slot")
+        query = self.client.table("agent_break_slots").select("*").order("display_order").order("time_slot")
         if shift_id:
             query = query.eq("shift_id", shift_id)
         if not include_inactive:
@@ -121,7 +121,7 @@ class BreakAdminStore:
         return self._obtener_data(self._execute(query))
 
     def get_slot(self, slot_id):
-        query = self.client.table("break_slots").select("*").eq("id", slot_id).limit(1)
+        query = self.client.table("agent_break_slots").select("*").eq("id", slot_id).limit(1)
         return self._primer_registro(self._execute(query))
 
     def create_slot(self, shift_id, time_slot, max_agents, display_order, is_active=True):
@@ -133,7 +133,7 @@ class BreakAdminStore:
             "is_active": is_active,
         }
         try:
-            self._execute(self.client.table("break_slots").insert(payload))
+            self._execute(self.client.table("agent_break_slots").insert(payload))
         except BreakAdminValidationError as exc:
             raise BreakAdminValidationError(
                 "Ya existe un horario con ese nombre dentro del turno."
@@ -144,7 +144,7 @@ class BreakAdminStore:
             raise BreakAdminValidationError("El horario indicado no existe.")
 
         query = (
-            self.client.table("break_slots")
+            self.client.table("agent_break_slots")
             .update(
                 {
                     "time_slot": time_slot,
@@ -166,7 +166,7 @@ class BreakAdminStore:
             raise BreakAdminValidationError("El horario indicado no existe.")
 
         query = (
-            self.client.table("break_slots")
+            self.client.table("agent_break_slots")
             .update({"is_active": is_active})
             .eq("id", slot_id)
         )
@@ -174,7 +174,7 @@ class BreakAdminStore:
 
     def list_reservations(self, reservation_date, shift_id):
         query = (
-            self.client.table("break_reservations")
+            self.client.table("agent_break_reservations")
             .select("*")
             .eq("reservation_date", reservation_date)
             .eq("shift_id", shift_id)
@@ -183,13 +183,13 @@ class BreakAdminStore:
         return self._obtener_data(self._execute(query))
 
     def get_reservation(self, reservation_id):
-        query = self.client.table("break_reservations").select("*").eq("id", reservation_id).limit(1)
+        query = self.client.table("agent_break_reservations").select("*").eq("id", reservation_id).limit(1)
         return self._primer_registro(self._execute(query))
 
     def delete_reservation(self, reservation_id):
         if not self.get_reservation(reservation_id):
             raise BreakAdminValidationError("La reserva indicada no existe.")
-        query = self.client.table("break_reservations").delete().eq("id", reservation_id)
+        query = self.client.table("agent_break_reservations").delete().eq("id", reservation_id)
         self._execute(query)
 
     def move_reservation(self, reservation_id, new_slot_id):
@@ -229,7 +229,7 @@ class BreakAdminStore:
             )
 
         query = (
-            self.client.table("break_reservations")
+            self.client.table("agent_break_reservations")
             .update({"slot_id": new_slot_id})
             .eq("id", reservation_id)
         )
