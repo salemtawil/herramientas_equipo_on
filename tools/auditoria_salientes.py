@@ -215,10 +215,14 @@ def parsear_duracion_segundos(valor):
 
         if len(partes_numericas) == 3:
             horas, minutos, segundos = partes_numericas
+            if any(pd.isna(parte) for parte in partes_numericas):
+                return None
             return int((horas * 3600) + (minutos * 60) + segundos)
 
         if len(partes_numericas) == 2:
             minutos, segundos = partes_numericas
+            if any(pd.isna(parte) for parte in partes_numericas):
+                return None
             return int((minutos * 60) + segundos)
 
         return None
@@ -246,6 +250,9 @@ def parsear_duracion_segundos(valor):
         if match_solo_min:
             return int(match_solo_min.group(1)) * 60
 
+        return None
+
+    if pd.isna(numero):
         return None
 
     return int(float(numero))
@@ -297,9 +304,12 @@ def preparar_dataframe_historial(df):
 
 
 def formatear_duracion(valor):
-    if valor is None:
+    if valor is None or pd.isna(valor):
         return "sin dato"
-    return f"{int(valor)} s"
+    try:
+        return f"{int(float(valor))} s"
+    except (TypeError, ValueError, OverflowError):
+        return "sin dato"
 
 
 def formatear_fecha(valor, fallback=""):
@@ -375,7 +385,7 @@ def analizar_casos(df_preparado):
             not fila["Agente"]
             or not fila["Numero normalizado"]
             or pd.isna(fila["Fecha llamada"])
-            or fila["Duracion segundos"] is None
+            or pd.isna(fila["Duracion segundos"])
         )
 
         if faltan_datos:
@@ -391,7 +401,7 @@ def analizar_casos(df_preparado):
                 "fecha_original": fila["Fecha original"],
                 "duracion_segundos": fila["Duracion segundos"],
                 "ticket_id": fila["TicketId"],
-                "fue_contestada": fila["Duracion segundos"] is not None and fila["Duracion segundos"] > 75,
+                "fue_contestada": pd.notna(fila["Duracion segundos"]) and fila["Duracion segundos"] > 75,
             }
         )
 

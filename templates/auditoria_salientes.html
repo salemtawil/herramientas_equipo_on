@@ -447,7 +447,7 @@
           normalizarBusqueda(cells[indice] ? cells[indice].textContent : "").includes(termino)
         );
         const turnoFila = normalizarBusqueda(row.dataset.turno || "");
-        const matchTurno = !turnoFila || turnosSeleccionados.includes(turnoFila);
+        const matchTurno = Boolean(turnoFila) && turnosSeleccionados.includes(turnoFila);
 
         row.style.display = matchBusqueda && matchTurno ? "" : "none";
       });
