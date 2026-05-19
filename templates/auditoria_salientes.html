@@ -354,6 +354,7 @@
       if (!table) return;
 
       const tableId = table.dataset.filterTable;
+      const usaFiltroTurno = table.dataset.turnoTable === "true";
       const input = document.querySelector(`input[data-table-filter="${tableId}"]`);
       const termino = normalizarBusqueda(input ? input.value : "");
       const headers = Array.from(table.querySelectorAll("thead th")).map((th) =>
@@ -375,7 +376,7 @@
           normalizarBusqueda(cells[indice] ? cells[indice].textContent : "").includes(termino)
         );
         const turnoFila = normalizarBusqueda(row.dataset.turno || "");
-        const matchTurno = Boolean(turnoFila) && turnosSeleccionados.includes(turnoFila);
+        const matchTurno = !usaFiltroTurno || (Boolean(turnoFila) && turnosSeleccionados.includes(turnoFila));
 
         row.style.display = matchBusqueda && matchTurno ? "" : "none";
       });

@@ -26,17 +26,12 @@
           </div>
           <div>
             <h3 class="system-card__title">Compinche</h3>
-            <p class="system-card__meta">Vista de actividad principal</p>
           </div>
         </div>
       </div>
       <div class="stat-list">
         <div class="stat-line"><span>Usuarios activos</span><strong id="compinche-active">-</strong></div>
         <div class="stat-line"><span>Running users</span><strong id="compinche-running">-</strong></div>
-      </div>
-      <div class="system-card__footer">
-        <span class="system-card__status" id="compinche-status">Pendiente</span>
-        <span class="system-card__updated" id="compinche-updated">Sin actualizacion</span>
       </div>
       <div class="error" id="compinche-error"></div>
     </article>
@@ -50,17 +45,12 @@
           </div>
           <div>
             <h3 class="system-card__title">Paripe</h3>
-            <p class="system-card__meta">Monitoreo comercial y fotos</p>
           </div>
         </div>
       </div>
       <div class="stat-list">
         <div class="stat-line"><span>Usuarios activos</span><strong id="paripe-good-standing">-</strong></div>
         <div class="stat-line"><span>Pool de fotos</span><strong id="paripe-photo-pool">-</strong></div>
-      </div>
-      <div class="system-card__footer">
-        <span class="system-card__status" id="paripe-status">Pendiente</span>
-        <span class="system-card__updated" id="paripe-updated">Sin actualizacion</span>
       </div>
       <div class="error" id="paripe-error"></div>
     </article>
@@ -74,17 +64,12 @@
           </div>
           <div>
             <h3 class="system-card__title">Camarada</h3>
-            <p class="system-card__meta">Seguimiento multiadmin</p>
           </div>
         </div>
       </div>
       <div class="stat-list">
         <div class="stat-line"><span>Usuarios activos</span><strong id="camarada-active">-</strong></div>
         <div class="stat-line"><span>Running users</span><strong id="camarada-running">-</strong></div>
-      </div>
-      <div class="system-card__footer">
-        <span class="system-card__status" id="camarada-status">Pendiente</span>
-        <span class="system-card__updated" id="camarada-updated">Sin actualizacion</span>
       </div>
       <div class="error" id="camarada-error"></div>
     </article>
@@ -98,17 +83,12 @@
           </div>
           <div>
             <h3 class="system-card__title">Complice</h3>
-            <p class="system-card__meta">Seguimiento multiadmin</p>
           </div>
         </div>
       </div>
       <div class="stat-list">
         <div class="stat-line"><span>Usuarios activos</span><strong id="complice-active">-</strong></div>
         <div class="stat-line"><span>Running users</span><strong id="complice-running">-</strong></div>
-      </div>
-      <div class="system-card__footer">
-        <span class="system-card__status" id="complice-status">Pendiente</span>
-        <span class="system-card__updated" id="complice-updated">Sin actualizacion</span>
       </div>
       <div class="error" id="complice-error"></div>
     </article>
@@ -121,17 +101,12 @@
           </div>
           <div>
             <h3 class="system-card__title">Secuaz</h3>
-            <p class="system-card__meta">Seguimiento multiadmin</p>
           </div>
         </div>
       </div>
       <div class="stat-list">
         <div class="stat-line"><span>Usuarios activos</span><strong id="secuaz-active">-</strong></div>
         <div class="stat-line"><span>Running users</span><strong id="secuaz-running">-</strong></div>
-      </div>
-      <div class="system-card__footer">
-        <span class="system-card__status" id="secuaz-status">Pendiente</span>
-        <span class="system-card__updated" id="secuaz-updated">Sin actualizacion</span>
       </div>
       <div class="error" id="secuaz-error"></div>
     </article>
@@ -145,17 +120,12 @@
           </div>
           <div>
             <h3 class="system-card__title">Ready4Drive</h3>
-            <p class="system-card__meta">Seguimiento multiadmin</p>
           </div>
         </div>
       </div>
       <div class="stat-list">
         <div class="stat-line"><span>Usuarios activos</span><strong id="ready4drive-active">-</strong></div>
         <div class="stat-line"><span>Running users</span><strong id="ready4drive-running">-</strong></div>
-      </div>
-      <div class="system-card__footer">
-        <span class="system-card__status" id="ready4drive-status">Pendiente</span>
-        <span class="system-card__updated" id="ready4drive-updated">Sin actualizacion</span>
       </div>
       <div class="error" id="ready4drive-error"></div>
     </article>
@@ -180,21 +150,9 @@ function formatUpdatedAt(value) {
 }
 
 function renderSystemState(prefix, item) {
-  const status = document.getElementById(`${prefix}-status`);
-  const updated = document.getElementById(`${prefix}-updated`);
   const error = document.getElementById(`${prefix}-error`);
   const card = document.getElementById(`card-${prefix}`);
   const hasError = Boolean(item?.error);
-
-  if (status) {
-    status.textContent = hasError ? "Con error" : "Actualizado";
-  }
-
-  if (updated) {
-    updated.textContent = item?.updated_at && item.updated_at !== "-"
-      ? formatUpdatedAt(item.updated_at)
-      : "Sin actualizacion";
-  }
 
   if (error) {
     error.textContent = hasError ? "Error: " + item.error : "";
@@ -270,11 +228,9 @@ async function actualizarDatos() {
   const button = document.getElementById("actualizar-btn");
 
   sistemas.forEach(nombre => {
-    const status = document.getElementById(`${nombre}-status`);
     const error = document.getElementById(`${nombre}-error`);
     const card = document.getElementById(`card-${nombre}`);
 
-    if (status) status.textContent = "Actualizando";
     if (error) error.textContent = "";
     if (card) card.classList.remove("system-card--error");
   });
