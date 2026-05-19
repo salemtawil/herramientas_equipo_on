@@ -651,11 +651,13 @@ input::file-selector-button {
 }
 
 .table-wrap {
-  overflow: auto;
+  overflow-x: auto;
+  overflow-y: auto;
   max-height: 560px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--surface-strong);
+  display: block;
   width: 100%;
   max-width: 100%;
   overscroll-behavior-x: contain;
@@ -668,10 +670,11 @@ html[data-theme="dark"] .table-wrap {
 }
 
 table {
-  width: max-content;
-  min-width: 100%;
+  width: 100%;
+  min-width: max-content;
   border-collapse: collapse;
   font-size: 13px;
+  margin: 0;
 }
 
 th,

@@ -1,7 +1,9 @@
-from datetime import datetime
-
 from flask import Blueprint, render_template, jsonify
-from tools.servicios_usuarios_activos import iniciar_actualizacion, obtener_estado_actual
+from tools.servicios_usuarios_activos import (
+    iniciar_actualizacion,
+    obtener_estado_actual,
+    obtener_timestamp_eastern,
+)
 
 usuarios_activos_bp = Blueprint(
     "usuarios_activos",
@@ -19,7 +21,7 @@ def api():
     return jsonify({
         "success": True,
         "data": data,
-        "updated_at": datetime.now().strftime("%H:%M"),
+        "updated_at": obtener_timestamp_eastern("%H:%M"),
     })
 
 @usuarios_activos_bp.route("/actualizar", methods=["POST"])
@@ -28,5 +30,5 @@ def actualizar():
     return jsonify({
         "success": True,
         "data": data,
-        "updated_at": datetime.now().strftime("%H:%M"),
+        "updated_at": obtener_timestamp_eastern("%H:%M"),
     })

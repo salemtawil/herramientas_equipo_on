@@ -1,7 +1,14 @@
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from tools.api_compinche import obtener_metricas_compinche_api
 from tools.api_multiadmin import obtener_metricas_multiadmin
+
+EASTERN_TIMEZONE = ZoneInfo("America/New_York")
+
+
+def obtener_timestamp_eastern(formato="%Y-%m-%d %H:%M:%S"):
+    return datetime.now(EASTERN_TIMEZONE).strftime(formato)
 
 
 def _estado_base():
@@ -62,7 +69,7 @@ def _actualizar_estado(estado, system, **kwargs):
 
 
 def _proceso_actualizacion_unica(estado):
-    ahora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    ahora = obtener_timestamp_eastern()
 
     try:
         metricas_compinche = obtener_metricas_compinche_api()

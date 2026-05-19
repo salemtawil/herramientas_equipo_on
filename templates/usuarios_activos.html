@@ -10,7 +10,7 @@
       <div>
         <h1>Usuarios activos</h1>
         <p>Consulta el estado consolidado de cada sistema y actualiza los datos sin salir de la vista.</p>
-        <p id="general-updated">Ultima actualizacion general: -</p>
+        <p id="general-updated">Ultima actualizacion general (ET): -</p>
       </div>
       <button type="button" id="actualizar-btn" onclick="actualizarDatos()">Actualizar</button>
     </div>
@@ -171,7 +171,7 @@ function renderData(items, updatedAt) {
   const secuaz = items.find(item => item.system === "secuaz");
   const ready4drive = items.find(item => item.system === "ready4drive");
 
-  document.getElementById("general-updated").textContent = `Ultima actualizacion general: ${formatUpdatedAt(updatedAt)}`;
+  document.getElementById("general-updated").textContent = `Ultima actualizacion general (ET): ${formatUpdatedAt(updatedAt)}`;
 
   if (compinche) {
     document.getElementById("compinche-active").textContent = compinche.active_users ?? "-";
