@@ -1,6 +1,7 @@
 import logging
 import os
 from flask import Flask, render_template
+from tools.auditoria_csat import auditoria_csat_bp
 from tools.auditoria_salientes import auditoria_salientes_bp
 from tools.break_admin import break_admin_bp
 from tools.reporte_agentes import reporte_agentes_bp
@@ -29,6 +30,7 @@ app.register_blueprint(reporte_agentes_bp)
 app.register_blueprint(usuarios_activos_bp)
 app.register_blueprint(comparar_csv_bp)
 app.register_blueprint(usuarios_a_sheets_bp)
+app.register_blueprint(auditoria_csat_bp)
 app.register_blueprint(auditoria_salientes_bp)
 app.register_blueprint(break_admin_bp)
 

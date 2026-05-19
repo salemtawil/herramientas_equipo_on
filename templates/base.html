@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Herramientas{% endblock %}</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v='14') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v='15') }}">
   <script src="{{ url_for('static', filename='app.js', v='1') }}" defer></script>
   {% block head_extra %}{% endblock %}
 </head>
@@ -33,6 +33,10 @@
         <a class="sidebar-link {% if endpoint == 'comparar_csv.comparar_csv' %}is-active{% endif %}" href="{{ url_for('comparar_csv.comparar_csv') }}">
           <span class="sidebar-link__eyebrow">Analisis</span>
           <strong>Comparar CSV</strong>
+        </a>
+        <a class="sidebar-link {% if endpoint == 'auditoria_csat.auditoria_csat' %}is-active{% endif %}" href="{{ url_for('auditoria_csat.auditoria_csat') }}">
+          <span class="sidebar-link__eyebrow">Calidad</span>
+          <strong>Auditoria CSAT</strong>
         </a>
         <a class="sidebar-link {% if endpoint == 'auditoria_salientes.auditoria_salientes' %}is-active{% endif %}" href="{{ url_for('auditoria_salientes.auditoria_salientes') }}">
           <span class="sidebar-link__eyebrow">Cumplimiento</span>

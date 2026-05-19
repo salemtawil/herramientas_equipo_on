@@ -1,0 +1,490 @@
+{% extends "base.html" %}
+
+{% block title %}Auditoría CSAT{% endblock %}
+{% block page_name %}Auditoría CSAT{% endblock %}
+
+{% block content %}
+<div class="page-stack auditoria-csat-page">
+  <section class="card page-hero">
+    <div class="page-section-title">
+      <div>
+        <h1>Auditoría CSAT de conversaciones</h1>
+        <p>Replica el flujo manual actual: carga CSV del período, audita negativas o cualquier rating, recalcula CSAT y exporta tanto el archivo auditado como un reporte listo para IA.</p>
+      </div>
+      <span class="hero-badge">V1 operativa</span>
+    </div>
+
+    <div class="dashboard-highlight-grid top-space">
+      <article class="dashboard-highlight-card dashboard-highlight-card--primary">
+        <span class="dashboard-highlight-card__eyebrow">Auditoría</span>
+        <strong>Calificación, justificación y motivo</strong>
+        <p>Cada fila permite marcar NO, TAL VEZ o SÍ justificable, con comentario del auditor y motivo de inconformidad.</p>
+      </article>
+      <article class="dashboard-highlight-card">
+        <span class="dashboard-highlight-card__eyebrow">Salida</span>
+        <strong>CSV auditado y reporte para IA</strong>
+        <p>El resultado queda exportable sin introducir otra API ni un frontend separado.</p>
+      </article>
+    </div>
+
+    {% if mensaje %}
+      <div class="success top-space">{{ mensaje }}</div>
+    {% endif %}
+    {% if advertencia %}
+      <div class="warning top-space">{{ advertencia }}</div>
+    {% endif %}
+    {% if contexto and contexto.warnings %}
+      {% for warning in contexto.warnings %}
+        <div class="warning top-space">{{ warning }}</div>
+      {% endfor %}
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <div class="page-section-title">
+      <div>
+        <h2>Cargar CSV del período</h2>
+        <p class="small">La herramienta espera la estructura operativa actual y completa vacíos si faltan columnas. No agrega persistencia compleja entre sesiones.</p>
+      </div>
+      <span class="hero-badge hero-badge-soft">1 archivo</span>
+    </div>
+
+    <form method="post" enctype="multipart/form-data" data-processing-message="Leyendo CSV y armando la auditoría CSAT...">
+      <input type="hidden" name="accion" value="analizar_csv">
+      <div class="row">
+        <div>
+          <label class="small" for="archivo">Archivo CSV</label>
+          <input id="archivo" type="file" name="archivo" accept=".csv">
+        </div>
+        <div>
+          <button type="submit">Analizar CSV</button>
+        </div>
+      </div>
+    </form>
+  </section>
+
+  {% if contexto %}
+    {% set metricas = contexto.metricas %}
+    <section class="card">
+      <div class="page-section-title">
+        <div>
+          <h2>Resumen inicial automático</h2>
+          <p class="small">Periodo, distribución del rating y CSAT base antes de aplicar decisiones del auditor.</p>
+        </div>
+        <span class="hero-badge hero-badge-soft">{{ metricas.periodo }}</span>
+      </div>
+
+      <div class="csat-summary-grid">
+        <div class="metric"><div class="label">Total de respuestas</div><div class="value">{{ metricas.total_respuestas }}</div></div>
+        <div class="metric"><div class="label">CSAT original</div><div class="value">{{ metricas.csat_original }}%</div></div>
+        <div class="metric"><div class="label">Negativos</div><div class="value">{{ metricas.negativos }}</div></div>
+        <div class="metric"><div class="label">Neutrales</div><div class="value">{{ metricas.neutrales }}</div></div>
+        <div class="metric"><div class="label">Positivos</div><div class="value">{{ metricas.positivos }}</div></div>
+        <div class="metric"><div class="label">Ratings inválidos</div><div class="value">{{ metricas.ratings_invalidos }}</div></div>
+      </div>
+    </section>
+
+    <form method="post" data-processing-message="Actualizando auditoría CSAT...">
+      <input type="hidden" name="analysis_id" value="{{ contexto.analysis_id }}">
+
+      <section class="card">
+        <div class="page-section-title">
+          <div>
+            <h2>Resumen de auditoría</h2>
+            <p class="small">El CSAT actualizado excluye solo las negativas marcadas como SÍ justificable. TAL VEZ no cambia el cálculo en esta V1.</p>
+          </div>
+          <div class="csat-action-bar">
+            <button type="submit" name="accion" value="guardar_auditoria">Actualizar resumen</button>
+            <button type="submit" class="btn secondary" name="accion" value="descargar_csv_auditado">Descargar CSV auditado</button>
+            <button type="submit" class="btn secondary" name="accion" value="descargar_reporte_ia">Descargar reporte para IA</button>
+          </div>
+        </div>
+
+        <div class="csat-summary-grid">
+          <div class="metric"><div class="label">NO</div><div class="value">{{ metricas.negativos_no }}</div></div>
+          <div class="metric"><div class="label">TAL VEZ</div><div class="value">{{ metricas.negativos_tal_vez }}</div></div>
+          <div class="metric"><div class="label">SÍ</div><div class="value">{{ metricas.negativos_si }}</div></div>
+          <div class="metric"><div class="label">% NO</div><div class="value">{{ metricas.porcentaje_no }}%</div></div>
+          <div class="metric"><div class="label">% TAL VEZ</div><div class="value">{{ metricas.porcentaje_tal_vez }}%</div></div>
+          <div class="metric"><div class="label">% SÍ</div><div class="value">{{ metricas.porcentaje_si }}%</div></div>
+          <div class="metric"><div class="label">Negativos totales</div><div class="value">{{ metricas.negativos }}</div></div>
+          <div class="metric"><div class="label">CSAT actualizado</div><div class="value">{{ metricas.csat_actualizado }}%</div></div>
+        </div>
+
+        <div class="csat-rule-box top-space">
+          <strong>Regla de cálculo usada</strong>
+          <p class="small top-space">CSAT original = positivas / ratings válidos. CSAT actualizado = positivas / (ratings válidos menos negativas con SÍ justificable). Las negativas con NO siguen contando. TAL VEZ permanece dentro del cálculo hasta definición posterior.</p>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="page-section-title">
+          <div>
+            <h2>Tabla principal de auditoría</h2>
+            <p class="small">Los filtros son locales en pantalla. Para recalcular resumen o exportar, usa los botones superiores.</p>
+          </div>
+          <span class="hero-badge hero-badge-soft">{{ contexto.filas|length }} filas</span>
+        </div>
+
+        <div class="csat-filter-grid">
+          <div>
+            <label class="small" for="filtro-agente">Agente</label>
+            <select id="filtro-agente" data-csat-filter="agente">
+              <option value="">Todos</option>
+              {% for agente in contexto.filtros.agentes %}
+                <option value="{{ agente }}">{{ agente }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="small" for="filtro-calificacion">Calificación</label>
+            <select id="filtro-calificacion" data-csat-filter="calificacion">
+              <option value="">Todas</option>
+              {% for item in contexto.filtros.calificaciones %}
+                <option value="{{ item }}">{{ item }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="small" for="filtro-tipo-rating">Tipo de rating</label>
+            <select id="filtro-tipo-rating" data-csat-filter="tipo">
+              <option value="">Todos</option>
+              {% for item in contexto.filtros.tipos_rating %}
+                <option value="{{ item }}">{{ item }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="small" for="filtro-estado">Estado de auditoría</label>
+            <select id="filtro-estado" data-csat-filter="estado">
+              <option value="">Todos</option>
+              {% for item in contexto.filtros.estados %}
+                <option value="{{ item }}">{{ item }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="small" for="filtro-motivo">Motivo</label>
+            <select id="filtro-motivo" data-csat-filter="motivo">
+              <option value="">Todos</option>
+              {% for item in contexto.filtros.motivos %}
+                <option value="{{ item }}">{{ item }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="small" for="filtro-busqueda">Búsqueda</label>
+            <input id="filtro-busqueda" type="text" data-csat-filter="search" placeholder="Contacto, comentario, email o link">
+          </div>
+        </div>
+
+        <div class="csat-table-actions top-space">
+          <button type="button" class="btn secondary" data-csat-clear-filters>Limpiar filtros</button>
+          <span class="small" data-csat-visible-count>{{ contexto.filas|length }} filas visibles</span>
+        </div>
+
+        <div class="table-wrap top-space">
+          <table class="tabla-ordenable tabla-compacta csat-table" data-csat-table>
+            <thead>
+              <tr>
+                <th>Agente</th>
+                <th>Calificación</th>
+                <th>Tipo rating</th>
+                <th>Comentario</th>
+                <th>Link</th>
+                <th>Nombre</th>
+                <th>Correo</th>
+                <th>Teléfono</th>
+                <th>Fecha</th>
+                <th>Justificable?</th>
+                <th>Comentarios del auditor</th>
+                <th>Motivo de inconformidad</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for fila in contexto.filas %}
+                {% set tipo_clase = 'is-negativo' if fila.tipo_rating == 'Negativo' else 'is-neutral' if fila.tipo_rating == 'Neutral' else 'is-positivo' if fila.tipo_rating == 'Positivo' else 'is-pendiente' %}
+                <tr
+                  data-agente="{{ fila.agente }}"
+                  data-calificacion="{{ fila.calificacion_visible if fila.calificacion_visible else 'Sin calificación válida' }}"
+                  data-tipo="{{ fila.tipo_rating }}"
+                  data-estado="{{ fila.estado_auditoria }}"
+                  data-motivo="{{ fila.motivo_inconformidad }}"
+                  data-search="{{ (fila.nombre_contacto ~ ' ' ~ fila.correo_contacto ~ ' ' ~ fila.telefono_contacto ~ ' ' ~ fila.comentario ~ ' ' ~ fila.enlace_conversacion ~ ' ' ~ fila.agente)|lower }}"
+                >
+                  <td>{{ fila.agente or 'Sin agente' }}</td>
+                  <td>{{ fila.calificacion_visible or 'Sin calificación válida' }}</td>
+                  <td><span class="csat-chip {{ tipo_clase }}">{{ fila.tipo_rating }}</span></td>
+                  <td>{{ fila.comentario or 'Sin comentario' }}</td>
+                  <td>
+                    {% if fila.enlace_conversacion %}
+                      <a class="csat-link" href="{{ fila.enlace_conversacion }}" target="_blank" rel="noopener noreferrer">Abrir conversación</a>
+                    {% else %}
+                      Sin enlace
+                    {% endif %}
+                  </td>
+                  <td>{{ fila.nombre_contacto or 'Sin nombre' }}</td>
+                  <td>{{ fila.correo_contacto or 'Sin correo' }}</td>
+                  <td>{{ fila.telefono_contacto or 'Sin teléfono' }}</td>
+                  <td>{{ fila.fecha_registrada or fila.fecha_registrada_raw or 'Sin fecha' }}</td>
+                  <td>
+                    <select name="justificable__{{ fila.row_id }}" data-row-estado>
+                      <option value="" {% if not fila.justificable %}selected{% endif %}>Pendiente</option>
+                      {% for opcion in contexto.justificable_options %}
+                        <option value="{{ opcion }}" {% if fila.justificable == opcion %}selected{% endif %}>{{ opcion }}</option>
+                      {% endfor %}
+                    </select>
+                  </td>
+                  <td>
+                    <textarea name="comentario_auditor__{{ fila.row_id }}" placeholder="Contexto del auditor">{{ fila.comentario_auditor }}</textarea>
+                  </td>
+                  <td>
+                    <select name="motivo_inconformidad__{{ fila.row_id }}" data-row-motivo>
+                      <option value="" {% if not fila.motivo_inconformidad %}selected{% endif %}>Sin motivo</option>
+                      {% for motivo in contexto.motivos_catalogo %}
+                        <option value="{{ motivo }}" {% if fila.motivo_inconformidad == motivo %}selected{% endif %}>{{ motivo }}</option>
+                      {% endfor %}
+                    </select>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </form>
+
+    <section class="card">
+      <div class="page-section-title">
+        <div>
+          <h2>Gráficos</h2>
+          <p class="small">Lectura rápida sin sumar dependencias pesadas. Los gráficos se renderizan con HTML y CSS.</p>
+        </div>
+        <span class="hero-badge hero-badge-soft">Sin librería extra</span>
+      </div>
+
+      <div class="csat-chart-grid">
+        <article class="csat-chart-card">
+          <h3>Distribución de ratings</h3>
+          <div class="bar-chart">
+            {% set max_value = (contexto.graficos.ratings | map(attribute='value') | max) or 1 %}
+            {% for item in contexto.graficos.ratings %}
+              <div class="bar-row">
+                <span>{{ item.label }}</span>
+                <div class="bar-track"><div class="bar-fill" style="width: {{ (item.value / max_value * 100) if max_value else 0 }}%"></div></div>
+                <strong>{{ item.value }}</strong>
+              </div>
+            {% endfor %}
+          </div>
+        </article>
+
+        <article class="csat-chart-card">
+          <h3>Distribución NO / TAL VEZ / SÍ</h3>
+          <div class="bar-chart">
+            {% set max_value = (contexto.graficos.auditoria | map(attribute='value') | max) or 1 %}
+            {% for item in contexto.graficos.auditoria %}
+              {% set clase = 'is-danger' if item.label == 'NO' else 'is-warning' if item.label == 'TAL VEZ' else 'is-success' %}
+              <div class="bar-row">
+                <span>{{ item.label }}</span>
+                <div class="bar-track"><div class="bar-fill {{ clase }}" style="width: {{ (item.value / max_value * 100) if max_value else 0 }}%"></div></div>
+                <strong>{{ item.value }}</strong>
+              </div>
+            {% endfor %}
+          </div>
+        </article>
+
+        <article class="csat-chart-card">
+          <h3>Motivos de inconformidad</h3>
+          <div class="bar-chart">
+            {% set max_value = (contexto.graficos.motivos | map(attribute='value') | max) or 1 %}
+            {% if contexto.graficos.motivos %}
+              {% for item in contexto.graficos.motivos %}
+                <div class="bar-row">
+                  <span>{{ item.label }}</span>
+                  <div class="bar-track"><div class="bar-fill is-warning" style="width: {{ (item.value / max_value * 100) if max_value else 0 }}%"></div></div>
+                  <strong>{{ item.value }}</strong>
+                </div>
+              {% endfor %}
+            {% else %}
+              <p class="small">No hay motivos capturados todavía.</p>
+            {% endif %}
+          </div>
+        </article>
+
+        <article class="csat-chart-card">
+          <h3>Resumen por agente</h3>
+          <div class="bar-chart">
+            {% set max_value = (contexto.graficos.agentes | map(attribute='value') | max) or 1 %}
+            {% if contexto.graficos.agentes %}
+              {% for item in contexto.graficos.agentes %}
+                <div class="bar-row">
+                  <span>{{ item.label }}</span>
+                  <div class="bar-track"><div class="bar-fill is-success" style="width: {{ (item.value / max_value * 100) if max_value else 0 }}%"></div></div>
+                  <strong>{{ item.value }}</strong>
+                </div>
+              {% endfor %}
+            {% else %}
+              <p class="small">No hay agentes visibles.</p>
+            {% endif %}
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <details class="card seccion-desplegable" open>
+      <summary class="titulo-desplegable">
+        <span>Resumen por agente</span>
+        <span class="small">{{ contexto.resumen_agente|length }} agentes</span>
+      </summary>
+      <div class="table-wrap">
+        <table class="tabla-ordenable tabla-compacta">
+          <thead>
+            <tr>
+              {% for col in ["Agente","Total de valoraciones","Negativas","Neutrales","Positivas","NO","TAL VEZ","SÍ","CSAT original","CSAT auditado"] %}
+                <th>{{ col }}</th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for fila in contexto.resumen_agente %}
+              <tr>
+                <td>{{ fila["Agente"] }}</td>
+                <td>{{ fila["Total de valoraciones"] }}</td>
+                <td>{{ fila["Negativas"] }}</td>
+                <td>{{ fila["Neutrales"] }}</td>
+                <td>{{ fila["Positivas"] }}</td>
+                <td>{{ fila["NO"] }}</td>
+                <td>{{ fila["TAL VEZ"] }}</td>
+                <td>{{ fila["SÍ"] }}</td>
+                <td>{{ fila["CSAT original"] }}%</td>
+                <td>{{ fila["CSAT auditado"] }}%</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </details>
+
+    <details class="card seccion-desplegable" open>
+      <summary class="titulo-desplegable">
+        <span>Resumen por motivo</span>
+        <span class="small">{{ contexto.resumen_motivo|length }} motivos</span>
+      </summary>
+      <div class="table-wrap">
+        <table class="tabla-ordenable tabla-compacta">
+          <thead>
+            <tr>
+              <th>Motivo de inconformidad</th>
+              <th>Cantidad</th>
+              <th>Porcentaje</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for fila in contexto.resumen_motivo %}
+              <tr>
+                <td>{{ fila["Motivo"] }}</td>
+                <td>{{ fila["Cantidad"] }}</td>
+                <td>{{ fila["Porcentaje"] }}%</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </details>
+
+    <section class="card">
+      <div class="page-section-title">
+        <div>
+          <h2>Hallazgos rápidos</h2>
+          <p class="small">Base operativa para el reporte exportable hacia IA.</p>
+        </div>
+        <span class="hero-badge hero-badge-soft">Auto-resumen</span>
+      </div>
+
+      <div class="csat-hallazgos">
+        {% if contexto.hallazgos %}
+          {% for hallazgo in contexto.hallazgos %}
+            <div class="csat-hallazgo">{{ hallazgo }}</div>
+          {% endfor %}
+        {% else %}
+          <div class="csat-hallazgo">Todavía no hay suficiente señal para mostrar hallazgos automáticos.</div>
+        {% endif %}
+      </div>
+    </section>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+  <script>
+    (function () {
+      const table = document.querySelector("[data-csat-table]");
+      if (!table) return;
+
+      const rows = Array.from(table.querySelectorAll("tbody tr"));
+      const countTarget = document.querySelector("[data-csat-visible-count]");
+      const filterInputs = document.querySelectorAll("[data-csat-filter]");
+      const clearButton = document.querySelector("[data-csat-clear-filters]");
+
+      function norm(value) {
+        return (value || "").toString().trim().toLowerCase();
+      }
+
+      function updateRowDataset(row) {
+        const estadoSelect = row.querySelector("[data-row-estado]");
+        const motivoSelect = row.querySelector("[data-row-motivo]");
+        row.dataset.estado = estadoSelect && estadoSelect.value ? estadoSelect.value : "pendiente";
+        row.dataset.motivo = motivoSelect ? motivoSelect.value : "";
+      }
+
+      function applyFilters() {
+        const values = {};
+        filterInputs.forEach((input) => {
+          values[input.dataset.csatFilter] = norm(input.value);
+        });
+
+        let visible = 0;
+        rows.forEach((row) => {
+          updateRowDataset(row);
+          const matches =
+            (!values.agente || norm(row.dataset.agente) === values.agente) &&
+            (!values.calificacion || norm(row.dataset.calificacion) === values.calificacion) &&
+            (!values.tipo || norm(row.dataset.tipo) === values.tipo) &&
+            (!values.estado || norm(row.dataset.estado) === values.estado) &&
+            (!values.motivo || norm(row.dataset.motivo) === values.motivo) &&
+            (!values.search || norm(row.dataset.search).includes(values.search));
+
+          row.style.display = matches ? "" : "none";
+          if (matches) visible += 1;
+        });
+
+        if (countTarget) {
+          countTarget.textContent = `${visible} filas visibles`;
+        }
+      }
+
+      filterInputs.forEach((input) => {
+        input.addEventListener("input", applyFilters);
+        input.addEventListener("change", applyFilters);
+      });
+
+      rows.forEach((row) => {
+        row.querySelectorAll("[data-row-estado], [data-row-motivo]").forEach((input) => {
+          input.addEventListener("change", applyFilters);
+        });
+      });
+
+      if (clearButton) {
+        clearButton.addEventListener("click", () => {
+          filterInputs.forEach((input) => {
+            input.value = "";
+          });
+          applyFilters();
+        });
+      }
+
+      applyFilters();
+    })();
+  </script>
+{% endblock %}
