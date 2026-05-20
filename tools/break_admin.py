@@ -27,7 +27,7 @@ def parsear_entero(valor, nombre, minimo=None):
     try:
         numero = int(texto)
     except (TypeError, ValueError) as exc:
-        raise BreakAdminValidationError(f"{nombre} debe ser un numero entero.") from exc
+        raise BreakAdminValidationError(f"{nombre} debe ser un número entero.") from exc
 
     if minimo is not None and numero < minimo:
         raise BreakAdminValidationError(f"{nombre} debe ser mayor o igual a {minimo}.")
@@ -43,7 +43,7 @@ def parsear_fecha(valor):
     try:
         return date.fromisoformat(texto).isoformat()
     except ValueError as exc:
-        raise BreakAdminValidationError("La fecha seleccionada no es valida.") from exc
+        raise BreakAdminValidationError("La fecha seleccionada no es válida.") from exc
 
 
 def construir_redirect(fecha=None, shift_id=None):
@@ -104,7 +104,7 @@ def ejecutar_accion(handler):
         return construir_redirect(fecha=fecha, shift_id=shift_id)
     except Exception as exc:
         logger.exception("Error inesperado de break_admin")
-        flash(f"No se pudo completar la accion: {exc}", "warning")
+        flash(f"No se pudo completar la acción: {exc}", "warning")
         return construir_redirect(fecha=fecha, shift_id=shift_id)
 
 

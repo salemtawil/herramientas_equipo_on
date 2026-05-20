@@ -4,14 +4,27 @@
 {% block page_name %}Reporte de agentes{% endblock %}
 
 {% block content %}
-<div class="page-stack">
+<div class="page-stack reporte-agentes-page">
   <section class="card page-hero">
     <div class="page-section-title">
       <div>
         <h1>Reporte de agentes</h1>
-        <p>Los turnos estan definidos manualmente en el codigo. El CSV se procesa temporalmente y no se guarda.</p>
+        <p>Los turnos están definidos manualmente en el código. El CSV se procesa temporalmente y no se guarda.</p>
       </div>
       <span class="hero-badge">CSV operativo</span>
+    </div>
+
+    <div class="dashboard-highlight-grid top-space">
+      <article class="dashboard-highlight-card dashboard-highlight-card--primary">
+        <span class="dashboard-highlight-card__eyebrow">Lectura</span>
+        <strong>Resumen, detalle y ranking</strong>
+        <p>La vista mantiene el flujo completo del reporte en una sola pantalla, con tablas y ranking reutilizables.</p>
+      </article>
+      <article class="dashboard-highlight-card">
+        <span class="dashboard-highlight-card__eyebrow">Base fija</span>
+        <strong>Turnos controlados por configuración</strong>
+        <p>El reporte conserva los turnos definidos por el equipo y solo muestra agentes con actividad real.</p>
+      </article>
     </div>
 
     {% if mensaje %}
@@ -25,7 +38,7 @@
 
   <details class="card seccion-desplegable">
     <summary class="titulo-desplegable">
-      <span>Configuracion fija de turnos</span>
+      <span>Configuración fija de turnos</span>
       <span class="small">{{ turnos_config|length }} turnos</span>
     </summary>
 
@@ -263,7 +276,7 @@
           </tfoot>
         </table>
       </div>
-      <p class="small top-space">Verde resalta volumen positivo. Rojo resalta perdidas y valores desfavorables.</p>
+      <p class="small top-space">Verde resalta volumen positivo. Rojo resalta pérdidas y valores desfavorables.</p>
       <p class="small">Salientes: verde desde 60, amarillo entre 11 y 59, rojo entre 0 y 10.</p>
     </div>
   </details>

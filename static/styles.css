@@ -30,6 +30,8 @@
   --radius-lg: 22px;
   --radius-md: 16px;
   --radius-sm: 12px;
+  --space-section: 24px;
+  --space-stack: 18px;
 }
 
 html[data-theme="dark"] {
@@ -221,13 +223,13 @@ a {
 }
 
 .app-main {
-  padding-top: 24px;
-  padding-bottom: 48px;
+  padding-top: 28px;
+  padding-bottom: 56px;
 }
 
 .page-stack {
   display: grid;
-  gap: 20px;
+  gap: var(--space-section);
   min-width: 0;
 }
 
@@ -236,7 +238,7 @@ a {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
-  padding: 24px;
+  padding: clamp(20px, 2vw, 26px);
   margin-bottom: 20px;
   backdrop-filter: blur(6px);
   min-width: 0;
@@ -317,8 +319,18 @@ html[data-theme="dark"] .page-hero {
   justify-content: space-between;
   align-items: center;
   gap: 12px;
-  margin-bottom: 14px;
+  margin-bottom: 18px;
   flex-wrap: wrap;
+}
+
+.page-section-title > div {
+  display: grid;
+  gap: 6px;
+}
+
+.page-section-title p,
+.page-section-title .small {
+  margin: 0;
 }
 
 .hero-badge {
@@ -377,6 +389,11 @@ p {
 
 .top-space {
   margin-top: 18px;
+}
+
+.section-stack {
+  display: grid;
+  gap: var(--space-stack);
 }
 
 .grid {
@@ -441,6 +458,10 @@ p {
 
 .comparativa-toolbar {
   margin-bottom: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--surface-muted) 94%, transparent);
 }
 
 .acciones-columna {
@@ -477,6 +498,16 @@ input[type="submit"]:hover,
 input[type="button"]:hover {
   background: var(--primary-hover);
   transform: translateY(-1px);
+}
+
+.btn[disabled],
+button[disabled],
+input[type="submit"][disabled],
+input[type="button"][disabled] {
+  opacity: 0.72;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 
 html[data-theme="dark"] .btn,
@@ -608,6 +639,18 @@ input::file-selector-button {
   padding: 14px 16px;
   border: 1px solid;
   margin-top: 14px;
+  position: relative;
+  overflow: hidden;
+}
+
+.warning::before,
+.success::before,
+.error-banner::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: currentColor;
 }
 
 .warning {
@@ -633,6 +676,16 @@ input::file-selector-button {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   padding: 16px;
+  position: relative;
+  overflow: hidden;
+}
+
+.metric::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--primary) 70%, white), color-mix(in srgb, var(--primary) 22%, transparent));
 }
 
 .metric .label {
@@ -646,7 +699,7 @@ input::file-selector-button {
 .metric .value {
   margin-top: 8px;
   color: var(--title);
-  font-size: 28px;
+  font-size: clamp(24px, 3vw, 30px);
   font-weight: 800;
 }
 
@@ -662,6 +715,7 @@ input::file-selector-button {
   max-width: 100%;
   overscroll-behavior-x: contain;
   -webkit-overflow-scrolling: touch;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 html[data-theme="dark"] .table-wrap {
@@ -699,6 +753,14 @@ html[data-theme="dark"] th {
 }
 
 tbody tr:hover {
+  background: var(--row-hover);
+}
+
+tbody tr:nth-child(even) {
+  background: color-mix(in srgb, var(--surface-muted) 82%, transparent);
+}
+
+tbody tr:nth-child(even):hover {
   background: var(--row-hover);
 }
 
@@ -778,6 +840,7 @@ th.desc::after {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--surface-strong) 92%, transparent);
+  min-height: 100%;
 }
 
 .dashboard-highlight-card strong {
@@ -819,6 +882,33 @@ th.desc::after {
 
 .action-surface {
   padding: 14px;
+}
+
+.filter-toolbar,
+.search-panel,
+.empty-state {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--surface-muted) 92%, transparent);
+}
+
+.filter-toolbar,
+.search-panel {
+  padding: 12px 14px;
+}
+
+.search-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.search-panel input[type="text"] {
+  background: var(--surface-strong);
+}
+
+.empty-state {
+  padding: 18px;
+  color: var(--muted);
 }
 
 .header-turno,
@@ -1732,6 +1822,20 @@ th.desc::after {
   font-weight: 600;
 }
 
+.system-card__status {
+  min-width: 112px;
+}
+
+.system-card__footer {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid color-mix(in srgb, var(--system-accent) 16%, var(--border));
+}
+
+.system-card__footer .system-card__updated {
+  margin-left: auto;
+}
+
 .error {
   min-height: 20px;
   margin-top: 10px;
@@ -1751,6 +1855,66 @@ th.desc::after {
   border-color: var(--danger-border);
   background: color-mix(in srgb, var(--danger-bg) 88%, transparent);
   color: var(--danger-text);
+}
+
+.users-active-page .page-hero .page-section-title {
+  align-items: flex-start;
+}
+
+.users-active-page .page-hero .page-actions {
+  justify-content: flex-end;
+}
+
+.users-active-page #general-updated {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--primary-soft) 68%, transparent);
+  border: 1px solid color-mix(in srgb, var(--primary) 18%, var(--border));
+  color: var(--title);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.users-active-page .system-grid {
+  align-items: stretch;
+}
+
+.reporte-agentes-page .agente-lista,
+.usuarios-sheets-page .agente-lista {
+  max-height: 260px;
+}
+
+.reporte-agentes-page .turnos-filtro-grid,
+.auditoria-salientes-page .turnos-filtro-grid {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--surface-muted) 92%, transparent);
+}
+
+.comparar-csv-page .comparativa-toolbar .small {
+  margin-right: 4px;
+  font-weight: 700;
+}
+
+.auditoria-csat-page .csat-filter-grid {
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--surface-muted) 92%, transparent);
+}
+
+.auditoria-csat-page .csat-table-actions {
+  justify-content: space-between;
+}
+
+.auditoria-csat-page .csat-hallazgo {
+  line-height: 1.45;
 }
 
 .system-card--compinche {
@@ -1888,6 +2052,12 @@ th.desc::after {
   .break-admin-page .break-slot-editor-header {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .users-active-page .page-hero .page-actions,
+  .auditoria-csat-page .csat-table-actions {
+    width: 100%;
+    justify-content: flex-start;
   }
 }
 

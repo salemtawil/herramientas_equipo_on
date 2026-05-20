@@ -4,15 +4,30 @@
 {% block page_name %}Usuarios activos{% endblock %}
 
 {% block content %}
-<div class="page-stack">
+<div class="page-stack users-active-page">
   <section class="card page-hero">
     <div class="page-section-title">
       <div>
         <h1>Usuarios activos</h1>
         <p>Consulta el estado consolidado de cada sistema y actualiza los datos sin salir de la vista.</p>
-        <p id="general-updated">Ultima actualizacion general (ET): {{ updated_at_inicial or "-" }}</p>
+        <p id="general-updated">Última actualización general (ET): {{ updated_at_inicial or "-" }}</p>
       </div>
-      <button type="button" id="actualizar-btn" onclick="actualizarDatos()">Actualizar</button>
+      <div class="page-actions">
+        <button type="button" id="actualizar-btn" class="btn secondary" onclick="actualizarDatos()">Actualizar datos</button>
+      </div>
+    </div>
+
+    <div class="dashboard-highlight-grid top-space">
+      <article class="dashboard-highlight-card dashboard-highlight-card--primary">
+        <span class="dashboard-highlight-card__eyebrow">Snapshot</span>
+        <strong>Estado útil al abrir</strong>
+        <p>La vista parte del último snapshot disponible y luego se refresca sobre los endpoints actuales.</p>
+      </article>
+      <article class="dashboard-highlight-card">
+        <span class="dashboard-highlight-card__eyebrow">Operación</span>
+        <strong>Actualización manual controlada</strong>
+        <p>Los sistemas se vuelven a consultar desde esta misma pantalla sin cambiar el flujo del usuario.</p>
+      </article>
     </div>
   </section>
 
@@ -33,6 +48,10 @@
         <div class="stat-line"><span>Usuarios activos</span><strong id="compinche-active">-</strong></div>
         <div class="stat-line"><span>Running users</span><strong id="compinche-running">-</strong></div>
       </div>
+      <div class="system-card__footer">
+        <span class="system-card__status" id="compinche-status">Pendiente</span>
+        <span class="system-card__updated" id="compinche-updated">Sin actualización</span>
+      </div>
       <div class="error" id="compinche-error"></div>
     </article>
 
@@ -51,6 +70,10 @@
       <div class="stat-list">
         <div class="stat-line"><span>Usuarios activos</span><strong id="paripe-good-standing">-</strong></div>
         <div class="stat-line"><span>Pool de fotos</span><strong id="paripe-photo-pool">-</strong></div>
+      </div>
+      <div class="system-card__footer">
+        <span class="system-card__status" id="paripe-status">Pendiente</span>
+        <span class="system-card__updated" id="paripe-updated">Sin actualización</span>
       </div>
       <div class="error" id="paripe-error"></div>
     </article>
@@ -71,6 +94,10 @@
         <div class="stat-line"><span>Usuarios activos</span><strong id="camarada-active">-</strong></div>
         <div class="stat-line"><span>Running users</span><strong id="camarada-running">-</strong></div>
       </div>
+      <div class="system-card__footer">
+        <span class="system-card__status" id="camarada-status">Pendiente</span>
+        <span class="system-card__updated" id="camarada-updated">Sin actualización</span>
+      </div>
       <div class="error" id="camarada-error"></div>
     </article>
 
@@ -90,6 +117,10 @@
         <div class="stat-line"><span>Usuarios activos</span><strong id="complice-active">-</strong></div>
         <div class="stat-line"><span>Running users</span><strong id="complice-running">-</strong></div>
       </div>
+      <div class="system-card__footer">
+        <span class="system-card__status" id="complice-status">Pendiente</span>
+        <span class="system-card__updated" id="complice-updated">Sin actualización</span>
+      </div>
       <div class="error" id="complice-error"></div>
     </article>
 
@@ -107,6 +138,10 @@
       <div class="stat-list">
         <div class="stat-line"><span>Usuarios activos</span><strong id="secuaz-active">-</strong></div>
         <div class="stat-line"><span>Running users</span><strong id="secuaz-running">-</strong></div>
+      </div>
+      <div class="system-card__footer">
+        <span class="system-card__status" id="secuaz-status">Pendiente</span>
+        <span class="system-card__updated" id="secuaz-updated">Sin actualización</span>
       </div>
       <div class="error" id="secuaz-error"></div>
     </article>
@@ -126,6 +161,10 @@
       <div class="stat-list">
         <div class="stat-line"><span>Usuarios activos</span><strong id="ready4drive-active">-</strong></div>
         <div class="stat-line"><span>Running users</span><strong id="ready4drive-running">-</strong></div>
+      </div>
+      <div class="system-card__footer">
+        <span class="system-card__status" id="ready4drive-status">Pendiente</span>
+        <span class="system-card__updated" id="ready4drive-updated">Sin actualización</span>
       </div>
       <div class="error" id="ready4drive-error"></div>
     </article>
@@ -156,6 +195,8 @@ function formatUpdatedAt(value) {
 function renderSystemState(prefix, item) {
   const error = document.getElementById(`${prefix}-error`);
   const card = document.getElementById(`card-${prefix}`);
+  const status = document.getElementById(`${prefix}-status`);
+  const updated = document.getElementById(`${prefix}-updated`);
   const hasError = Boolean(item?.error);
 
   if (error) {
@@ -164,6 +205,14 @@ function renderSystemState(prefix, item) {
 
   if (card) {
     card.classList.toggle("system-card--error", hasError);
+  }
+
+  if (status) {
+    status.textContent = item?.progress || "Pendiente";
+  }
+
+  if (updated) {
+    updated.textContent = item?.updated_at && item.updated_at !== "-" ? `Actualizado: ${formatUpdatedAt(item.updated_at)}` : "Sin actualización";
   }
 }
 
@@ -175,7 +224,7 @@ function renderData(items, updatedAt) {
   const secuaz = items.find(item => item.system === "secuaz");
   const ready4drive = items.find(item => item.system === "ready4drive");
 
-  document.getElementById("general-updated").textContent = `Ultima actualizacion general (ET): ${formatUpdatedAt(updatedAt)}`;
+  document.getElementById("general-updated").textContent = `Última actualización general (ET): ${formatUpdatedAt(updatedAt)}`;
 
   if (compinche) {
     document.getElementById("compinche-active").textContent = compinche.active_users ?? "-";

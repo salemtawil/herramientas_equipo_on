@@ -10,22 +10,22 @@
       <div>
         <h1>Panel principal</h1>
         <p>
-          Aqui puedes elegir la herramienta que necesitas usar en cada momento.
-          Todas las vistas comparten el mismo sistema visual, tema global, sidebar y navegacion consistente.
+          Aquí puedes abrir cada herramienta operativa desde un layout común.
+          Todas las vistas comparten el mismo sistema visual, tema global, sidebar y navegación consistente.
         </p>
       </div>
       <span class="hero-badge">Vista general</span>
     </div>
     <div class="dashboard-highlight-grid top-space">
       <article class="dashboard-highlight-card dashboard-highlight-card--primary">
-        <span class="dashboard-highlight-card__eyebrow">Operacion</span>
+        <span class="dashboard-highlight-card__eyebrow">Operación</span>
         <strong>Monitoreo centralizado</strong>
-        <p>Usuarios activos y reportes en un mismo layout con lectura rapida.</p>
+        <p>Usuarios activos, auditorías y reportes dentro de una misma base visual.</p>
       </article>
       <article class="dashboard-highlight-card">
         <span class="dashboard-highlight-card__eyebrow">Datos</span>
         <strong>Herramientas server-rendered</strong>
-        <p>Flujos directos, formularios claros y tablas consistentes para CSV y paneles.</p>
+        <p>Flujos directos, formularios claros y tablas consistentes para CSV, paneles y exportes.</p>
       </article>
     </div>
   </section>
@@ -39,10 +39,10 @@
     <div class="tool-grid">
       <article class="subherramienta subherramienta-acento subherramienta-acento--reportes">
         <div>
-          <h3>Reporte de stats</h3>
+          <h3>Reporte de agentes</h3>
           <p>Carga un CSV y genera el reporte general por agente, turnos, resumen y ranking.</p>
         </div>
-        <a class="btn" href="{{ url_for('reporte_agentes.reporte_agentes') }}">Abrir reporte</a>
+        <a class="btn" href="{{ url_for('reporte_agentes.reporte_agentes') }}">Abrir herramienta</a>
       </article>
 
       <article class="subherramienta subherramienta-destacada subherramienta-acento subherramienta-acento--comparativa">
@@ -50,23 +50,23 @@
           <h3>Comparar CSV</h3>
           <p>Compara un CSV contra el reporte base y visualiza diferencias en llamadas, salientes, minutos y perdidas.</p>
         </div>
-        <a class="btn secondary" href="{{ url_for('comparar_csv.comparar_csv') }}">Abrir comparador</a>
+        <a class="btn secondary" href="{{ url_for('comparar_csv.comparar_csv') }}">Abrir herramienta</a>
       </article>
 
       <article class="subherramienta subherramienta-acento subherramienta-acento--comparativa">
         <div>
-          <h3>Auditoria de salientes</h3>
-          <p>Carga el historial de llamadas y valida casos por agente, numero y ventana de 10 minutos.</p>
+          <h3>Auditoría de salientes</h3>
+          <p>Carga el historial de llamadas y valida casos por agente, número y ventana de 10 minutos.</p>
         </div>
-        <a class="btn secondary" href="{{ url_for('auditoria_salientes.auditoria_salientes') }}">Abrir auditoria</a>
+        <a class="btn secondary" href="{{ url_for('auditoria_salientes.auditoria_salientes') }}">Abrir herramienta</a>
       </article>
 
       <article class="subherramienta subherramienta-acento subherramienta-acento--reportes">
         <div>
-          <h3>Auditoria CSAT</h3>
+          <h3>Auditoría CSAT</h3>
           <p>Sube el CSV de valoraciones, audita cada caso y descarga tanto el CSV corregido como un reporte listo para IA.</p>
         </div>
-        <a class="btn" href="{{ url_for('auditoria_csat.auditoria_csat') }}">Abrir auditoria</a>
+        <a class="btn" href="{{ url_for('auditoria_csat.auditoria_csat') }}">Abrir herramienta</a>
       </article>
 
       <article class="subherramienta subherramienta-acento subherramienta-acento--sheets">
@@ -82,7 +82,7 @@
           <h3>Usuarios activos</h3>
           <p>Consulta usuarios activos de distintos sistemas en un solo lugar.</p>
         </div>
-        <a class="btn secondary" href="{{ url_for('usuarios_activos.index') }}">Abrir vista</a>
+        <a class="btn secondary" href="{{ url_for('usuarios_activos.index') }}">Abrir herramienta</a>
       </article>
 
       <article class="subherramienta subherramienta-acento subherramienta-acento--sheets">
@@ -90,7 +90,7 @@
           <h3>Admin de breaks</h3>
           <p>Gestiona turnos, horarios, cupos y reservas de breaks sobre la base compartida en Supabase.</p>
         </div>
-        <a class="btn" href="{{ url_for('break_admin.break_admin') }}">Abrir modulo</a>
+        <a class="btn" href="{{ url_for('break_admin.break_admin') }}">Abrir herramienta</a>
       </article>
     </div>
   </section>

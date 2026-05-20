@@ -78,11 +78,28 @@
       const headers = table.querySelectorAll("th");
       headers.forEach((header, index) => {
         header.style.cursor = "pointer";
-        header.addEventListener("click", () => {
+        header.setAttribute("role", "button");
+        header.setAttribute("tabindex", "0");
+        header.setAttribute("aria-sort", "none");
+
+        function toggleSort() {
           const asc = !header.classList.contains("asc");
-          headers.forEach((th) => th.classList.remove("asc", "desc"));
+          headers.forEach((th) => {
+            th.classList.remove("asc", "desc");
+            th.setAttribute("aria-sort", "none");
+          });
           header.classList.add(asc ? "asc" : "desc");
+          header.setAttribute("aria-sort", asc ? "ascending" : "descending");
           sortTableByColumn(table, index, asc);
+        }
+
+        header.addEventListener("click", () => {
+          toggleSort();
+        });
+        header.addEventListener("keydown", (event) => {
+          if (event.key !== "Enter" && event.key !== " ") return;
+          event.preventDefault();
+          toggleSort();
         });
       });
     });
@@ -120,6 +137,10 @@
         const message = buttonMessage || formMessage;
 
         if (!message) return;
+
+        if (submitter && submitter.dataset.loadingLabel) {
+          submitter.textContent = submitter.dataset.loadingLabel;
+        }
 
         showProcessingOverlay(message);
         disableFormControls(form, submitter);

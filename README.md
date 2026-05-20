@@ -1,6 +1,6 @@
 # herramientas_equipo_on-revision
 
-App Flask con utilidades internas para procesar CSVs, consultar usuarios activos y enviar resultados a Google Sheets.
+App Flask con utilidades internas para procesar CSVs, consultar usuarios activos, auditar reportes y administrar breaks reservables.
 
 ## Correr localmente
 
@@ -11,7 +11,7 @@ App Flask con utilidades internas para procesar CSVs, consultar usuarios activos
 pip install -r requirements.txt
 ```
 
-3. Define variables de entorno segun las herramientas que vayas a usar.
+3. Define variables de entorno según las herramientas que vayas a usar.
 4. Ejecuta la app:
 
 ```bash
@@ -28,20 +28,17 @@ python -m unittest discover -s tests -v
 
 ## Variables de entorno importantes
 
-Obligatoria en produccion:
+Obligatoria en producción:
 
 - `FLASK_SECRET_KEY`
 
-Opcionales segun funcionalidad:
+Opcionales según funcionalidad:
 
 - `APPS_SCRIPT_WEBHOOK_URL`
 - `APPS_SCRIPT_WEBHOOK_TOKEN`
 - `COMPINCHE_ID_TOKEN`
 - `COMPINCHE_REFRESH_TOKEN`
 - `COMPINCHE_CLIENT_ID`
-- `PARIPE_ID_TOKEN`
-- `PARIPE_REFRESH_TOKEN`
-- `PARIPE_CLIENT_ID`
 - `AWS_ACCESS_KEY_ID`
 - `AWS_SECRET_ACCESS_KEY`
 - `AWS_DEFAULT_REGION`
@@ -51,7 +48,7 @@ Opcionales segun funcionalidad:
 
 ## Deploy en Vercel
 
-Configuracion actual:
+Configuración actual:
 
 - entrypoint: `app.py`
 - runtime: `@vercel/python`
@@ -60,25 +57,26 @@ Configuracion actual:
 Antes de desplegar:
 
 1. Configura `FLASK_SECRET_KEY` en Vercel.
-2. Si usaras `usuarios_a_sheets`, configura `APPS_SCRIPT_WEBHOOK_URL` y, si aplica, `APPS_SCRIPT_WEBHOOK_TOKEN`.
-3. Si usaras `usuarios_activos`, configura los tokens de Compinche y Paripe.
-4. Si usaras el modulo `break_admin`, configura:
+2. Si usarás `usuarios_a_sheets`, configura `APPS_SCRIPT_WEBHOOK_URL` y, si aplica, `APPS_SCRIPT_WEBHOOK_TOKEN`.
+3. Si usarás `usuarios_activos`, configura los tokens de Compinche.
+4. Si usarás el módulo `break_admin`, configura:
    - `SUPABASE_URL`
    - `SUPABASE_SERVICE_ROLE_KEY`
-5. Si esperas refresco automatico de tokens via Cognito, configura tambien:
+5. Si esperas refresco automático del token de Compinche vía Cognito, configura también:
    - `AWS_ACCESS_KEY_ID`
    - `AWS_SECRET_ACCESS_KEY`
    - `AWS_DEFAULT_REGION=us-east-1`
 
 ## Limitaciones conocidas
 
-- `usuarios_a_sheets` y `auditoria_salientes` guardan estado temporal firmado. Si el estado es pequeno, viaja inline; si crece, se apoya en almacenamiento temporal del runtime.
-- `auditoria_csat` guarda su analisis temporal en almacenamiento efimero del runtime.
+- `usuarios_a_sheets` y `auditoria_salientes` guardan estado temporal firmado. Si el estado es pequeño, viaja inline; si crece, se apoya en almacenamiento temporal del runtime.
+- `auditoria_csat` guarda su análisis temporal en almacenamiento efímero del runtime.
 - `usuarios_activos` depende de APIs externas y puede fallar por timeouts o credenciales vencidas.
 - El repo contiene una carpeta `tools/trash/` con scripts archivados que no forman parte del runtime activo.
+- Las variables y dependencias asociadas a `Paripe` quedaron fuera de la documentación del runtime activo; hoy solo viven en scripts archivados dentro de `tools/trash/`.
 
-## Limites de CSV
+## Límites de CSV
 
 - Los CSV subidos se validan antes de procesarse con pandas.
-- Limite actual por archivo: `5 MB`.
-- Si el archivo supera ese tamano, la app devuelve un error funcional antes de intentar procesarlo.
+- Límite actual por archivo: `5 MB`.
+- Si el archivo supera ese tamaño, la app devuelve un error funcional antes de intentar procesarlo.

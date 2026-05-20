@@ -24,17 +24,17 @@ class BreakAdminStore:
             from supabase import create_client
         except ImportError as exc:
             raise BreakAdminConfigError(
-                "La dependencia 'supabase' no esta instalada en el entorno."
+                "La dependencia 'supabase' no está instalada en el entorno."
             ) from exc
 
         url = (os.getenv("SUPABASE_URL") or "").strip()
         service_role_key = (os.getenv("SUPABASE_SERVICE_ROLE_KEY") or "").strip()
 
         if not url:
-            raise BreakAdminConfigError("No esta configurada la variable SUPABASE_URL.")
+            raise BreakAdminConfigError("No está configurada la variable SUPABASE_URL.")
         if not service_role_key:
             raise BreakAdminConfigError(
-                "No esta configurada la variable SUPABASE_SERVICE_ROLE_KEY."
+                "No está configurada la variable SUPABASE_SERVICE_ROLE_KEY."
             )
 
         return cls(create_client(url, service_role_key))
@@ -70,6 +70,71 @@ class BreakAdminStore:
     @staticmethod
     def _normalizar_nombre_agente(valor):
         return " ".join(str(valor or "").strip().lower().split())
+
+    def _actualizar_slot_reserva(self, reservation_id, slot_id):
+        query = (
+            self.client.table("agent_break_reservations")
+            .update({"slot_id": slot_id})
+            .eq("id", reservation_id)
+        )
+        self._execute(query)
+
+    def _validar_movimiento_reserva(
+        self,
+        reservations,
+        reservation_id,
+        reservation_date,
+        shift_id,
+        new_slot_id,
+        slot_destino,
+        agent_name,
+    ):
+        ocupacion_destino = sum(
+            1
+            for item in reservations
+            if item["slot_id"] == new_slot_id and item["id"] != reservation_id
+        )
+        if ocupacion_destino >= int(slot_destino.get("max_agents") or 0):
+            raise BreakAdminValidationError("El horario destino ya esta lleno.")
+
+        agente_objetivo = self._normalizar_nombre_agente(agent_name)
+        duplicado = any(
+            item["id"] != reservation_id
+            and self._normalizar_nombre_agente(item.get("agent_name")) == agente_objetivo
+            for item in reservations
+        )
+        if duplicado:
+            raise BreakAdminValidationError(
+                "Ese agente ya tiene una reserva en ese turno para la fecha seleccionada."
+            )
+
+    def _revalidar_movimiento_reserva(self, reservation_id, original_slot_id, new_slot_id):
+        reservation = self.get_reservation(reservation_id)
+        if not reservation:
+            raise BreakAdminValidationError("La reserva ya no existe después del movimiento.")
+
+        reservations = self.list_reservations(
+            reservation_date=reservation["reservation_date"],
+            shift_id=reservation["shift_id"],
+        )
+        slot_destino = self.get_slot(new_slot_id)
+        if not slot_destino:
+            raise BreakAdminValidationError("El horario destino ya no existe.")
+
+        if reservation.get("slot_id") != new_slot_id:
+            raise BreakAdminValidationError("La reserva no quedo asignada al horario destino.")
+
+        self._validar_movimiento_reserva(
+            reservations=reservations,
+            reservation_id=reservation_id,
+            reservation_date=reservation["reservation_date"],
+            shift_id=reservation["shift_id"],
+            new_slot_id=new_slot_id,
+            slot_destino=slot_destino,
+            agent_name=reservation.get("agent_name"),
+        )
+
+        return reservation, reservations, slot_destino
 
     def list_shifts(self, include_inactive=True):
         query = self.client.table("agent_break_shifts").select("*").order("display_order").order("label")
@@ -203,37 +268,39 @@ class BreakAdminStore:
         if slot_destino["shift_id"] != reservation["shift_id"]:
             raise BreakAdminValidationError("El horario destino no pertenece al mismo turno.")
         if not slot_destino.get("is_active", True):
-            raise BreakAdminValidationError("El horario destino esta inactivo.")
+            raise BreakAdminValidationError("El horario destino está inactivo.")
+        if reservation.get("slot_id") == new_slot_id:
+            return
 
         reservations = self.list_reservations(
             reservation_date=reservation["reservation_date"],
             shift_id=reservation["shift_id"],
         )
-        ocupacion_destino = sum(
-            1
-            for item in reservations
-            if item["slot_id"] == new_slot_id and item["id"] != reservation_id
+        self._validar_movimiento_reserva(
+            reservations=reservations,
+            reservation_id=reservation_id,
+            reservation_date=reservation["reservation_date"],
+            shift_id=reservation["shift_id"],
+            new_slot_id=new_slot_id,
+            slot_destino=slot_destino,
+            agent_name=reservation.get("agent_name"),
         )
-        if ocupacion_destino >= int(slot_destino.get("max_agents") or 0):
-            raise BreakAdminValidationError("El horario destino ya esta lleno.")
 
-        agente_objetivo = self._normalizar_nombre_agente(reservation.get("agent_name"))
-        duplicado = any(
-            item["id"] != reservation_id
-            and self._normalizar_nombre_agente(item.get("agent_name")) == agente_objetivo
-            for item in reservations
-        )
-        if duplicado:
+        original_slot_id = reservation.get("slot_id")
+        self._actualizar_slot_reserva(reservation_id, new_slot_id)
+
+        try:
+            self._revalidar_movimiento_reserva(reservation_id, original_slot_id, new_slot_id)
+        except BreakAdminValidationError as exc:
+            try:
+                self._actualizar_slot_reserva(reservation_id, original_slot_id)
+            except BreakAdminError as rollback_exc:
+                raise BreakAdminError(
+                    "No se pudo revertir el movimiento despues de detectar un conflicto. Revisa la reserva manualmente."
+                ) from rollback_exc
             raise BreakAdminValidationError(
-                "Ese agente ya tiene una reserva en ese turno para la fecha seleccionada."
-            )
-
-        query = (
-            self.client.table("agent_break_reservations")
-            .update({"slot_id": new_slot_id})
-            .eq("id", reservation_id)
-        )
-        self._execute(query)
+                "No se pudo completar el movimiento porque la reserva cambió mientras se procesaba. Intenta de nuevo."
+            ) from exc
 
     def build_shift_day_view(self, reservation_date, shift_id):
         shift = self.get_shift(shift_id)

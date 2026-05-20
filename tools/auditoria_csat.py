@@ -1,12 +1,10 @@
 import io
 import json
 import logging
-import os
 import re
-import tempfile
 import unicodedata
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import pandas as pd
 from flask import Blueprint, Response, render_template, request
@@ -262,10 +260,15 @@ def limpiar_analisis_expirados():
 
 
 def guardar_analisis(estado):
-    analysis_id = estado.get("analysis_id")
-    estado["analysis_id"] = analysis_id
+    analysis_id = limpiar_texto(estado.get("analysis_id")) or str(uuid.uuid4())
     estado["updated_at"] = datetime.utcnow().isoformat()
-    return guardar_json_temporal(estado, namespace=STATE_NAMESPACE, state_id=analysis_id)
+    estado["analysis_id"] = analysis_id
+    guardar_json_temporal(
+        estado,
+        namespace=STATE_NAMESPACE,
+        state_id=analysis_id,
+    )
+    return analysis_id
 
 
 def cargar_analisis(analysis_id):

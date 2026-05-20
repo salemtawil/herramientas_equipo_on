@@ -1,15 +1,15 @@
 {% extends "base.html" %}
 
-{% block title %}Auditoria de salientes{% endblock %}
-{% block page_name %}Auditoria de salientes{% endblock %}
+{% block title %}Auditoría de salientes{% endblock %}
+{% block page_name %}Auditoría de salientes{% endblock %}
 
 {% block content %}
 <div class="page-stack auditoria-salientes-page">
   <section class="card page-hero">
     <div class="page-section-title">
       <div>
-        <h1>Auditoria de salientes</h1>
-        <p>Sube un CSV de historial de llamadas y valida cumplimiento por agente, numero y ventana operativa de 10 minutos.</p>
+        <h1>Auditoría de salientes</h1>
+        <p>Sube un CSV de historial de llamadas y valida cumplimiento por agente, número y ventana operativa de 10 minutos.</p>
       </div>
       <span class="hero-badge">Control operativo</span>
     </div>
@@ -18,7 +18,7 @@
       <article class="dashboard-highlight-card dashboard-highlight-card--primary">
         <span class="dashboard-highlight-card__eyebrow">Regla</span>
         <strong>Casos agrupados por primera llamada</strong>
-        <p>La vista agrupa por agente, numero y la hora del primer intento, con cierre inmediato si hubo contestada.</p>
+        <p>La vista agrupa por agente, número y la hora del primer intento, con cierre inmediato si hubo contestada.</p>
       </article>
       <article class="dashboard-highlight-card">
         <span class="dashboard-highlight-card__eyebrow">Heuristica</span>
@@ -40,7 +40,7 @@
     <div class="page-section-title">
       <div>
         <h2>Cargar CSV del historial</h2>
-        <p class="small">Flujo simple: archivo del dia, analisis backend y resultado en pantalla. No se guarda estado entre requests.</p>
+        <p class="small">Flujo simple: archivo del día, análisis backend y resultado en pantalla. No se guarda estado entre requests.</p>
       </div>
       <span class="hero-badge hero-badge-soft">1 archivo</span>
     </div>
@@ -54,7 +54,7 @@
     </form>
 
     <div class="top-space contextual-note">
-      <p>Contestada: mas de 75 segundos. Voicemail probable: desde el segundo intento, una llamada entre 15 y 75 segundos. No contestada: 14 segundos o menos.</p>
+      <p>Contestada: más de 75 segundos. Voicemail probable: desde el segundo intento, una llamada entre 15 y 75 segundos. No contestada: 14 segundos o menos.</p>
     </div>
   </section>
 
@@ -103,10 +103,8 @@
       </form>
       {% endif %}
 
-      <div class="top-space">
-        <label for="buscador-resumen-agente" class="small">Que quieres buscar?</label>
-      </div>
-      <div class="top-space">
+      <div class="search-panel top-space">
+        <label for="buscador-resumen-agente" class="small">¿Qué quieres buscar?</label>
         <input
           type="text"
           id="buscador-resumen-agente"
@@ -176,10 +174,8 @@
       </form>
       {% endif %}
 
-      <div class="top-space">
-        <label for="buscador-detalle-casos" class="small">Que quieres buscar?</label>
-      </div>
-      <div class="top-space">
+      <div class="search-panel top-space">
+        <label for="buscador-detalle-casos" class="small">¿Qué quieres buscar?</label>
         <input
           type="text"
           id="buscador-detalle-casos"
@@ -263,10 +259,8 @@
       </form>
       {% endif %}
 
-      <div class="top-space">
-        <label for="buscador-resumen-turno" class="small">Que quieres buscar?</label>
-      </div>
-      <div class="top-space">
+      <div class="search-panel top-space">
+        <label for="buscador-resumen-turno" class="small">¿Qué quieres buscar?</label>
         <input
           type="text"
           id="buscador-resumen-turno"

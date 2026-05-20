@@ -18,7 +18,7 @@
       <article class="dashboard-highlight-card dashboard-highlight-card--primary">
         <span class="dashboard-highlight-card__eyebrow">Control</span>
         <strong>Turnos, cupos y movimientos</strong>
-        <p>La administracion completa de breaks vive aqui, con validaciones de cupo y duplicados por fecha y turno.</p>
+        <p>La administración completa de breaks vive aquí, con validaciones de cupo y duplicados por fecha y turno.</p>
       </article>
       <article class="dashboard-highlight-card">
         <span class="dashboard-highlight-card__eyebrow">Seguridad</span>
@@ -44,15 +44,15 @@
     <div class="page-section-title">
       <div>
         <h2>Vista principal</h2>
-        <p class="small">Filtra por fecha y turno para abrir una vista operativa del break del dia, con cupos, estado de horarios y acciones sobre reservas.</p>
+        <p class="small">Filtra por fecha y turno para abrir una vista operativa del break del día, con cupos, estado de horarios y acciones sobre reservas.</p>
       </div>
-      <span class="hero-badge hero-badge-soft">Operacion diaria</span>
+      <span class="hero-badge hero-badge-soft">Operación diaria</span>
     </div>
 
     <div class="break-summary-grid top-space">
       <article class="break-filter-card">
         <div class="break-selection-title">
-          <strong>Que quieres revisar?</strong>
+          <strong>¿Qué quieres revisar?</strong>
           {% if selected_shift_id and day_view %}
             <span class="break-state-tag {% if not day_view.shift.is_active %}is-inactive{% endif %}">
               {% if day_view.shift.is_active %}Turno activo{% else %}Turno inactivo{% endif %}
@@ -93,7 +93,7 @@
             <article class="break-chip">
               <strong>Fecha visible</strong>
               <span>{{ fecha_seleccionada }}</span>
-              <span class="small">Base de la administracion diaria</span>
+              <span class="small">Base de la administración diaria</span>
             </article>
           </div>
         {% endif %}
@@ -114,7 +114,7 @@
           {% endfor %}
 
           <h3>Resumen operativo</h3>
-          <p class="small break-section-note">Lectura rapida del turno seleccionado para saber si hay saturacion, espacio disponible o configuraciones inactivas.</p>
+          <p class="small break-section-note">Lectura rápida del turno seleccionado para saber si hay saturación, espacio disponible o configuraciones inactivas.</p>
 
           <div class="break-stat-grid top-space">
             <article class="break-stat-card">
@@ -144,7 +144,7 @@
           </div>
         {% else %}
           <h3>Resumen operativo</h3>
-          <p class="small">Selecciona fecha y turno para ver de inmediato cuantos horarios hay, cuantos estan llenos y donde quedan cupos disponibles.</p>
+          <p class="small">Selecciona fecha y turno para ver de inmediato cuántos horarios hay, cuántos están llenos y dónde quedan cupos disponibles.</p>
         {% endif %}
       </article>
     </div>
@@ -232,7 +232,7 @@
                     </span>
                     <span class="small">
                       {% if not fila.slot.is_active %}
-                        El horario esta inactivo, pero sigue visible para administracion.
+                        El horario está inactivo, pero sigue visible para administración.
                       {% elif fila.taken == 0 %}
                         Sin agentes asignados todavia.
                       {% else %}
@@ -251,7 +251,7 @@
                         {% if fila.slot.is_active %}Desactivar horario{% else %}Activar horario{% endif %}
                       </button>
                     </form>
-                    <span class="small">Usa esta accion para sacar el horario de circulacion sin eliminar su configuracion.</span>
+                    <span class="small">Usa esta acción para sacar el horario de circulación sin eliminar su configuración.</span>
                   </div>
                 </td>
               </tr>
@@ -261,14 +261,14 @@
       </div>
     {% elif not config_error %}
       <div class="contextual-note top-space">
-        <p>Primero selecciona un turno para ver la tabla principal de reservas y administrar el break del dia con contexto operativo.</p>
+        <p>Primero selecciona un turno para ver la tabla principal de reservas y administrar el break del día con contexto operativo.</p>
       </div>
     {% endif %}
   </section>
 
   <details class="card seccion-desplegable" open>
     <summary class="titulo-desplegable">
-      <span>Gestion de turnos</span>
+      <span>Gestión de turnos</span>
       <span class="small">{{ shifts|length }} registrados</span>
     </summary>
 
@@ -341,7 +341,7 @@
 
   <details class="card seccion-desplegable" open>
     <summary class="titulo-desplegable">
-      <span>Gestion de horarios</span>
+      <span>Gestión de horarios</span>
       <span class="small">
         {% if day_view %}{{ day_view.shift.label }}{% else %}Selecciona un turno{% endif %}
       </span>

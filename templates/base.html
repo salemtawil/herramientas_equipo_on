@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Herramientas{% endblock %}</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v='16') }}">
-  <script src="{{ url_for('static', filename='app.js', v='1') }}" defer></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v='17') }}">
+  <script src="{{ url_for('static', filename='app.js', v='2') }}" defer></script>
   {% block head_extra %}{% endblock %}
 </head>
 <body>
@@ -14,10 +14,10 @@
     <aside class="app-sidebar">
       <div class="app-sidebar__header">
         <a class="app-brand" href="{{ url_for('inicio') }}">Herramientas Equipo</a>
-        <p class="app-subtitle">Dashboard server-rendered con UI consistente y tema global.</p>
+        <p class="app-subtitle">Admin server-rendered con patrones compartidos, tablas consistentes y tema global.</p>
       </div>
 
-      <nav class="app-sidebar__nav" aria-label="Navegacion principal">
+      <nav class="app-sidebar__nav" aria-label="Navegación principal">
         <a class="sidebar-link {% if endpoint == 'inicio' %}is-active{% endif %}" href="{{ url_for('inicio') }}">
           <span class="sidebar-link__eyebrow">Inicio</span>
           <strong>Panel principal</strong>
@@ -31,36 +31,36 @@
           <strong>Reporte de agentes</strong>
         </a>
         <a class="sidebar-link {% if endpoint == 'comparar_csv.comparar_csv' %}is-active{% endif %}" href="{{ url_for('comparar_csv.comparar_csv') }}">
-          <span class="sidebar-link__eyebrow">Analisis</span>
+          <span class="sidebar-link__eyebrow">Análisis</span>
           <strong>Comparar CSV</strong>
         </a>
         <a class="sidebar-link {% if endpoint == 'auditoria_csat.auditoria_csat' %}is-active{% endif %}" href="{{ url_for('auditoria_csat.auditoria_csat') }}">
           <span class="sidebar-link__eyebrow">Calidad</span>
-          <strong>Auditoria CSAT</strong>
+          <strong>Auditoría CSAT</strong>
         </a>
         <a class="sidebar-link {% if endpoint == 'auditoria_salientes.auditoria_salientes' %}is-active{% endif %}" href="{{ url_for('auditoria_salientes.auditoria_salientes') }}">
           <span class="sidebar-link__eyebrow">Cumplimiento</span>
-          <strong>Auditoria de salientes</strong>
+          <strong>Auditoría de salientes</strong>
         </a>
         <a class="sidebar-link {% if endpoint == 'usuarios_a_sheets.usuarios_a_sheets' %}is-active{% endif %}" href="{{ url_for('usuarios_a_sheets.usuarios_a_sheets') }}">
-          <span class="sidebar-link__eyebrow">Exportacion</span>
+          <span class="sidebar-link__eyebrow">Exportación</span>
           <strong>Usuarios a Sheets</strong>
         </a>
         <a class="sidebar-link {% if endpoint == 'break_admin.break_admin' %}is-active{% endif %}" href="{{ url_for('break_admin.break_admin') }}">
-          <span class="sidebar-link__eyebrow">Administracion</span>
+          <span class="sidebar-link__eyebrow">Administración</span>
           <strong>Breaks reservables</strong>
         </a>
       </nav>
 
       <div class="app-sidebar__footer">
-        <p class="small">Tema global y acceso rapido a las vistas principales.</p>
+        <p class="small">Navegación estable, microcopy unificado y acceso rápido a las vistas principales.</p>
       </div>
     </aside>
 
     <div class="app-content-shell">
       <header class="app-topbar">
         <div class="app-topbar__brand">
-          <p class="app-topbar__eyebrow">Dashboard</p>
+          <p class="app-topbar__eyebrow">Admin compartido</p>
           <p class="app-topbar__current">{% block page_name %}Herramientas{% endblock %}</p>
         </div>
 
@@ -72,7 +72,7 @@
               data-back-button
               data-fallback="{{ url_for('inicio') }}"
             >
-              Regresar
+              Volver
             </button>
           {% endif %}
           <button type="button" class="btn btn-ghost" data-theme-toggle>Modo oscuro</button>
@@ -89,7 +89,7 @@
     <div class="processing-overlay__card">
       <div class="processing-overlay__spinner" aria-hidden="true"></div>
       <h3>Procesando</h3>
-      <p id="global-processing-text">
+      <p id="global-processing-text" aria-live="polite">
         Estamos trabajando en tu solicitud. Esto puede tardar un poco si el archivo es grande.
       </p>
     </div>
