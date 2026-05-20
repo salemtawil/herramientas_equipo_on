@@ -6,10 +6,13 @@ import unicodedata
 
 import pandas as pd
 from flask import Blueprint, Response, current_app, render_template, request
-from itsdangerous import BadData, URLSafeSerializer
 
 from utils.archivos import _leer_csv_desde_bytes
+from utils.archivos import leer_bytes_archivo_csv
 from utils.config_turnos import obtener_turnos_fijos
+from utils.estado_temporal import cargar_estado_temporal
+from utils.estado_temporal import guardar_estado_temporal
+from utils.estado_temporal import limpiar_estados_temporales_expirados
 
 auditoria_salientes_bp = Blueprint("auditoria_salientes", __name__)
 logger = logging.getLogger(__name__)
@@ -17,6 +20,8 @@ FORM_KEY_PAYLOAD = "auditoria_salientes_payload"
 MAX_FILAS_VISTA_PREVIA = 500
 VENTANA_CASO_MINUTOS = 10
 TURNO_SIN_TURNO = "Sin turno"
+STATE_NAMESPACE = "auditoria_salientes"
+STATE_TTL_HOURS = 24
 
 ESTADO_CONTESTADA = "Cumple por contestada"
 ESTADO_COMPLETO = "Cumple completo"
@@ -174,9 +179,7 @@ def resolver_columnas_historial(df):
 
 
 def leer_csv_historial(archivo):
-    contenido = archivo.read()
-    if hasattr(archivo, "seek"):
-        archivo.seek(0)
+    contenido = leer_bytes_archivo_csv(archivo)
     return _leer_csv_desde_bytes(contenido)
 
 
@@ -599,14 +602,14 @@ def respuesta_csv_desde_df(df, nombre_archivo):
 
 
 def serializar_resultado_auditoria(df_casos):
-    serializer = URLSafeSerializer(
-        current_app.secret_key,
-        salt="auditoria-salientes-payload",
-    )
-    return serializer.dumps(
+    return guardar_estado_temporal(
         {
             "df_casos_json": df_casos.to_json(orient="records", force_ascii=False),
-        }
+        },
+        secret_key=current_app.secret_key,
+        salt="auditoria-salientes-payload",
+        namespace=STATE_NAMESPACE,
+        ttl_hours=STATE_TTL_HOURS,
     )
 
 
@@ -614,15 +617,12 @@ def cargar_resultado_auditoria_desde_payload(payload):
     if not payload:
         return None
 
-    serializer = URLSafeSerializer(
-        current_app.secret_key,
+    item = cargar_estado_temporal(
+        payload,
+        secret_key=current_app.secret_key,
         salt="auditoria-salientes-payload",
+        namespace=STATE_NAMESPACE,
     )
-
-    try:
-        item = serializer.loads(payload)
-    except BadData:
-        return None
 
     if not item or "df_casos_json" not in item:
         return None
@@ -636,6 +636,8 @@ def cargar_resultado_auditoria_desde_payload(payload):
 
 @auditoria_salientes_bp.route("/auditoria-salientes", methods=["GET", "POST"])
 def auditoria_salientes():
+    limpiar_estados_temporales_expirados(STATE_NAMESPACE, ttl_hours=STATE_TTL_HOURS)
+
     mensaje = ""
     advertencia = ""
     resumen_general = None

@@ -12,6 +12,10 @@ import pandas as pd
 from flask import Blueprint, Response, render_template, request
 
 from utils.archivos import _leer_csv_desde_bytes
+from utils.archivos import leer_bytes_archivo_csv
+from utils.estado_temporal import cargar_json_temporal
+from utils.estado_temporal import guardar_json_temporal
+from utils.estado_temporal import limpiar_estados_temporales_expirados
 
 auditoria_csat_bp = Blueprint("auditoria_csat", __name__)
 logger = logging.getLogger(__name__)
@@ -132,6 +136,7 @@ TIPOS_RATING = ["Negativo", "Neutral", "Positivo", "Sin calificación válida"]
 ESTADOS_AUDITORIA = ["pendiente"] + JUSTIFICABLE_OPTIONS
 MAX_CASOS_REPORTE_IA = 8
 ANALYSIS_TTL_HOURS = 24
+STATE_NAMESPACE = "auditoria_csat"
 
 
 def normalizar_texto(valor):
@@ -159,9 +164,7 @@ def normalizar_justificable(valor):
 
 
 def leer_csv_subido(archivo):
-    contenido = archivo.read()
-    if hasattr(archivo, "seek"):
-        archivo.seek(0)
+    contenido = leer_bytes_archivo_csv(archivo)
     return _leer_csv_desde_bytes(contenido)
 
 
@@ -254,61 +257,19 @@ def calcular_flag_csat(tipo_rating, justificable):
     return "contabiliza"
 
 
-def obtener_storage_dir():
-    base_dir = os.path.join(tempfile.gettempdir(), "herramientas_equipo_on", "auditoria_csat")
-    os.makedirs(base_dir, exist_ok=True)
-    return base_dir
-
-
 def limpiar_analisis_expirados():
-    ahora = datetime.utcnow()
-    ttl = timedelta(hours=ANALYSIS_TTL_HOURS)
-    base_dir = obtener_storage_dir()
-
-    for nombre in os.listdir(base_dir):
-        ruta = os.path.join(base_dir, nombre)
-        if not os.path.isfile(ruta):
-            continue
-
-        try:
-            modificado = datetime.utcfromtimestamp(os.path.getmtime(ruta))
-        except OSError:
-            continue
-
-        if ahora - modificado > ttl:
-            try:
-                os.remove(ruta)
-            except OSError:
-                logger.debug("No se pudo limpiar archivo temporal %s", ruta, exc_info=True)
-
-
-def ruta_analisis(analysis_id):
-    if not re.fullmatch(r"[a-f0-9-]{36}", analysis_id or ""):
-        raise ValueError("Identificador de auditoría inválido.")
-    return os.path.join(obtener_storage_dir(), f"{analysis_id}.json")
+    limpiar_estados_temporales_expirados(STATE_NAMESPACE, ttl_hours=ANALYSIS_TTL_HOURS)
 
 
 def guardar_analisis(estado):
-    analysis_id = estado.get("analysis_id") or str(uuid.uuid4())
+    analysis_id = estado.get("analysis_id")
     estado["analysis_id"] = analysis_id
     estado["updated_at"] = datetime.utcnow().isoformat()
-
-    with open(ruta_analisis(analysis_id), "w", encoding="utf-8") as fh:
-        json.dump(estado, fh, ensure_ascii=False)
-
-    return analysis_id
+    return guardar_json_temporal(estado, namespace=STATE_NAMESPACE, state_id=analysis_id)
 
 
 def cargar_analisis(analysis_id):
-    if not analysis_id:
-        return None
-
-    ruta = ruta_analisis(analysis_id)
-    if not os.path.exists(ruta):
-        return None
-
-    with open(ruta, "r", encoding="utf-8") as fh:
-        return json.load(fh)
+    return cargar_json_temporal(analysis_id, namespace=STATE_NAMESPACE)
 
 
 def construir_advertencias_columnas(df, columnas_resueltas):

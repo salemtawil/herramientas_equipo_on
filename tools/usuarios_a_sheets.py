@@ -8,9 +8,12 @@ import unicodedata
 import pandas as pd
 import requests
 from flask import Blueprint, Response, current_app, render_template, request
-from itsdangerous import BadData, URLSafeSerializer
 
 from utils.archivos import _leer_csv_desde_bytes
+from utils.archivos import leer_bytes_archivo_csv
+from utils.estado_temporal import cargar_estado_temporal
+from utils.estado_temporal import guardar_estado_temporal
+from utils.estado_temporal import limpiar_estados_temporales_expirados
 from utils.turnos import cargar_turnos_fijos
 
 usuarios_a_sheets_bp = Blueprint("usuarios_a_sheets", __name__)
@@ -18,6 +21,8 @@ logger = logging.getLogger(__name__)
 
 FORM_KEY_PAYLOAD = "usuarios_a_sheets_payload"
 FORM_KEY_SISTEMA = "sistema"
+STATE_NAMESPACE = "usuarios_a_sheets"
+STATE_TTL_HOURS = 24
 
 SISTEMAS_PERFIL = {
     "compinche": {
@@ -338,43 +343,7 @@ def leer_csv_generico(archivo):
     if not archivo:
         raise ValueError("No se recibió ningún archivo.")
 
-    contenido = archivo.read()
-    archivo.seek(0)
-
-    if not contenido:
-        raise ValueError("El archivo está vacío.")
-
-    candidatos_encoding = ["utf-8-sig", "utf-8", "latin-1", "cp1252"]
-    candidatos_sep = [",", ";", "\t"]
-
-    ultimo_error = None
-
-    for encoding in candidatos_encoding:
-        try:
-            texto = contenido.decode(encoding)
-        except Exception:
-            continue
-
-        for sep in candidatos_sep:
-            try:
-                df = pd.read_csv(io.StringIO(texto), sep=sep)
-                if df is not None and len(df.columns) >= 1:
-                    df.columns = [str(c).strip() for c in df.columns]
-                    return df
-            except Exception as e:
-                ultimo_error = e
-
-    raise ValueError(f"No se pudo interpretar el CSV: {ultimo_error}")
-
-
-def leer_csv_generico(archivo):
-    if not archivo:
-        raise ValueError("No se recibió ningún archivo.")
-
-    contenido = archivo.read()
-    if hasattr(archivo, "seek"):
-        archivo.seek(0)
-
+    contenido = leer_bytes_archivo_csv(archivo)
     return _leer_csv_desde_bytes(contenido)
 
 
@@ -676,17 +645,17 @@ def enviar_a_apps_script(df, nombre_hoja):
 
 
 def serializar_resultado(df, resumen, regiones_sin_tz, sistema):
-    serializer = URLSafeSerializer(
-        current_app.secret_key,
-        salt="usuarios-a-sheets-payload",
-    )
-    return serializer.dumps(
+    return guardar_estado_temporal(
         {
             "df_json": df.to_json(orient="records", force_ascii=False),
             "resumen": resumen,
             "regiones_sin_tz": regiones_sin_tz,
             "sistema": resolver_sistema_perfil(sistema),
-        }
+        },
+        secret_key=current_app.secret_key,
+        salt="usuarios-a-sheets-payload",
+        namespace=STATE_NAMESPACE,
+        ttl_hours=STATE_TTL_HOURS,
     )
 
 
@@ -694,15 +663,12 @@ def cargar_desde_payload(payload):
     if not payload:
         return None, None, [], SISTEMA_DEFAULT
 
-    serializer = URLSafeSerializer(
-        current_app.secret_key,
+    item = cargar_estado_temporal(
+        payload,
+        secret_key=current_app.secret_key,
         salt="usuarios-a-sheets-payload",
+        namespace=STATE_NAMESPACE,
     )
-
-    try:
-        item = serializer.loads(payload)
-    except BadData:
-        return None, None, [], SISTEMA_DEFAULT
 
     if not item or "df_json" not in item:
         return None, None, [], SISTEMA_DEFAULT
@@ -714,6 +680,8 @@ def cargar_desde_payload(payload):
 
 @usuarios_a_sheets_bp.route("/usuarios-a-sheets", methods=["GET", "POST"])
 def usuarios_a_sheets():
+    limpiar_estados_temporales_expirados(STATE_NAMESPACE, ttl_hours=STATE_TTL_HOURS)
+
     mensaje = ""
     advertencia = ""
     tabla_previa = None

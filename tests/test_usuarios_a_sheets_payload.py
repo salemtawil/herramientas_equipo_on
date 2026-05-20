@@ -17,13 +17,15 @@ class UsuariosASheetsPayloadTests(unittest.TestCase):
                 df=pd.DataFrame([{"Nombre": "Ana", "Telefono": "123"}]),
                 resumen={"Filas originales": 1},
                 regiones_sin_tz=["Region X"],
+                sistema="compinche",
             )
 
-            df, resumen, regiones = cargar_desde_payload(payload)
+            df, resumen, regiones, sistema = cargar_desde_payload(payload)
 
             self.assertEqual(1, len(df))
             self.assertEqual({"Filas originales": 1}, resumen)
             self.assertEqual(["Region X"], regiones)
+            self.assertEqual("compinche", sistema)
 
     def test_payload_tampered_se_invalida(self):
         with app.app_context():
@@ -31,13 +33,15 @@ class UsuariosASheetsPayloadTests(unittest.TestCase):
                 df=pd.DataFrame([{"Nombre": "Ana"}]),
                 resumen={"Filas originales": 1},
                 regiones_sin_tz=[],
+                sistema="compinche",
             )
 
-            df, resumen, regiones = cargar_desde_payload(f"{payload}tampered")
+            df, resumen, regiones, sistema = cargar_desde_payload(f"{payload}tampered")
 
             self.assertIsNone(df)
             self.assertIsNone(resumen)
             self.assertEqual([], regiones)
+            self.assertEqual("compinche", sistema)
 
 
 if __name__ == "__main__":

@@ -8,6 +8,7 @@ from werkzeug.datastructures import FileStorage
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from utils.archivos import leer_csv_subido
+from utils.archivos import leer_bytes_archivo_csv
 
 
 class LeerCsvSubidoTests(unittest.TestCase):
@@ -50,6 +51,15 @@ class LeerCsvSubidoTests(unittest.TestCase):
 
         self.assertIn("Worktime", df.columns)
         self.assertEqual("01:15:00", df.iloc[0]["Worktime"])
+
+    def test_rechaza_archivo_mayor_al_limite(self):
+        contenido = b"123456"
+        archivo = FileStorage(stream=io.BytesIO(contenido), filename="grande.csv")
+
+        with self.assertRaises(ValueError) as error:
+            leer_bytes_archivo_csv(archivo, max_bytes=5)
+
+        self.assertIn("supera el limite permitido", str(error.exception))
 
 
 if __name__ == "__main__":

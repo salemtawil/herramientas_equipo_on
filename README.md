@@ -72,6 +72,13 @@ Antes de desplegar:
 
 ## Limitaciones conocidas
 
-- `usuarios_a_sheets` mantiene el resultado intermedio en un payload firmado enviado por formulario. Eso evita depender de memoria compartida entre requests, pero puede crecer con CSVs grandes.
+- `usuarios_a_sheets` y `auditoria_salientes` guardan estado temporal firmado. Si el estado es pequeno, viaja inline; si crece, se apoya en almacenamiento temporal del runtime.
+- `auditoria_csat` guarda su analisis temporal en almacenamiento efimero del runtime.
 - `usuarios_activos` depende de APIs externas y puede fallar por timeouts o credenciales vencidas.
 - El repo contiene una carpeta `tools/trash/` con scripts archivados que no forman parte del runtime activo.
+
+## Limites de CSV
+
+- Los CSV subidos se validan antes de procesarse con pandas.
+- Limite actual por archivo: `5 MB`.
+- Si el archivo supera ese tamano, la app devuelve un error funcional antes de intentar procesarlo.

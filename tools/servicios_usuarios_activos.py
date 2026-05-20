@@ -3,8 +3,12 @@ from zoneinfo import ZoneInfo
 
 from tools.api_compinche import obtener_metricas_compinche_api
 from tools.api_multiadmin import obtener_metricas_multiadmin
+from utils.estado_temporal import cargar_json_temporal
+from utils.estado_temporal import guardar_json_temporal
 
 EASTERN_TIMEZONE = ZoneInfo("America/New_York")
+SNAPSHOT_NAMESPACE = "usuarios_activos"
+SNAPSHOT_ID = "latest"
 
 
 def obtener_timestamp_eastern(formato="%Y-%m-%d %H:%M:%S"):
@@ -160,9 +164,63 @@ def _ejecutar_actualizacion_total():
     return list(estado.values())
 
 
+def _obtener_updated_at_desde_data(data):
+    for item in data:
+        updated_at = item.get("updated_at")
+        if updated_at and updated_at != "-":
+            return updated_at
+    return obtener_timestamp_eastern("%H:%M")
+
+
+def _guardar_snapshot(data):
+    snapshot = {
+        "data": data,
+        "updated_at": _obtener_updated_at_desde_data(data),
+        "source": "snapshot",
+    }
+    guardar_json_temporal(snapshot, namespace=SNAPSHOT_NAMESPACE, state_id=SNAPSHOT_ID)
+    return snapshot
+
+
+def _cargar_snapshot():
+    snapshot = cargar_json_temporal(SNAPSHOT_ID, namespace=SNAPSHOT_NAMESPACE)
+    if not isinstance(snapshot, dict):
+        return None
+    if not isinstance(snapshot.get("data"), list):
+        return None
+    return snapshot
+
+
+def iniciar_actualizacion_dashboard():
+    data = _ejecutar_actualizacion_total()
+    return _guardar_snapshot(data)
+
+
+def obtener_estado_inicial_dashboard():
+    snapshot = _cargar_snapshot()
+    if snapshot:
+        return snapshot
+
+    try:
+        return iniciar_actualizacion_dashboard()
+    except Exception:
+        return {
+            "data": list(_estado_base().values()),
+            "updated_at": "-",
+            "source": "base",
+        }
+
+
+def obtener_estado_actual_con_metadata():
+    snapshot = _cargar_snapshot()
+    if snapshot:
+        return snapshot
+    return obtener_estado_inicial_dashboard()
+
+
 def obtener_estado_actual():
-    return list(_estado_base().values())
+    return obtener_estado_actual_con_metadata()["data"]
 
 
 def iniciar_actualizacion():
-    return _ejecutar_actualizacion_total()
+    return iniciar_actualizacion_dashboard()["data"]

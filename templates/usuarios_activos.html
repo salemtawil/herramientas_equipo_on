@@ -10,7 +10,7 @@
       <div>
         <h1>Usuarios activos</h1>
         <p>Consulta el estado consolidado de cada sistema y actualiza los datos sin salir de la vista.</p>
-        <p id="general-updated">Ultima actualizacion general (ET): -</p>
+        <p id="general-updated">Ultima actualizacion general (ET): {{ updated_at_inicial or "-" }}</p>
       </div>
       <button type="button" id="actualizar-btn" onclick="actualizarDatos()">Actualizar</button>
     </div>
@@ -135,6 +135,10 @@
 
 {% block scripts %}
 <script>
+const usuariosActivosApiUrl = {{ url_for('usuarios_activos.api')|tojson }};
+const usuariosActivosActualizarUrl = {{ url_for('usuarios_activos.actualizar')|tojson }};
+window.__USUARIOS_ACTIVOS_INITIAL_STATE__ = {{ {"data": estado_inicial, "updated_at": updated_at_inicial}|tojson }};
+
 function formatUpdatedAt(value) {
   if (!value || value === "-") return "-";
 
@@ -212,7 +216,7 @@ function renderData(items, updatedAt) {
 
 async function consultarEstado() {
   try {
-    const response = await fetch("/usuarios-activos/api");
+    const response = await fetch(usuariosActivosApiUrl);
     const result = await response.json();
 
     if (result.success) {
@@ -241,7 +245,7 @@ async function actualizarDatos() {
       button.textContent = "Actualizando...";
     }
 
-    const response = await fetch("/usuarios-activos/actualizar", {
+    const response = await fetch(usuariosActivosActualizarUrl, {
       method: "POST"
     });
     const result = await response.json();
@@ -288,6 +292,12 @@ function initSystemLogos() {
 }
 
 initSystemLogos();
+if (window.__USUARIOS_ACTIVOS_INITIAL_STATE__) {
+  renderData(
+    window.__USUARIOS_ACTIVOS_INITIAL_STATE__.data || [],
+    window.__USUARIOS_ACTIVOS_INITIAL_STATE__.updated_at || "-",
+  );
+}
 consultarEstado();
 </script>
 {% endblock %}

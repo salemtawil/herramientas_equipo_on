@@ -7,7 +7,6 @@ import pandas as pd
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from tools.auditoria_salientes import (
-    ESTADO_AMBIGUO,
     ESTADO_COMPLETO,
     ESTADO_CONTESTADA,
     ESTADO_NO_CUMPLE,
@@ -25,7 +24,7 @@ class AuditoriaSalientesTests(unittest.TestCase):
                     "Agente": "Ana Perez",
                     "Numero llamado": "5551112222",
                     "Fecha llamada": "2026-05-10 09:00:00",
-                    "Duracion": "55",
+                    "Duracion": "80",
                     "dateAnswered": "2026-05-10 09:00:10",
                     "ticketId": "T1",
                 }
@@ -102,7 +101,7 @@ class AuditoriaSalientesTests(unittest.TestCase):
 
         self.assertEqual(ESTADO_NO_CUMPLE, df_casos.iloc[0]["Estado final"])
 
-    def test_clasifica_caso_ambiguo_con_un_solo_intento_entre_15_y_40(self):
+    def test_clasifica_caso_no_cumple_con_un_solo_intento_intermedio(self):
         df = pd.DataFrame(
             [
                 {
@@ -117,7 +116,7 @@ class AuditoriaSalientesTests(unittest.TestCase):
         df_preparado, _ = preparar_dataframe_historial(df)
         df_casos = analizar_casos(df_preparado)
 
-        self.assertEqual(ESTADO_AMBIGUO, df_casos.iloc[0]["Estado final"])
+        self.assertEqual(ESTADO_NO_CUMPLE, df_casos.iloc[0]["Estado final"])
 
     def test_cierra_caso_contestado_y_abre_uno_nuevo_despues(self):
         df = pd.DataFrame(
@@ -132,13 +131,13 @@ class AuditoriaSalientesTests(unittest.TestCase):
                     "Agente": "Ana Perez",
                     "Numero llamado": "5551112222",
                     "Fecha llamada": "2026-05-10 09:03:00",
-                    "Duracion": "65",
+                    "Duracion": "80",
                     "dateAnswered": "2026-05-10 09:03:15",
                 },
                 {
                     "Agente": "Ana Perez",
                     "Numero llamado": "5551112222",
-                    "Fecha llamada": "2026-05-10 09:07:00",
+                    "Fecha llamada": "2026-05-10 09:14:00",
                     "Duracion": "7",
                 },
             ]

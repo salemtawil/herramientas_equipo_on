@@ -8,6 +8,45 @@ logger = logging.getLogger(__name__)
 
 ENCODINGS_CANDIDATOS = ("utf-8-sig", "utf-8", "cp1252", "latin-1")
 SEPARADORES_CANDIDATOS = (None, ",", ";", "\t", "|")
+MAX_CSV_FILE_SIZE_BYTES = 5 * 1024 * 1024
+
+
+def formatear_tamano_bytes(num_bytes):
+    if num_bytes >= 1024 * 1024:
+        return f"{num_bytes / (1024 * 1024):.1f} MB"
+    if num_bytes >= 1024:
+        return f"{num_bytes / 1024:.1f} KB"
+    return f"{num_bytes} bytes"
+
+
+def leer_bytes_archivo_csv(file_storage, max_bytes=MAX_CSV_FILE_SIZE_BYTES):
+    if file_storage is None:
+        raise ValueError("No se recibio ningun archivo.")
+
+    stream = getattr(file_storage, "stream", None)
+    if stream and hasattr(stream, "tell") and hasattr(stream, "seek"):
+        posicion = stream.tell()
+        try:
+            stream.seek(0, io.SEEK_END)
+            tamano = stream.tell()
+        finally:
+            stream.seek(posicion)
+
+        if tamano > max_bytes:
+            raise ValueError(
+                f"El archivo supera el limite permitido de {formatear_tamano_bytes(max_bytes)}."
+            )
+
+    contenido = file_storage.read()
+    if hasattr(file_storage, "seek"):
+        file_storage.seek(0)
+
+    if len(contenido) > max_bytes:
+        raise ValueError(
+            f"El archivo supera el limite permitido de {formatear_tamano_bytes(max_bytes)}."
+        )
+
+    return contenido
 
 
 def _leer_csv_desde_bytes(contenido):
@@ -47,10 +86,7 @@ def _leer_csv_desde_bytes(contenido):
 
 
 def leer_csv_subido(file_storage):
-    contenido = file_storage.read()
-    if hasattr(file_storage, "seek"):
-        file_storage.seek(0)
-
+    contenido = leer_bytes_archivo_csv(file_storage)
     df = _leer_csv_desde_bytes(contenido)
     df = validar_columnas(df)
     return df
