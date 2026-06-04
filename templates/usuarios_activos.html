@@ -47,6 +47,7 @@
       <div class="stat-list">
         <div class="stat-line"><span>Usuarios</span><strong id="compinche-active">-</strong></div>
         <div class="stat-line"><span>Running</span><strong id="compinche-running">-</strong></div>
+        <div class="stat-line"><span>Promo</span><strong id="compinche-promo">-</strong></div>
       </div>
       <div class="system-card__footer">
         <span class="system-card__status" id="compinche-status">Pendiente</span>
@@ -229,6 +230,7 @@ function renderData(items, updatedAt) {
   if (compinche) {
     document.getElementById("compinche-active").textContent = compinche.active_users ?? "-";
     document.getElementById("compinche-running").textContent = compinche.running_users ?? "-";
+    document.getElementById("compinche-promo").textContent = compinche.active_by_promo_users ?? "-";
     renderSystemState("compinche", compinche);
   }
 

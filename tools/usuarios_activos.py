@@ -1,4 +1,5 @@
 from flask import Blueprint, render_template, jsonify
+from tools.api_compinche import obtener_diagnostico_promo_compinche
 from tools.servicios_usuarios_activos import (
     iniciar_actualizacion,
     obtener_estado_actual,
@@ -49,4 +50,19 @@ def actualizar():
         "data": data,
         "updated_at": estado.get("updated_at", "-"),
         "source": estado.get("source", "snapshot"),
+    })
+
+@usuarios_activos_bp.route("/compinche/promo-diagnostico")
+def compinche_promo_diagnostico():
+    try:
+        diagnostico = obtener_diagnostico_promo_compinche()
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e),
+        }), 500
+
+    return jsonify({
+        "success": True,
+        "data": diagnostico,
     })

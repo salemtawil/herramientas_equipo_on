@@ -6,6 +6,8 @@ from unittest.mock import patch
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from app import app
+from tools.api_compinche import obtener_diagnostico_promo_compinche
+from tools.api_compinche import obtener_metricas_compinche_api
 
 
 class UsuariosActivosTests(unittest.TestCase):
@@ -51,3 +53,56 @@ class UsuariosActivosTests(unittest.TestCase):
         self.assertIn('"source": "base"', html.replace("&#34;", '"'))
         compinche_api.assert_not_called()
         multiadmin_api.assert_not_called()
+
+    def test_compinche_calcula_usuarios_activos_con_promo(self):
+        usuarios = [
+            {
+                "phoneNumber": "1",
+                "goodStanding": True,
+                "status": "start",
+                "promo": True,
+            },
+            {
+                "phoneNumber": "2",
+                "goodStanding": True,
+                "status": "stop",
+                "promo": False,
+            },
+            {
+                "phoneNumber": "3",
+                "goodStanding": False,
+                "status": "start",
+                "promo": True,
+            },
+            {
+                "phoneNumber": "4",
+                "goodStanding": True,
+                "status": "start",
+                "promo": True,
+            },
+        ]
+        admins = [{"phoneNumber": "4"}]
+
+        with patch("tools.api_compinche._obtener_data_compinche", return_value=(usuarios, admins)):
+            metricas = obtener_metricas_compinche_api()
+
+        self.assertEqual(2, metricas["active_users"])
+        self.assertEqual(1, metricas["running_users"])
+        self.assertEqual(1, metricas["active_by_promo_users"])
+
+    def test_compinche_diagnostico_promo_no_expone_valores(self):
+        usuarios = [
+            {
+                "phoneNumber": "1",
+                "name": "Persona Demo",
+                "goodStanding": True,
+                "promoCode": "PROMO-SECRETA",
+            }
+        ]
+
+        with patch("tools.api_compinche._obtener_data_compinche", return_value=(usuarios, [])):
+            diagnostico = obtener_diagnostico_promo_compinche()
+
+        self.assertEqual(1, diagnostico["active_by_promo_users_detectado"])
+        self.assertEqual(["promoCode"], [item["campo"] for item in diagnostico["campos_promo_detectados"]])
+        self.assertNotIn("PROMO-SECRETA", str(diagnostico))
