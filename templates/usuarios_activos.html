@@ -170,6 +170,31 @@
       <div class="error" id="ready4drive-error"></div>
     </article>
   </section>
+
+  <section class="compinche-bonus-panel" id="compinche-bonus-panel" hidden>
+    <div class="compinche-bonus-panel__main">
+      <span class="compinche-bonus-panel__eyebrow">Compinche bonus</span>
+      <h2>Meta mensual</h2>
+      <p id="compinche-bonus-updated">Sin datos</p>
+    </div>
+    <div class="compinche-bonus-panel__progress" aria-label="Progreso de meta mensual">
+      <div class="compinche-bonus-panel__progress-bar" id="compinche-bonus-progress-bar"></div>
+    </div>
+    <div class="compinche-bonus-panel__stats">
+      <div>
+        <span>Actual</span>
+        <strong id="compinche-bonus-current">-</strong>
+      </div>
+      <div>
+        <span>Meta</span>
+        <strong id="compinche-bonus-goal">-</strong>
+      </div>
+      <div>
+        <span>Avance</span>
+        <strong id="compinche-bonus-percent">-</strong>
+      </div>
+    </div>
+  </section>
 </div>
 {% endblock %}
 
@@ -191,6 +216,37 @@ function formatUpdatedAt(value) {
 
   hours = hours % 12 || 12;
   return `${hours}:${minutes} ${suffix}`;
+}
+
+function formatMoney(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "-";
+  return "$" + Math.round(number).toLocaleString("en-US");
+}
+
+function formatPercent(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "-";
+  return `${Math.round(number * 10) / 10}%`;
+}
+
+function renderBonusStats(bonus) {
+  const panel = document.getElementById("compinche-bonus-panel");
+  if (!panel) return;
+
+  const hasBonus = bonus && typeof bonus === "object";
+  panel.hidden = !hasBonus;
+  if (!hasBonus) return;
+
+  const percent = Number(bonus.percentage_completed);
+  const safePercent = Number.isFinite(percent) ? Math.max(0, Math.min(percent, 100)) : 0;
+  const generatedAt = bonus.generated_at ? formatUpdatedAt(bonus.generated_at) : "-";
+
+  document.getElementById("compinche-bonus-current").textContent = formatMoney(bonus.total_gross_revenue);
+  document.getElementById("compinche-bonus-goal").textContent = formatMoney(bonus.goal_for_bonus);
+  document.getElementById("compinche-bonus-percent").textContent = formatPercent(bonus.percentage_completed);
+  document.getElementById("compinche-bonus-progress-bar").style.width = `${safePercent}%`;
+  document.getElementById("compinche-bonus-updated").textContent = generatedAt !== "-" ? `Generado: ${generatedAt}` : "Sin datos";
 }
 
 function renderSystemState(prefix, item) {
@@ -226,6 +282,7 @@ function renderData(items, updatedAt) {
   const ready4drive = items.find(item => item.system === "ready4drive");
 
   document.getElementById("general-updated").textContent = `Última actualización general (ET): ${formatUpdatedAt(updatedAt)}`;
+  renderBonusStats(compinche?.bonus_stats);
 
   if (compinche) {
     document.getElementById("compinche-active").textContent = compinche.active_users ?? "-";

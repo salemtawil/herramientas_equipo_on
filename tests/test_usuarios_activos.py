@@ -60,35 +60,41 @@ class UsuariosActivosTests(unittest.TestCase):
                 "phoneNumber": "1",
                 "goodStanding": True,
                 "status": "start",
-                "promo": True,
+                "standingType": "promo_trial",
             },
             {
                 "phoneNumber": "2",
                 "goodStanding": True,
                 "status": "stop",
-                "promo": False,
+                "standingType": "paid",
             },
             {
                 "phoneNumber": "3",
                 "goodStanding": False,
                 "status": "start",
-                "promo": True,
+                "standingType": "promo_trial",
             },
             {
                 "phoneNumber": "4",
                 "goodStanding": True,
                 "status": "start",
-                "promo": True,
+                "standingType": "promo_trial",
             },
         ]
         admins = [{"phoneNumber": "4"}]
 
-        with patch("tools.api_compinche._obtener_data_compinche", return_value=(usuarios, admins)):
+        bonus_stats = {"percentage_completed": 71.2}
+
+        with patch("tools.api_compinche._obtener_data_compinche", return_value=(usuarios, admins)), patch(
+            "tools.api_compinche._obtener_bonus_stats_compinche",
+            return_value=bonus_stats,
+        ):
             metricas = obtener_metricas_compinche_api()
 
         self.assertEqual(2, metricas["active_users"])
         self.assertEqual(1, metricas["running_users"])
         self.assertEqual(1, metricas["active_by_promo_users"])
+        self.assertEqual(bonus_stats, metricas["bonus_stats"])
 
     def test_compinche_diagnostico_promo_no_expone_valores(self):
         usuarios = [
@@ -96,7 +102,7 @@ class UsuariosActivosTests(unittest.TestCase):
                 "phoneNumber": "1",
                 "name": "Persona Demo",
                 "goodStanding": True,
-                "promoCode": "PROMO-SECRETA",
+                "standingType": "promo_trial",
             }
         ]
 
@@ -104,5 +110,9 @@ class UsuariosActivosTests(unittest.TestCase):
             diagnostico = obtener_diagnostico_promo_compinche()
 
         self.assertEqual(1, diagnostico["active_by_promo_users_detectado"])
-        self.assertEqual(["promoCode"], [item["campo"] for item in diagnostico["campos_promo_detectados"]])
-        self.assertNotIn("PROMO-SECRETA", str(diagnostico))
+        self.assertEqual(
+            [{"standingType": "promo_trial", "usuarios": 1, "usuarios_activos": 1}],
+            diagnostico["standing_type_counts"],
+        )
+        self.assertNotIn("Persona Demo", str(diagnostico))
+        self.assertNotIn("phoneNumber': '1", str(diagnostico))

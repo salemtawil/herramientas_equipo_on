@@ -5,6 +5,7 @@ import boto3
 
 COMPINCHE_USERS_URL = "https://api.compinche.io/api/flex/v1/all-users-table"
 COMPINCHE_ADMINS_URL = "https://api.compinche.io/api/flex/v1/admin"
+COMPINCHE_BONUS_URL = "https://api.compinche.io/api/flex/v1/admin/bonus"
 
 COMPINCHE_ID_TOKEN = os.getenv("COMPINCHE_ID_TOKEN", "")
 COMPINCHE_REFRESH_TOKEN = os.getenv("COMPINCHE_REFRESH_TOKEN", "")
@@ -58,6 +59,9 @@ def obtener_admins_compinche(token):
     data = _request_json(COMPINCHE_ADMINS_URL, token)
     return data if isinstance(data, list) else []
 
+def obtener_bonus_compinche(token):
+    return _normalizar_bonus_compinche(_request_json(COMPINCHE_BONUS_URL, token))
+
 def _obtener_data_compinche():
     token = COMPINCHE_ID_TOKEN
 
@@ -71,6 +75,18 @@ def _obtener_data_compinche():
         admins = obtener_admins_compinche(token)
 
     return usuarios, admins
+
+def _obtener_bonus_stats_compinche():
+    token = COMPINCHE_ID_TOKEN
+
+    try:
+        return obtener_bonus_compinche(token)
+    except Exception:
+        try:
+            nuevos = refrescar_compinche_token()
+            return obtener_bonus_compinche(nuevos["id_token"])
+        except Exception:
+            return None
 
 def _usuarios_sin_admins(usuarios, admins):
     admin_phones = {
@@ -117,7 +133,32 @@ def _campos_promo(user):
     ]
 
 def _usuario_tiene_promo(user):
+    standing_type = user.get("standingType")
+    if isinstance(standing_type, str) and standing_type.startswith("promo"):
+        return True
     return any(_valor_activo(value) for _, value in _campos_promo(user))
+
+def _to_number(value):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+def _normalizar_bonus_compinche(data):
+    if not isinstance(data, dict):
+        return None
+
+    return {
+        "total_gross_revenue": _to_number(data.get("totalGrossRevenue")),
+        "goal_for_bonus": _to_number(data.get("goalForBonus")),
+        "percentage_completed": _to_number(data.get("percentageCompleted")),
+        "generated_at": data.get("generatedAtTimestamp"),
+        "next_refresh_at": data.get("nextRefreshTimestamp"),
+        "bonus_end_at": data.get("bonusEndTimestamp"),
+        "compinche_gross_revenue": _to_number(data.get("compincheGrossRevenue")),
+        "paripe_gross_revenue": _to_number(data.get("paripeGrossRevenue")),
+        "other_gross_revenue": _to_number(data.get("otherGrossRevenue")),
+    }
 
 def obtener_metricas_compinche_api():
     usuarios, admins = _obtener_data_compinche()
@@ -133,7 +174,14 @@ def obtener_metricas_compinche_api():
         if bool(user.get("goodStanding")) and user.get("status") == "start"
     )
 
-    hay_campos_promo = any(_campos_promo(user) for user in usuarios_filtrados)
+    hay_campos_promo = any(
+        _campos_promo(user)
+        or (
+            isinstance(user.get("standingType"), str)
+            and user.get("standingType").startswith("promo")
+        )
+        for user in usuarios_filtrados
+    )
     active_by_promo_users = None
     if hay_campos_promo:
         active_by_promo_users = sum(
@@ -145,6 +193,7 @@ def obtener_metricas_compinche_api():
         "active_users": active_users,
         "running_users": running_users,
         "active_by_promo_users": active_by_promo_users,
+        "bonus_stats": _obtener_bonus_stats_compinche(),
     }
 
 def obtener_diagnostico_promo_compinche():
@@ -157,9 +206,24 @@ def obtener_diagnostico_promo_compinche():
         for key in user.keys()
     })
     resumen_promo = {}
+    standing_type_counts = {}
 
     for user in usuarios_filtrados:
         is_active = bool(user.get("goodStanding"))
+        standing_type = user.get("standingType")
+        if isinstance(standing_type, str):
+            item = standing_type_counts.setdefault(
+                standing_type,
+                {
+                    "standingType": standing_type,
+                    "usuarios": 0,
+                    "usuarios_activos": 0,
+                },
+            )
+            item["usuarios"] += 1
+            if is_active:
+                item["usuarios_activos"] += 1
+
         for path, value in _campos_promo(user):
             item = resumen_promo.setdefault(
                 path,
@@ -194,6 +258,10 @@ def obtener_diagnostico_promo_compinche():
         ),
         "campos_top_level": campos_top_level,
         "campos_promo_detectados": campos_promo,
+        "standing_type_counts": sorted(
+            standing_type_counts.values(),
+            key=lambda item: item["standingType"],
+        ),
         "nota": "No incluye valores de campos, telefonos, nombres, emails ni tokens.",
     }
 

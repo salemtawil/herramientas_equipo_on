@@ -2077,6 +2077,84 @@ th.desc::after {
   font-size: 12px;
 }
 
+.users-active-page .compinche-bonus-panel {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.8fr) minmax(220px, 1.1fr) minmax(280px, 1.2fr);
+  gap: 14px;
+  align-items: center;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, #f59f0a 28%, var(--border));
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 94%, transparent), var(--surface-strong)),
+    radial-gradient(circle at top right, color-mix(in srgb, #f59f0a 14%, transparent), transparent 42%);
+  min-width: 0;
+}
+
+.users-active-page .compinche-bonus-panel[hidden] {
+  display: none;
+}
+
+.users-active-page .compinche-bonus-panel__main {
+  display: grid;
+  gap: 3px;
+}
+
+.users-active-page .compinche-bonus-panel__eyebrow,
+.users-active-page .compinche-bonus-panel__stats span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.users-active-page .compinche-bonus-panel h2 {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.15;
+}
+
+.users-active-page .compinche-bonus-panel p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.users-active-page .compinche-bonus-panel__progress {
+  height: 12px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--border) 72%, var(--surface-muted));
+}
+
+.users-active-page .compinche-bonus-panel__progress-bar {
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #f59f0a, #22b573);
+  transition: width 0.24s ease;
+}
+
+.users-active-page .compinche-bonus-panel__stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.users-active-page .compinche-bonus-panel__stats div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.users-active-page .compinche-bonus-panel__stats strong {
+  color: var(--title);
+  font-size: 18px;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
 .reporte-agentes-page .agente-lista,
 .usuarios-sheets-page .agente-lista {
   max-height: 260px;
@@ -2273,6 +2351,10 @@ th.desc::after {
     width: 100%;
     justify-content: flex-start;
   }
+
+  .users-active-page .compinche-bonus-panel {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 640px) {
@@ -2332,5 +2414,13 @@ th.desc::after {
 
   .users-active-page .system-card__footer {
     flex-wrap: wrap;
+  }
+
+  .users-active-page .compinche-bonus-panel__stats {
+    grid-template-columns: 1fr;
+  }
+
+  .users-active-page .compinche-bonus-panel__stats strong {
+    white-space: normal;
   }
 }
