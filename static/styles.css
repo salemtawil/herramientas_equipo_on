@@ -2055,6 +2055,21 @@ th.desc::after {
   font-size: 14px;
 }
 
+.users-active-page .stat-list--compinche {
+  gap: 5px;
+}
+
+.users-active-page .stat-list--compinche .stat-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 6px 7px;
+}
+
+.users-active-page .stat-list--compinche .stat-line span {
+  white-space: normal;
+  line-height: 1.1;
+}
+
 .users-active-page .system-card__footer {
   margin-top: 10px;
   padding-top: 8px;
