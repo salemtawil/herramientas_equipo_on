@@ -45,7 +45,7 @@
         </div>
       </div>
       <div class="stat-list">
-        <div class="stat-line"><span>Usuarios</span><strong id="compinche-active">-</strong></div>
+        <div class="stat-line"><span>Reales</span><strong id="compinche-active">-</strong></div>
         <div class="stat-line"><span>Running</span><strong id="compinche-running">-</strong></div>
         <div class="stat-line"><span>Promo</span><strong id="compinche-promo">-</strong></div>
       </div>
@@ -230,6 +230,14 @@ function formatPercent(value) {
   return `${Math.round(number * 10) / 10}%`;
 }
 
+function calcularUsuariosReales(activeUsers, promoUsers) {
+  const active = Number(activeUsers);
+  const promo = Number(promoUsers);
+  if (!Number.isFinite(active)) return "-";
+  if (!Number.isFinite(promo)) return active;
+  return Math.max(active - promo, 0);
+}
+
 function renderBonusStats(bonus) {
   const panel = document.getElementById("compinche-bonus-panel");
   if (!panel) return;
@@ -285,7 +293,10 @@ function renderData(items, updatedAt) {
   renderBonusStats(compinche?.bonus_stats);
 
   if (compinche) {
-    document.getElementById("compinche-active").textContent = compinche.active_users ?? "-";
+    document.getElementById("compinche-active").textContent = calcularUsuariosReales(
+      compinche.active_users,
+      compinche.active_by_promo_users,
+    );
     document.getElementById("compinche-running").textContent = compinche.running_users ?? "-";
     document.getElementById("compinche-promo").textContent = compinche.active_by_promo_users ?? "-";
     renderSystemState("compinche", compinche);
