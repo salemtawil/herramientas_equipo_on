@@ -4,14 +4,21 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Herramientas{% endblock %}</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v='17') }}">
-  <script src="{{ url_for('static', filename='app.js', v='2') }}" defer></script>
+  <script>
+    try {
+      if (localStorage.getItem("sidebarCollapsed") === "true") {
+        document.documentElement.classList.add("has-sidebar-collapsed");
+      }
+    } catch (error) {}
+  </script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v='18') }}">
+  <script src="{{ url_for('static', filename='app.js', v='3') }}" defer></script>
   {% block head_extra %}{% endblock %}
 </head>
 <body>
   {% set endpoint = request.endpoint or '' %}
-  <div class="app-shell">
-    <aside class="app-sidebar">
+  <div class="app-shell" data-sidebar-shell>
+    <aside class="app-sidebar" id="app-sidebar">
       <div class="app-sidebar__header">
         <a class="app-brand" href="{{ url_for('inicio') }}">Herramientas Equipo</a>
         <p class="app-subtitle">Admin server-rendered con patrones compartidos, tablas consistentes y tema global.</p>
@@ -65,6 +72,15 @@
         </div>
 
         <div class="app-topbar__actions">
+          <button
+            type="button"
+            class="btn btn-ghost sidebar-toggle"
+            data-sidebar-toggle
+            aria-controls="app-sidebar"
+            aria-expanded="true"
+          >
+            Ocultar menu
+          </button>
           {% if endpoint != 'inicio' %}
             <button
               type="button"

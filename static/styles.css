@@ -98,6 +98,7 @@ a {
   grid-template-columns: 288px minmax(0, 1fr);
   width: 100%;
   min-width: 0;
+  transition: grid-template-columns 0.22s ease;
 }
 
 .app-topbar {
@@ -129,6 +130,29 @@ a {
     linear-gradient(180deg, color-mix(in srgb, var(--surface) 92%, transparent), color-mix(in srgb, var(--bg-elevated) 84%, transparent)),
     radial-gradient(circle at top left, rgba(31, 79, 120, 0.14), transparent 38%);
   backdrop-filter: blur(18px);
+  overflow: hidden auto;
+  transition: opacity 0.18s ease, padding 0.22s ease, transform 0.22s ease;
+}
+
+.app-shell.is-sidebar-collapsed {
+  grid-template-columns: 0 minmax(0, 1fr);
+}
+
+html.has-sidebar-collapsed .app-shell {
+  grid-template-columns: 0 minmax(0, 1fr);
+}
+
+.app-shell.is-sidebar-collapsed .app-sidebar,
+html.has-sidebar-collapsed .app-sidebar {
+  padding-inline: 0;
+  border-right-width: 0;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-12px);
+}
+
+.sidebar-toggle {
+  white-space: nowrap;
 }
 
 .app-sidebar__header,
@@ -2098,12 +2122,28 @@ th.desc::after {
     grid-template-columns: 1fr;
   }
 
+  .app-shell.is-sidebar-collapsed {
+    grid-template-columns: 1fr;
+  }
+
+  html.has-sidebar-collapsed .app-shell {
+    grid-template-columns: 1fr;
+  }
+
   .app-sidebar {
     position: static;
     height: auto;
     border-right: none;
     border-bottom: 1px solid var(--border);
     padding: 16px 20px;
+  }
+
+  .app-shell.is-sidebar-collapsed .app-sidebar,
+  html.has-sidebar-collapsed .app-sidebar {
+    height: 0;
+    padding-block: 0;
+    border-bottom-width: 0;
+    transform: translateY(-8px);
   }
 
   .app-topbar {
