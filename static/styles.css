@@ -1977,72 +1977,72 @@ th.desc::after {
 
 .users-active-page .system-grid {
   align-items: stretch;
-  grid-template-columns: repeat(6, minmax(128px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
   overflow-x: auto;
-  padding-bottom: 4px;
+  padding-bottom: 6px;
 }
 
 .users-active-page .system-card {
-  padding: 12px;
-  min-width: 128px;
+  padding: 18px;
+  min-width: 220px;
 }
 
 .users-active-page .system-card::before {
-  width: 3px;
+  width: 4px;
 }
 
 .users-active-page .system-card::after {
-  inset-inline: 12px;
+  inset-inline: 18px;
 }
 
 .users-active-page .system-card__header {
-  gap: 8px;
-  margin-bottom: 10px;
+  gap: 12px;
+  margin-bottom: 14px;
 }
 
 .users-active-page .system-card__brand {
-  gap: 8px;
+  gap: 12px;
 }
 
 .users-active-page .system-card__logo-wrap,
 .users-active-page .system-card__logo,
 .users-active-page .system-card__logo-image {
-  width: 34px;
-  height: 34px;
+  width: 46px;
+  height: 46px;
 }
 
 .users-active-page .system-card__logo-wrap {
-  flex-basis: 34px;
+  flex-basis: 46px;
 }
 
 .users-active-page .system-card__logo,
 .users-active-page .system-card__logo-image {
-  border-radius: 11px;
+  border-radius: 14px;
 }
 
 .users-active-page .system-card__logo {
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .users-active-page .system-card__logo-image {
-  padding: 5px;
+  padding: 7px;
 }
 
 .users-active-page .system-card__title {
-  font-size: 15px;
+  font-size: 18px;
   line-height: 1.15;
 }
 
 .users-active-page .stat-list {
-  gap: 6px;
+  gap: 10px;
 }
 
 .users-active-page .stat-line {
-  gap: 6px;
-  padding: 7px 8px;
+  gap: 10px;
+  padding: 10px 12px;
   align-items: center;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .users-active-page .stat-line span {
@@ -2052,21 +2052,21 @@ th.desc::after {
 }
 
 .users-active-page .stat-line strong {
-  font-size: 14px;
+  font-size: 18px;
 }
 
 .users-active-page .stat-list--compinche {
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
+  gap: 10px;
 }
 
 .users-active-page .stat-list--compinche .stat-line {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 2px;
+  gap: 4px;
   align-items: start;
-  min-height: 48px;
-  padding: 6px 7px;
+  min-height: 62px;
+  padding: 10px 12px;
 }
 
 .users-active-page .stat-list--compinche .stat-line span {
@@ -2075,24 +2075,24 @@ th.desc::after {
 }
 
 .users-active-page .stat-list--compinche .stat-line strong {
-  font-size: 16px;
+  font-size: 20px;
   line-height: 1;
 }
 
 .users-active-page .system-card__footer {
-  margin-top: 10px;
-  padding-top: 8px;
-  gap: 6px;
+  margin-top: 14px;
+  padding-top: 12px;
+  gap: 10px;
 }
 
 .users-active-page .system-card__status {
   min-width: 0;
-  padding: 4px 7px;
-  font-size: 9px;
+  padding: 6px 9px;
+  font-size: 11px;
 }
 
 .users-active-page .system-card__updated {
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .users-active-page .error {
@@ -2421,13 +2421,13 @@ th.desc::after {
   }
 
   .users-active-page .system-grid {
-    grid-template-columns: repeat(6, minmax(118px, 1fr));
-    gap: 8px;
+    grid-template-columns: repeat(6, minmax(200px, 1fr));
+    gap: 12px;
   }
 
   .users-active-page .system-card {
-    min-width: 118px;
-    padding: 10px;
+    min-width: 200px;
+    padding: 16px;
   }
 
   .users-active-page .system-card__header,
