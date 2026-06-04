@@ -57,7 +57,8 @@
 
     document.querySelectorAll("[data-sidebar-toggle]").forEach((button) => {
       button.setAttribute("aria-expanded", collapsed ? "false" : "true");
-      button.textContent = collapsed ? "Mostrar menu" : "Ocultar menu";
+      button.setAttribute("aria-label", collapsed ? "Mostrar menu" : "Ocultar menu");
+      button.setAttribute("title", collapsed ? "Mostrar menu" : "Ocultar menu");
     });
   }
 

@@ -11,8 +11,8 @@
       }
     } catch (error) {}
   </script>
-  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v='18') }}">
-  <script src="{{ url_for('static', filename='app.js', v='3') }}" defer></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v='19') }}">
+  <script src="{{ url_for('static', filename='app.js', v='4') }}" defer></script>
   {% block head_extra %}{% endblock %}
 </head>
 <body>
@@ -20,8 +20,21 @@
   <div class="app-shell" data-sidebar-shell>
     <aside class="app-sidebar" id="app-sidebar">
       <div class="app-sidebar__header">
-        <a class="app-brand" href="{{ url_for('inicio') }}">Herramientas Equipo</a>
-        <p class="app-subtitle">Admin server-rendered con patrones compartidos, tablas consistentes y tema global.</p>
+        <div class="app-sidebar__intro">
+          <a class="app-brand" href="{{ url_for('inicio') }}">Herramientas Equipo</a>
+          <p class="app-subtitle">Admin server-rendered con patrones compartidos, tablas consistentes y tema global.</p>
+        </div>
+        <button
+          type="button"
+          class="sidebar-icon-toggle"
+          data-sidebar-toggle
+          aria-controls="app-sidebar"
+          aria-expanded="true"
+          aria-label="Ocultar menu"
+          title="Ocultar menu"
+        >
+          <span aria-hidden="true"></span>
+        </button>
       </div>
 
       <nav class="app-sidebar__nav" aria-label="Navegación principal">
@@ -72,15 +85,6 @@
         </div>
 
         <div class="app-topbar__actions">
-          <button
-            type="button"
-            class="btn btn-ghost sidebar-toggle"
-            data-sidebar-toggle
-            aria-controls="app-sidebar"
-            aria-expanded="true"
-          >
-            Ocultar menu
-          </button>
           {% if endpoint != 'inicio' %}
             <button
               type="button"
