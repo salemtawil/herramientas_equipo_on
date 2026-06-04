@@ -1882,6 +1882,104 @@ th.desc::after {
 
 .users-active-page .system-grid {
   align-items: stretch;
+  grid-template-columns: repeat(6, minmax(128px, 1fr));
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.users-active-page .system-card {
+  padding: 12px;
+  min-width: 128px;
+}
+
+.users-active-page .system-card::before {
+  width: 3px;
+}
+
+.users-active-page .system-card::after {
+  inset-inline: 12px;
+}
+
+.users-active-page .system-card__header {
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.users-active-page .system-card__brand {
+  gap: 8px;
+}
+
+.users-active-page .system-card__logo-wrap,
+.users-active-page .system-card__logo,
+.users-active-page .system-card__logo-image {
+  width: 34px;
+  height: 34px;
+}
+
+.users-active-page .system-card__logo-wrap {
+  flex-basis: 34px;
+}
+
+.users-active-page .system-card__logo,
+.users-active-page .system-card__logo-image {
+  border-radius: 11px;
+}
+
+.users-active-page .system-card__logo {
+  font-size: 12px;
+}
+
+.users-active-page .system-card__logo-image {
+  padding: 5px;
+}
+
+.users-active-page .system-card__title {
+  font-size: 15px;
+  line-height: 1.15;
+}
+
+.users-active-page .stat-list {
+  gap: 6px;
+}
+
+.users-active-page .stat-line {
+  gap: 6px;
+  padding: 7px 8px;
+  align-items: center;
+  font-size: 12px;
+}
+
+.users-active-page .stat-line span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.users-active-page .stat-line strong {
+  font-size: 14px;
+}
+
+.users-active-page .system-card__footer {
+  margin-top: 10px;
+  padding-top: 8px;
+  gap: 6px;
+}
+
+.users-active-page .system-card__status {
+  min-width: 0;
+  padding: 4px 7px;
+  font-size: 9px;
+}
+
+.users-active-page .system-card__updated {
+  font-size: 11px;
+}
+
+.users-active-page .error {
+  min-height: 16px;
+  margin-top: 6px;
+  font-size: 12px;
 }
 
 .reporte-agentes-page .agente-lista,
@@ -2098,5 +2196,25 @@ th.desc::after {
   .comparativa-toolbar,
   .sheet-link-box {
     align-items: stretch;
+  }
+
+  .users-active-page .system-grid {
+    grid-template-columns: repeat(6, minmax(118px, 1fr));
+    gap: 8px;
+  }
+
+  .users-active-page .system-card {
+    min-width: 118px;
+    padding: 10px;
+  }
+
+  .users-active-page .system-card__header,
+  .users-active-page .system-card__footer {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .users-active-page .system-card__footer {
+    flex-wrap: wrap;
   }
 }
