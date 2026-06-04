@@ -176,7 +176,7 @@
 <script>
 const usuariosActivosApiUrl = {{ url_for('usuarios_activos.api')|tojson }};
 const usuariosActivosActualizarUrl = {{ url_for('usuarios_activos.actualizar')|tojson }};
-window.__USUARIOS_ACTIVOS_INITIAL_STATE__ = {{ {"data": estado_inicial, "updated_at": updated_at_inicial}|tojson }};
+window.__USUARIOS_ACTIVOS_INITIAL_STATE__ = {{ {"data": estado_inicial, "updated_at": updated_at_inicial, "source": source_inicial}|tojson }};
 
 function formatUpdatedAt(value) {
   if (!value || value === "-") return "-";
@@ -283,9 +283,11 @@ async function actualizarDatos() {
   sistemas.forEach(nombre => {
     const error = document.getElementById(`${nombre}-error`);
     const card = document.getElementById(`card-${nombre}`);
+    const status = document.getElementById(`${nombre}-status`);
 
     if (error) error.textContent = "";
     if (card) card.classList.remove("system-card--error");
+    if (status) status.textContent = "Actualizando";
   });
 
   try {
@@ -307,7 +309,7 @@ async function actualizarDatos() {
   } finally {
     if (button) {
       button.disabled = false;
-      button.textContent = "Actualizar";
+      button.textContent = "Actualizar datos";
     }
   }
 }
@@ -347,6 +349,7 @@ if (window.__USUARIOS_ACTIVOS_INITIAL_STATE__) {
     window.__USUARIOS_ACTIVOS_INITIAL_STATE__.updated_at || "-",
   );
 }
-consultarEstado();
+
+window.setTimeout(actualizarDatos, 0);
 </script>
 {% endblock %}

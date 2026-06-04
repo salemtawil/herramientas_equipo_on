@@ -20,22 +20,33 @@ def index():
         "usuarios_activos.html",
         estado_inicial=estado_inicial.get("data", []),
         updated_at_inicial=estado_inicial.get("updated_at", "-"),
+        source_inicial=estado_inicial.get("source", "base"),
     )
 
 @usuarios_activos_bp.route("/api")
 def api():
     estado = obtener_estado_actual_con_metadata()
+    data = estado.get("data")
+    if data is None:
+        data = obtener_estado_actual()
+
     return jsonify({
         "success": True,
-        "data": estado.get("data", obtener_estado_actual()),
+        "data": data,
         "updated_at": estado.get("updated_at", "-"),
+        "source": estado.get("source", "base"),
     })
 
 @usuarios_activos_bp.route("/actualizar", methods=["POST"])
 def actualizar():
     estado = iniciar_actualizacion_dashboard()
+    data = estado.get("data")
+    if data is None:
+        data = iniciar_actualizacion()
+
     return jsonify({
         "success": True,
-        "data": estado.get("data", iniciar_actualizacion()),
+        "data": data,
         "updated_at": estado.get("updated_at", "-"),
+        "source": estado.get("source", "snapshot"),
     })

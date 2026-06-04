@@ -34,3 +34,20 @@ class UsuariosActivosTests(unittest.TestCase):
         self.assertEqual(200, response.status_code)
         self.assertIn("window.__USUARIOS_ACTIVOS_INITIAL_STATE__", html)
         self.assertIn("09:15", html)
+
+    def test_index_no_actualiza_si_no_hay_snapshot(self):
+        with patch(
+            "tools.servicios_usuarios_activos.cargar_json_temporal",
+            return_value=None,
+        ), patch(
+            "tools.servicios_usuarios_activos.obtener_metricas_compinche_api",
+        ) as compinche_api, patch(
+            "tools.servicios_usuarios_activos.obtener_metricas_multiadmin",
+        ) as multiadmin_api:
+            response = self.client.get("/usuarios-activos/")
+
+        html = response.get_data(as_text=True)
+        self.assertEqual(200, response.status_code)
+        self.assertIn('"source": "base"', html.replace("&#34;", '"'))
+        compinche_api.assert_not_called()
+        multiadmin_api.assert_not_called()

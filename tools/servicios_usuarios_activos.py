@@ -201,21 +201,22 @@ def obtener_estado_inicial_dashboard():
     if snapshot:
         return snapshot
 
-    try:
-        return iniciar_actualizacion_dashboard()
-    except Exception:
-        return {
-            "data": list(_estado_base().values()),
-            "updated_at": "-",
-            "source": "base",
-        }
+    return {
+        "data": list(_estado_base().values()),
+        "updated_at": "-",
+        "source": "base",
+    }
 
 
 def obtener_estado_actual_con_metadata():
     snapshot = _cargar_snapshot()
     if snapshot:
         return snapshot
-    return obtener_estado_inicial_dashboard()
+    return {
+        "data": list(_estado_base().values()),
+        "updated_at": "-",
+        "source": "base",
+    }
 
 
 def obtener_estado_actual():
