@@ -619,6 +619,18 @@ def auditar_estado_con_ia(estado):
             resultado = auditar_fila_con_ia(fila, config)
             aplicar_resultado_ia(fila, resultado, config["model"])
             auditadas += 1
+        except requests.exceptions.HTTPError as exc:
+            status_code = exc.response.status_code if exc.response is not None else None
+            if status_code in {401, 403}:
+                advertencias.append(
+                    "OpenAI rechazó la credencial. Revisa que OPENAI_API_KEY sea una secret key válida, "
+                    "que no tenga espacios/comillas extra, y reinicia Flask después de configurarla."
+                )
+                break
+            logger.exception("Error auditando fila CSAT con IA")
+            advertencias.append(
+                f"No se pudo auditar con IA la fila {fila.get('row_id')}: {exc}"
+            )
         except Exception as exc:
             logger.exception("Error auditando fila CSAT con IA")
             advertencias.append(
