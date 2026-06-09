@@ -93,7 +93,7 @@
 
     <div class="top-space">
       {% if payload_cache %}
-      <form method="post" class="acciones-barra" data-processing-message="Preparando CSV del analisis..." data-sync-turnos="true">
+      <form method="post" class="acciones-barra" data-sync-turnos="true">
         <input type="hidden" name="auditoria_salientes_payload" value="{{ payload_cache }}">
         <input type="hidden" name="usar_filtro_turnos" value="1">
         <div data-turnos-hidden-target></div>
@@ -166,7 +166,7 @@
 
     <div class="top-space">
       {% if payload_cache %}
-      <form method="post" class="acciones-barra" data-processing-message="Preparando CSV del analisis...">
+      <form method="post" class="acciones-barra">
         <input type="hidden" name="auditoria_salientes_payload" value="{{ payload_cache }}">
         <button type="submit" name="accion" value="descargar_detalle_casos" class="btn secondary">
           Descargar detalle de casos
@@ -233,7 +233,7 @@
 
     <div class="top-space">
       {% if payload_cache %}
-      <form method="post" data-processing-message="Aplicando filtro de turnos..." data-turnos-form="true">
+      <form method="post" data-turnos-form="true">
         <input type="hidden" name="auditoria_salientes_payload" value="{{ payload_cache }}">
         <input type="hidden" name="usar_filtro_turnos" value="1">
 
