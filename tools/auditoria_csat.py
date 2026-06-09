@@ -159,7 +159,7 @@ ANALYSIS_TTL_HOURS = 24
 STATE_NAMESPACE = "auditoria_csat"
 OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
 OPENAI_CSAT_MODEL_DEFAULT = "gpt-4.1-mini"
-OPENAI_CSAT_MAX_CASES_DEFAULT = 15
+OPENAI_CSAT_MAX_CASES_DEFAULT = 10
 OPENAI_CSAT_MAX_TRANSCRIPT_CHARS = 6000
 OPENAI_REQUEST_TIMEOUT = 45
 
@@ -447,14 +447,15 @@ def limitar_texto(valor, max_chars):
     return texto[:max_chars] + "\n[Texto truncado por límite operativo]"
 
 
-def construir_payload_auditoria_ia(fila):
+def construir_caso_auditoria_ia(fila):
     transcript = limitar_texto(
         fila.get("transcripcion_conversacion"),
         OPENAI_CSAT_MAX_TRANSCRIPT_CHARS,
     )
     fuente = "transcripcion_csv" if transcript else "comentario_csv_sin_transcript"
 
-    contenido = {
+    return {
+        "row_id": fila.get("row_id"),
         "rating": fila.get("calificacion_visible"),
         "tipo_rating": fila.get("tipo_rating"),
         "agente": fila.get("agente"),
@@ -467,6 +468,22 @@ def construir_payload_auditoria_ia(fila):
         "motivos_permitidos": MOTIVOS_INCONFORMIDAD,
     }
 
+
+def construir_instrucciones_auditoria_ia():
+    return (
+        "Audita valoraciones CSAT negativas de soporte. "
+        "Decide si cada negativo debe excluirse del CSAT del agente. "
+        "Usa SI cuando el negativo parece injusto, no atribuible al agente, causado por sistema/política/cliente sin solicitud clara, o sin evidencia suficiente contra el agente. "
+        "Usa NO cuando la conversación muestra falla atribuible al agente o mala gestión que justifica contar el negativo. "
+        "Usa TAL VEZ cuando la evidencia es ambigua y requiere revisión humana. "
+        "Elige un motivo exacto de la lista permitida. "
+        "Si no hay transcripción completa, dilo en la explicación y baja la confianza. "
+        "Devuelve un resultado por cada row_id recibido."
+    )
+
+
+def construir_payload_auditoria_ia(fila):
+    contenido = construir_caso_auditoria_ia(fila)
     instrucciones = (
         "Audita una valoración CSAT negativa de soporte. "
         "Decide si debe excluirse del CSAT del agente. "
@@ -478,6 +495,14 @@ def construir_payload_auditoria_ia(fila):
     )
 
     return instrucciones + "\n\nCaso:\n" + json.dumps(contenido, ensure_ascii=False, indent=2)
+
+
+def construir_payload_lote_auditoria_ia(filas):
+    contenido = {
+        "motivos_permitidos": MOTIVOS_INCONFORMIDAD,
+        "casos": [construir_caso_auditoria_ia(fila) for fila in filas],
+    }
+    return construir_instrucciones_auditoria_ia() + "\n\nCasos:\n" + json.dumps(contenido, ensure_ascii=False, indent=2)
 
 
 def esquema_auditoria_ia():
@@ -511,6 +536,27 @@ def esquema_auditoria_ia():
             "explicacion",
             "evidencia",
         ],
+        "additionalProperties": False,
+    }
+
+
+def esquema_lote_auditoria_ia():
+    item_schema = esquema_auditoria_ia()
+    item_schema["properties"] = {
+        "row_id": {"type": "string"},
+        **item_schema["properties"],
+    }
+    item_schema["required"] = ["row_id"] + item_schema["required"]
+
+    return {
+        "type": "object",
+        "properties": {
+            "resultados": {
+                "type": "array",
+                "items": item_schema,
+            },
+        },
+        "required": ["resultados"],
         "additionalProperties": False,
     }
 
@@ -566,6 +612,45 @@ def auditar_fila_con_ia(fila, config):
     return json.loads(texto)
 
 
+def auditar_lote_con_ia(filas, config):
+    payload = {
+        "model": config["model"],
+        "input": [
+            {
+                "role": "system",
+                "content": "Eres auditor de calidad CSAT. Responde solo con JSON válido según el esquema.",
+            },
+            {
+                "role": "user",
+                "content": construir_payload_lote_auditoria_ia(filas),
+            },
+        ],
+        "text": {
+            "format": {
+                "type": "json_schema",
+                "name": "auditoria_csat_lote",
+                "strict": True,
+                "schema": esquema_lote_auditoria_ia(),
+            }
+        },
+        "max_output_tokens": max(1200, 450 * len(filas)),
+    }
+
+    response = requests.post(
+        OPENAI_RESPONSES_URL,
+        headers={
+            "Authorization": f"Bearer {config['api_key']}",
+            "Content-Type": "application/json",
+        },
+        json=payload,
+        timeout=OPENAI_REQUEST_TIMEOUT,
+    )
+    response.raise_for_status()
+    texto = extraer_texto_respuesta_openai(response.json())
+    data = json.loads(texto)
+    return data.get("resultados", [])
+
+
 def aplicar_resultado_ia(fila, resultado, modelo):
     justificable = normalizar_justificable(resultado.get("justificable"))
     if not justificable:
@@ -614,28 +699,34 @@ def auditar_estado_con_ia(estado):
 
     advertencias = []
     auditadas = 0
-    for fila in candidatos:
-        try:
-            resultado = auditar_fila_con_ia(fila, config)
+    filas_por_id = {str(fila.get("row_id")): fila for fila in candidatos}
+
+    try:
+        resultados = auditar_lote_con_ia(candidatos, config)
+        for resultado in resultados:
+            fila = filas_por_id.get(str(resultado.get("row_id")))
+            if not fila:
+                continue
             aplicar_resultado_ia(fila, resultado, config["model"])
             auditadas += 1
-        except requests.exceptions.HTTPError as exc:
-            status_code = exc.response.status_code if exc.response is not None else None
-            if status_code in {401, 403}:
-                advertencias.append(
-                    "OpenAI rechazó la credencial. Revisa que OPENAI_API_KEY sea una secret key válida, "
-                    "que no tenga espacios/comillas extra, y reinicia Flask después de configurarla."
-                )
-                break
-            logger.exception("Error auditando fila CSAT con IA")
+    except requests.exceptions.HTTPError as exc:
+        status_code = exc.response.status_code if exc.response is not None else None
+        if status_code in {401, 403}:
             advertencias.append(
-                f"No se pudo auditar con IA la fila {fila.get('row_id')}: {exc}"
+                "OpenAI rechazó la credencial. Revisa que OPENAI_API_KEY sea una secret key válida, "
+                "que no tenga espacios/comillas extra, y reinicia Flask después de configurarla."
             )
-        except Exception as exc:
-            logger.exception("Error auditando fila CSAT con IA")
+        elif status_code == 429:
             advertencias.append(
-                f"No se pudo auditar con IA la fila {fila.get('row_id')}: {exc}"
+                "OpenAI devolvió límite de uso o demasiadas solicitudes. "
+                "Intenta de nuevo en unos segundos, baja OPENAI_CSAT_MAX_CASES, o revisa los límites/crédito de tu cuenta."
             )
+        else:
+            logger.exception("Error auditando lote CSAT con IA")
+            advertencias.append(f"No se pudo auditar el lote con IA: {exc}")
+    except Exception as exc:
+        logger.exception("Error auditando lote CSAT con IA")
+        advertencias.append(f"No se pudo auditar el lote con IA: {exc}")
 
     return auditadas, advertencias
 
