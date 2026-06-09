@@ -1825,6 +1825,24 @@ th.desc::after {
   align-items: center;
 }
 
+.auditoria-csat-page .bar-row strong {
+  white-space: nowrap;
+}
+
+.auditoria-csat-page .csat-delta {
+  grid-column: 2 / span 2;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.auditoria-csat-page .csat-delta.is-up {
+  color: #2f8d53;
+}
+
+.auditoria-csat-page .csat-delta.is-down {
+  color: #ab4d4d;
+}
+
 .auditoria-csat-page .bar-track {
   height: 12px;
   border-radius: 999px;
@@ -1851,7 +1869,7 @@ th.desc::after {
 }
 
 .auditoria-csat-page .csat-table {
-  min-width: 1280px;
+  min-width: 1460px;
 }
 
 .auditoria-csat-page .csat-table td {
@@ -1871,6 +1889,19 @@ th.desc::after {
 
 .auditoria-csat-page .csat-link {
   word-break: break-word;
+}
+
+.auditoria-csat-page .csat-ai-note {
+  display: grid;
+  gap: 6px;
+  min-width: 220px;
+  max-width: 320px;
+}
+
+.auditoria-csat-page .csat-ai-note span,
+.auditoria-csat-page .csat-ai-note small {
+  color: var(--muted);
+  line-height: 1.35;
 }
 
 .auditoria-csat-page .csat-chip {
@@ -2340,6 +2371,10 @@ th.desc::after {
   .break-admin-page .break-move-form,
   .auditoria-csat-page .bar-row {
     grid-template-columns: 1fr;
+  }
+
+  .auditoria-csat-page .csat-delta {
+    grid-column: auto;
   }
 
   .ranking-card-top {

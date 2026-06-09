@@ -1,12 +1,14 @@
 import io
 import json
 import logging
+import os
 import re
 import unicodedata
 import uuid
 from datetime import datetime
 
 import pandas as pd
+import requests
 from flask import Blueprint, Response, render_template, request
 
 from utils.archivos import _leer_csv_desde_bytes
@@ -40,6 +42,7 @@ DISPLAY_COLUMNS = {
     "enlace_conversacion": "Enlace a la conversación",
     "fecha_registrada": "Fecha registrada",
     "review_notes": "Review Notes",
+    "transcripcion_conversacion": "Transcripcion de conversacion",
 }
 
 IMPORTANT_COLUMNS = [
@@ -51,6 +54,7 @@ IMPORTANT_COLUMNS = [
 ]
 
 JUSTIFICABLE_OPTIONS = ["NO", "TAL VEZ", "SÍ"]
+OPTIONAL_COLUMNS = {"transcripcion_conversacion"}
 
 COLUMN_ALIASES = {
     "agente": [
@@ -111,6 +115,17 @@ COLUMN_ALIASES = {
         "review notes",
         "notes",
     ],
+    "transcripcion_conversacion": [
+        "Transcripcion de conversacion",
+        "transcripcion",
+        "transcript",
+        "conversation transcript",
+        "conversacion",
+        "conversation",
+        "mensajes",
+        "messages",
+        "chat",
+    ],
 }
 
 MOTIVOS_INCONFORMIDAD = [
@@ -132,9 +147,21 @@ MOTIVOS_INCONFORMIDAD = [
 
 TIPOS_RATING = ["Negativo", "Neutral", "Positivo", "Sin calificación válida"]
 ESTADOS_AUDITORIA = ["pendiente"] + JUSTIFICABLE_OPTIONS
+RATING_CATEGORIAS = {
+    5: {"label": "Excelente", "tipo": "Positivo"},
+    4: {"label": "Bueno", "tipo": "Positivo"},
+    3: {"label": "Promedio", "tipo": "Neutral"},
+    2: {"label": "Justo", "tipo": "Negativo"},
+    1: {"label": "Pobre", "tipo": "Negativo"},
+}
 MAX_CASOS_REPORTE_IA = 8
 ANALYSIS_TTL_HOURS = 24
 STATE_NAMESPACE = "auditoria_csat"
+OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
+OPENAI_CSAT_MODEL_DEFAULT = "gpt-4.1-mini"
+OPENAI_CSAT_MAX_CASES_DEFAULT = 15
+OPENAI_CSAT_MAX_TRANSCRIPT_CHARS = 6000
+OPENAI_REQUEST_TIMEOUT = 45
 
 
 def normalizar_texto(valor):
@@ -245,6 +272,19 @@ def calcular_csat(positivos, total_validos):
     return formatear_porcentaje((positivos / total_validos) * 100)
 
 
+def formatear_delta(valor, sufijo=""):
+    valor = formatear_porcentaje(valor)
+    if valor > 0:
+        return f"+{valor}{sufijo}"
+    return f"{valor}{sufijo}"
+
+
+def formatear_delta_entero(valor):
+    if valor > 0:
+        return f"+{valor}"
+    return str(valor)
+
+
 def calcular_flag_csat(tipo_rating, justificable):
     if tipo_rating == "Sin calificación válida":
         return "rating_invalido"
@@ -279,6 +319,7 @@ def construir_advertencias_columnas(df, columnas_resueltas):
     faltantes = [
         DISPLAY_COLUMNS[clave]
         for clave in DISPLAY_COLUMNS
+        if clave not in OPTIONAL_COLUMNS
         if not columnas_resueltas.get(clave)
     ]
     advertencias = []
@@ -349,11 +390,19 @@ def construir_filas_desde_dataframe(df, columnas_resueltas):
                 "fecha_registrada_raw": limpiar_texto(obtener_valor_resuelto(fila, columnas_resueltas, "fecha_registrada")),
                 "fecha_iso": fecha_dt.isoformat() if fecha_dt else "",
                 "review_notes": review_notes,
+                "transcripcion_conversacion": limpiar_texto(obtener_valor_resuelto(fila, columnas_resueltas, "transcripcion_conversacion")),
                 "justificable": "",
                 "comentario_auditor": "",
                 "motivo_inconformidad": "",
                 "estado_auditoria": "pendiente",
                 "csat_flag": calcular_flag_csat(tipo_rating, ""),
+                "ia_estado": "",
+                "ia_confianza": "",
+                "ia_explicacion": "",
+                "ia_evidencia": "",
+                "ia_modelo": "",
+                "ia_fecha": "",
+                "ia_fuente": "",
             }
         )
         filas.append(item)
@@ -376,6 +425,207 @@ def construir_estado_inicial(df, nombre_archivo):
         "warnings": advertencias,
         "rows": filas,
     }
+
+
+def obtener_openai_config():
+    try:
+        max_cases = int(os.getenv("OPENAI_CSAT_MAX_CASES", OPENAI_CSAT_MAX_CASES_DEFAULT))
+    except (TypeError, ValueError):
+        max_cases = OPENAI_CSAT_MAX_CASES_DEFAULT
+
+    return {
+        "api_key": limpiar_texto(os.getenv("OPENAI_API_KEY")),
+        "model": limpiar_texto(os.getenv("OPENAI_CSAT_MODEL")) or OPENAI_CSAT_MODEL_DEFAULT,
+        "max_cases": max(1, max_cases),
+    }
+
+
+def limitar_texto(valor, max_chars):
+    texto = limpiar_texto(valor)
+    if len(texto) <= max_chars:
+        return texto
+    return texto[:max_chars] + "\n[Texto truncado por límite operativo]"
+
+
+def construir_payload_auditoria_ia(fila):
+    transcript = limitar_texto(
+        fila.get("transcripcion_conversacion"),
+        OPENAI_CSAT_MAX_TRANSCRIPT_CHARS,
+    )
+    fuente = "transcripcion_csv" if transcript else "comentario_csv_sin_transcript"
+
+    contenido = {
+        "rating": fila.get("calificacion_visible"),
+        "tipo_rating": fila.get("tipo_rating"),
+        "agente": fila.get("agente"),
+        "fecha": fila.get("fecha_registrada") or fila.get("fecha_registrada_raw"),
+        "comentario_csat": fila.get("comentario"),
+        "review_notes": fila.get("review_notes"),
+        "transcripcion_conversacion": transcript,
+        "enlace_conversacion": fila.get("enlace_conversacion"),
+        "fuente_disponible": fuente,
+        "motivos_permitidos": MOTIVOS_INCONFORMIDAD,
+    }
+
+    instrucciones = (
+        "Audita una valoración CSAT negativa de soporte. "
+        "Decide si debe excluirse del CSAT del agente. "
+        "Usa SI cuando el negativo parece injusto, no atribuible al agente, causado por sistema/política/cliente sin solicitud clara, o sin evidencia suficiente contra el agente. "
+        "Usa NO cuando la conversación muestra falla atribuible al agente o mala gestión que justifica contar el negativo. "
+        "Usa TAL VEZ cuando la evidencia es ambigua y requiere revisión humana. "
+        "Elige un motivo exacto de la lista permitida. "
+        "Si no hay transcripción completa, dilo en la explicación y baja la confianza."
+    )
+
+    return instrucciones + "\n\nCaso:\n" + json.dumps(contenido, ensure_ascii=False, indent=2)
+
+
+def esquema_auditoria_ia():
+    return {
+        "type": "object",
+        "properties": {
+            "justificable": {
+                "type": "string",
+                "enum": ["NO", "TAL VEZ", "SI"],
+            },
+            "motivo_inconformidad": {
+                "type": "string",
+                "enum": MOTIVOS_INCONFORMIDAD,
+            },
+            "confianza": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+            },
+            "explicacion": {
+                "type": "string",
+            },
+            "evidencia": {
+                "type": "string",
+            },
+        },
+        "required": [
+            "justificable",
+            "motivo_inconformidad",
+            "confianza",
+            "explicacion",
+            "evidencia",
+        ],
+        "additionalProperties": False,
+    }
+
+
+def extraer_texto_respuesta_openai(data):
+    if data.get("output_text"):
+        return data["output_text"]
+
+    textos = []
+    for item in data.get("output", []):
+        for contenido in item.get("content", []):
+            texto = contenido.get("text")
+            if texto:
+                textos.append(texto)
+    return "\n".join(textos).strip()
+
+
+def auditar_fila_con_ia(fila, config):
+    payload = {
+        "model": config["model"],
+        "input": [
+            {
+                "role": "system",
+                "content": "Eres auditor de calidad CSAT. Responde solo con JSON válido según el esquema.",
+            },
+            {
+                "role": "user",
+                "content": construir_payload_auditoria_ia(fila),
+            },
+        ],
+        "text": {
+            "format": {
+                "type": "json_schema",
+                "name": "auditoria_csat",
+                "strict": True,
+                "schema": esquema_auditoria_ia(),
+            }
+        },
+        "max_output_tokens": 600,
+    }
+
+    response = requests.post(
+        OPENAI_RESPONSES_URL,
+        headers={
+            "Authorization": f"Bearer {config['api_key']}",
+            "Content-Type": "application/json",
+        },
+        json=payload,
+        timeout=OPENAI_REQUEST_TIMEOUT,
+    )
+    response.raise_for_status()
+    texto = extraer_texto_respuesta_openai(response.json())
+    return json.loads(texto)
+
+
+def aplicar_resultado_ia(fila, resultado, modelo):
+    justificable = normalizar_justificable(resultado.get("justificable"))
+    if not justificable:
+        justificable = "TAL VEZ"
+
+    motivo = limpiar_texto(resultado.get("motivo_inconformidad"))
+    if motivo not in MOTIVOS_INCONFORMIDAD:
+        motivo = "OTRO"
+
+    confianza = resultado.get("confianza")
+    try:
+        confianza = max(0, min(1, float(confianza)))
+    except (TypeError, ValueError):
+        confianza = 0
+
+    explicacion = limitar_texto(resultado.get("explicacion"), 900)
+    evidencia = limitar_texto(resultado.get("evidencia"), 700)
+
+    fila["justificable"] = justificable
+    fila["comentario_auditor"] = f"IA: {explicacion}" if explicacion else "IA: sin explicación"
+    fila["motivo_inconformidad"] = motivo
+    fila["estado_auditoria"] = justificable
+    fila["csat_flag"] = calcular_flag_csat(fila.get("tipo_rating"), justificable)
+    fila["ia_estado"] = "sugerida"
+    fila["ia_confianza"] = formatear_porcentaje(confianza * 100)
+    fila["ia_explicacion"] = explicacion
+    fila["ia_evidencia"] = evidencia
+    fila["ia_modelo"] = modelo
+    fila["ia_fecha"] = datetime.utcnow().isoformat()
+    fila["ia_fuente"] = "transcripcion_csv" if fila.get("transcripcion_conversacion") else "comentario_csv_sin_transcript"
+
+
+def auditar_estado_con_ia(estado):
+    config = obtener_openai_config()
+    if not config["api_key"]:
+        return 0, ["Configura OPENAI_API_KEY para usar la auditoría con IA."]
+
+    candidatos = [
+        fila for fila in estado.get("rows", [])
+        if fila.get("tipo_rating") == "Negativo"
+        and not fila.get("justificable")
+    ][:config["max_cases"]]
+
+    if not candidatos:
+        return 0, ["No hay negativas pendientes para auditar con IA."]
+
+    advertencias = []
+    auditadas = 0
+    for fila in candidatos:
+        try:
+            resultado = auditar_fila_con_ia(fila, config)
+            aplicar_resultado_ia(fila, resultado, config["model"])
+            auditadas += 1
+        except Exception as exc:
+            logger.exception("Error auditando fila CSAT con IA")
+            advertencias.append(
+                f"No se pudo auditar con IA la fila {fila.get('row_id')}: {exc}"
+            )
+
+    return auditadas, advertencias
 
 
 def actualizar_estado_desde_formulario(estado, form):
@@ -509,6 +759,37 @@ def construir_resumen_por_motivo(filas):
     return resumen
 
 
+def construir_distribucion_calificaciones(filas, auditada=False):
+    conteo = {rating: 0 for rating in RATING_CATEGORIAS}
+
+    for fila in filas:
+        calificacion = fila.get("calificacion")
+        if calificacion not in conteo:
+            continue
+        if (
+            auditada
+            and fila.get("tipo_rating") == "Negativo"
+            and fila.get("justificable") == JUSTIFICABLE_OPTIONS[-1]
+        ):
+            continue
+        conteo[calificacion] += 1
+
+    total = sum(conteo.values())
+    return {
+        "total": total,
+        "barras": [
+            {
+                "rating": rating,
+                "label": data["label"],
+                "tipo": data["tipo"],
+                "value": conteo[rating],
+                "percent": calcular_csat(conteo[rating], total),
+            }
+            for rating, data in RATING_CATEGORIAS.items()
+        ],
+    }
+
+
 def construir_distribuciones_graficos(filas, resumen_agente, resumen_motivo):
     rating_counts = {str(rating): 0 for rating in range(1, 6)}
     audit_counts = {estado: 0 for estado in JUSTIFICABLE_OPTIONS}
@@ -519,8 +800,25 @@ def construir_distribuciones_graficos(filas, resumen_agente, resumen_motivo):
         if fila.get("tipo_rating") == "Negativo" and fila.get("justificable") in audit_counts:
             audit_counts[fila["justificable"]] += 1
 
+    ratings_original = construir_distribucion_calificaciones(filas)
+    ratings_auditada = construir_distribucion_calificaciones(filas, auditada=True)
+    originales_por_rating = {
+        item["rating"]: item for item in ratings_original["barras"]
+    }
+    for item in ratings_auditada["barras"]:
+        original = originales_por_rating.get(item["rating"], {})
+        delta_value = item["value"] - original.get("value", 0)
+        delta_percent = item["percent"] - original.get("percent", 0)
+        item["delta_value"] = delta_value
+        item["delta_percent"] = formatear_porcentaje(delta_percent)
+        item["delta_value_label"] = formatear_delta_entero(delta_value)
+        item["delta_percent_label"] = formatear_delta(delta_percent, "%")
+        item["delta_class"] = "is-up" if delta_percent > 0 else "is-down" if delta_percent < 0 else "is-flat"
+
     return {
         "ratings": [{"label": clave, "value": valor} for clave, valor in rating_counts.items()],
+        "ratings_original": ratings_original,
+        "ratings_auditada": ratings_auditada,
         "auditoria": [{"label": clave, "value": valor} for clave, valor in audit_counts.items()],
         "motivos": [
             {"label": fila["Motivo"], "value": fila["Cantidad"]}
@@ -597,6 +895,8 @@ def construir_contexto_analisis(estado):
         "analysis_id": estado.get("analysis_id", ""),
         "source_filename": estado.get("source_filename", ""),
         "warnings": estado.get("warnings", []),
+        "ia_disponible": bool(obtener_openai_config()["api_key"]),
+        "ia_modelo": obtener_openai_config()["model"],
         "metricas": metricas,
         "filas": filas,
         "resumen_agente": resumen_agente,
@@ -638,6 +938,13 @@ def construir_dataframe_exportable(filas, columnas_originales):
                 "motivo_inconformidad": fila.get("motivo_inconformidad", ""),
                 "csat_flag": fila.get("csat_flag", ""),
                 "estado_auditoria": fila.get("estado_auditoria", ""),
+                "ia_estado": fila.get("ia_estado", ""),
+                "ia_confianza": fila.get("ia_confianza", ""),
+                "ia_explicacion": fila.get("ia_explicacion", ""),
+                "ia_evidencia": fila.get("ia_evidencia", ""),
+                "ia_modelo": fila.get("ia_modelo", ""),
+                "ia_fecha": fila.get("ia_fecha", ""),
+                "ia_fuente": fila.get("ia_fuente", ""),
             }
         )
         registros.append(item)
@@ -782,6 +1089,14 @@ def auditoria_csat():
 
                     if accion == "guardar_auditoria":
                         mensaje = "Auditoría actualizada."
+                        contexto_analisis = construir_contexto_analisis(estado)
+                    elif accion == "auditar_con_ia":
+                        auditadas, advertencias_ia = auditar_estado_con_ia(estado)
+                        guardar_analisis(estado)
+                        if auditadas:
+                            mensaje = f"IA auditó {auditadas} negativa(s) pendiente(s). Revisa y confirma o corrige la tabla."
+                        if advertencias_ia:
+                            advertencia = " ".join(advertencias_ia)
                         contexto_analisis = construir_contexto_analisis(estado)
                     elif accion == "descargar_csv_auditado":
                         df_export = construir_dataframe_exportable(

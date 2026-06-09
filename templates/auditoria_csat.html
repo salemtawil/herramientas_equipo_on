@@ -95,9 +95,19 @@
           </div>
           <div class="csat-action-bar">
             <button type="submit" name="accion" value="guardar_auditoria">Actualizar resumen</button>
+            <button type="submit" class="btn secondary" name="accion" value="auditar_con_ia" {% if not contexto.ia_disponible %}disabled{% endif %}>Auditar pendientes con IA</button>
             <button type="submit" class="btn secondary" name="accion" value="descargar_csv_auditado">Descargar CSV auditado</button>
             <button type="submit" class="btn secondary" name="accion" value="descargar_reporte_ia">Descargar reporte para IA</button>
           </div>
+        </div>
+
+        <div class="csat-rule-box top-space">
+          <strong>Auditoría asistida por IA</strong>
+          {% if contexto.ia_disponible %}
+            <p class="small top-space">La IA usa {{ contexto.ia_modelo }} y audita solo negativas pendientes. Si el CSV incluye transcripción, la revisa; si solo hay link, usa el comentario disponible y baja la confianza.</p>
+          {% else %}
+            <p class="small top-space">Configura OPENAI_API_KEY en el entorno para habilitar el botón. La clave se usa solo en backend.</p>
+          {% endif %}
         </div>
 
         <div class="csat-summary-grid">
@@ -196,6 +206,7 @@
                 <th>Correo</th>
                 <th>Teléfono</th>
                 <th>Fecha</th>
+                <th>Sugerencia IA</th>
                 <th>Justificable</th>
                 <th>Comentarios del auditor</th>
                 <th>Motivo de inconformidad</th>
@@ -227,6 +238,20 @@
                   <td>{{ fila.correo_contacto or 'Sin correo' }}</td>
                   <td>{{ fila.telefono_contacto or 'Sin teléfono' }}</td>
                   <td>{{ fila.fecha_registrada or fila.fecha_registrada_raw or 'Sin fecha' }}</td>
+                  <td>
+                    {% if fila.ia_estado %}
+                      <div class="csat-ai-note">
+                        <strong>Confianza {{ fila.ia_confianza }}%</strong>
+                        <span>{{ fila.ia_explicacion }}</span>
+                        {% if fila.ia_evidencia %}
+                          <small>Evidencia: {{ fila.ia_evidencia }}</small>
+                        {% endif %}
+                        <small>Fuente: {{ fila.ia_fuente }}</small>
+                      </div>
+                    {% else %}
+                      <span class="small">Sin sugerencia</span>
+                    {% endif %}
+                  </td>
                   <td>
                     <select name="justificable__{{ fila.row_id }}" data-row-estado>
                       <option value="" {% if not fila.justificable %}selected{% endif %}>Pendiente</option>
@@ -265,14 +290,31 @@
 
       <div class="csat-chart-grid">
         <article class="csat-chart-card">
-          <h3>Distribución de ratings</h3>
+          <h3>Antes de auditoría</h3>
+          <p class="small">Distribución original sobre {{ contexto.graficos.ratings_original.total }} ratings válidos.</p>
           <div class="bar-chart">
-            {% set max_value = (contexto.graficos.ratings | map(attribute='value') | max) or 1 %}
-            {% for item in contexto.graficos.ratings %}
+            {% for item in contexto.graficos.ratings_original.barras %}
+              {% set clase = 'is-success' if item.tipo == 'Positivo' else 'is-warning' if item.tipo == 'Neutral' else 'is-danger' %}
               <div class="bar-row">
-                <span>{{ item.label }}</span>
-                <div class="bar-track"><div class="bar-fill" style="width: {{ (item.value / max_value * 100) if max_value else 0 }}%"></div></div>
-                <strong>{{ item.value }}</strong>
+                <span>{{ item.label }} ({{ item.rating }})</span>
+                <div class="bar-track"><div class="bar-fill {{ clase }}" style="width: {{ item.percent }}%"></div></div>
+                <strong>{{ item.value }} / {{ item.percent }}%</strong>
+              </div>
+            {% endfor %}
+          </div>
+        </article>
+
+        <article class="csat-chart-card">
+          <h3>Después de auditoría</h3>
+          <p class="small">Distribución auditada sobre {{ contexto.graficos.ratings_auditada.total }} ratings válidos, excluyendo negativas con SÍ.</p>
+          <div class="bar-chart">
+            {% for item in contexto.graficos.ratings_auditada.barras %}
+              {% set clase = 'is-success' if item.tipo == 'Positivo' else 'is-warning' if item.tipo == 'Neutral' else 'is-danger' %}
+              <div class="bar-row">
+                <span>{{ item.label }} ({{ item.rating }})</span>
+                <div class="bar-track"><div class="bar-fill {{ clase }}" style="width: {{ item.percent }}%"></div></div>
+                <strong>{{ item.value }} / {{ item.percent }}%</strong>
+                <small class="csat-delta {{ item.delta_class }}">Cambio {{ item.delta_value_label }} / {{ item.delta_percent_label }}</small>
               </div>
             {% endfor %}
           </div>
