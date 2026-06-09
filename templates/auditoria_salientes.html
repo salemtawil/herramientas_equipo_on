@@ -94,7 +94,7 @@
     <div class="top-space">
       {% if payload_cache %}
       <form method="post" class="acciones-barra" data-processing-message="Preparando CSV del analisis..." data-sync-turnos="true">
-        <textarea name="auditoria_salientes_payload" hidden>{{ payload_cache }}</textarea>
+        <input type="hidden" name="auditoria_salientes_payload" value="{{ payload_cache }}">
         <input type="hidden" name="usar_filtro_turnos" value="1">
         <div data-turnos-hidden-target></div>
         <button type="submit" name="accion" value="descargar_resumen_agente">
@@ -167,7 +167,7 @@
     <div class="top-space">
       {% if payload_cache %}
       <form method="post" class="acciones-barra" data-processing-message="Preparando CSV del analisis...">
-        <textarea name="auditoria_salientes_payload" hidden>{{ payload_cache }}</textarea>
+        <input type="hidden" name="auditoria_salientes_payload" value="{{ payload_cache }}">
         <button type="submit" name="accion" value="descargar_detalle_casos" class="btn secondary">
           Descargar detalle de casos
         </button>
@@ -234,7 +234,7 @@
     <div class="top-space">
       {% if payload_cache %}
       <form method="post" data-processing-message="Aplicando filtro de turnos..." data-turnos-form="true">
-        <textarea name="auditoria_salientes_payload" hidden>{{ payload_cache }}</textarea>
+        <input type="hidden" name="auditoria_salientes_payload" value="{{ payload_cache }}">
         <input type="hidden" name="usar_filtro_turnos" value="1">
 
         <div class="turnos-filtro-grid">

@@ -159,6 +159,8 @@ ANALYSIS_TTL_HOURS = 24
 STATE_NAMESPACE = "auditoria_csat"
 OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
 OPENAI_CSAT_MODEL_DEFAULT = "gpt-4.1-mini"
+OLLAMA_BASE_URL_DEFAULT = "http://127.0.0.1:11434"
+OLLAMA_CSAT_MODEL_DEFAULT = "qwen2.5:7b"
 OPENAI_CSAT_MAX_CASES_DEFAULT = 10
 OPENAI_CSAT_MAX_TRANSCRIPT_CHARS = 6000
 OPENAI_REQUEST_TIMEOUT = 45
@@ -427,17 +429,31 @@ def construir_estado_inicial(df, nombre_archivo):
     }
 
 
-def obtener_openai_config():
+def obtener_ia_config():
     try:
         max_cases = int(os.getenv("OPENAI_CSAT_MAX_CASES", OPENAI_CSAT_MAX_CASES_DEFAULT))
     except (TypeError, ValueError):
         max_cases = OPENAI_CSAT_MAX_CASES_DEFAULT
 
+    provider = normalizar_texto(os.getenv("CSAT_AI_PROVIDER")) or "openai"
+    if provider not in {"openai", "ollama"}:
+        provider = "openai"
+
     return {
+        "provider": provider,
         "api_key": limpiar_texto(os.getenv("OPENAI_API_KEY")),
-        "model": limpiar_texto(os.getenv("OPENAI_CSAT_MODEL")) or OPENAI_CSAT_MODEL_DEFAULT,
+        "model": (
+            limpiar_texto(os.getenv("OLLAMA_CSAT_MODEL")) or OLLAMA_CSAT_MODEL_DEFAULT
+            if provider == "ollama"
+            else limpiar_texto(os.getenv("OPENAI_CSAT_MODEL")) or OPENAI_CSAT_MODEL_DEFAULT
+        ),
+        "ollama_base_url": limpiar_texto(os.getenv("OLLAMA_BASE_URL")) or OLLAMA_BASE_URL_DEFAULT,
         "max_cases": max(1, max_cases),
     }
+
+
+def obtener_openai_config():
+    return obtener_ia_config()
 
 
 def limitar_texto(valor, max_chars):
@@ -651,6 +667,36 @@ def auditar_lote_con_ia(filas, config):
     return data.get("resultados", [])
 
 
+def auditar_lote_con_ollama(filas, config):
+    base_url = config["ollama_base_url"].rstrip("/")
+    payload = {
+        "model": config["model"],
+        "prompt": construir_payload_lote_auditoria_ia(filas),
+        "system": "Eres auditor de calidad CSAT. Responde solo con JSON válido según el esquema.",
+        "format": esquema_lote_auditoria_ia(),
+        "stream": False,
+        "options": {
+            "temperature": 0,
+        },
+    }
+
+    response = requests.post(
+        f"{base_url}/api/generate",
+        json=payload,
+        timeout=OPENAI_REQUEST_TIMEOUT,
+    )
+    response.raise_for_status()
+    texto = limpiar_texto(response.json().get("response"))
+    data = json.loads(texto)
+    return data.get("resultados", [])
+
+
+def auditar_lote_con_proveedor(filas, config):
+    if config["provider"] == "ollama":
+        return auditar_lote_con_ollama(filas, config)
+    return auditar_lote_con_ia(filas, config)
+
+
 def aplicar_resultado_ia(fila, resultado, modelo):
     justificable = normalizar_justificable(resultado.get("justificable"))
     if not justificable:
@@ -684,8 +730,8 @@ def aplicar_resultado_ia(fila, resultado, modelo):
 
 
 def auditar_estado_con_ia(estado):
-    config = obtener_openai_config()
-    if not config["api_key"]:
+    config = obtener_ia_config()
+    if config["provider"] == "openai" and not config["api_key"]:
         return 0, ["Configura OPENAI_API_KEY para usar la auditoría con IA."]
 
     candidatos = [
@@ -702,7 +748,7 @@ def auditar_estado_con_ia(estado):
     filas_por_id = {str(fila.get("row_id")): fila for fila in candidatos}
 
     try:
-        resultados = auditar_lote_con_ia(candidatos, config)
+        resultados = auditar_lote_con_proveedor(candidatos, config)
         for resultado in resultados:
             fila = filas_por_id.get(str(resultado.get("row_id")))
             if not fila:
@@ -724,6 +770,14 @@ def auditar_estado_con_ia(estado):
         else:
             logger.exception("Error auditando lote CSAT con IA")
             advertencias.append(f"No se pudo auditar el lote con IA: {exc}")
+    except requests.exceptions.ConnectionError:
+        if config["provider"] == "ollama":
+            advertencias.append(
+                "No se pudo conectar con Ollama. Verifica que Ollama esté abierto, "
+                f"que el modelo {config['model']} esté instalado, y que {config['ollama_base_url']} responda."
+            )
+        else:
+            advertencias.append("No se pudo conectar con el proveedor de IA.")
     except Exception as exc:
         logger.exception("Error auditando lote CSAT con IA")
         advertencias.append(f"No se pudo auditar el lote con IA: {exc}")
@@ -985,6 +1039,7 @@ def construir_casos_destacados(filas):
 
 def construir_contexto_analisis(estado):
     filas = estado.get("rows", [])
+    ia_config = obtener_ia_config()
     metricas = construir_metricas(filas)
     resumen_agente = construir_resumen_por_agente(filas)
     resumen_motivo = construir_resumen_por_motivo(filas)
@@ -998,8 +1053,10 @@ def construir_contexto_analisis(estado):
         "analysis_id": estado.get("analysis_id", ""),
         "source_filename": estado.get("source_filename", ""),
         "warnings": estado.get("warnings", []),
-        "ia_disponible": bool(obtener_openai_config()["api_key"]),
-        "ia_modelo": obtener_openai_config()["model"],
+        "ia_disponible": ia_config["provider"] == "ollama" or bool(ia_config["api_key"]),
+        "ia_modelo": ia_config["model"],
+        "ia_provider": ia_config["provider"],
+        "ia_ollama_base_url": ia_config["ollama_base_url"],
         "metricas": metricas,
         "filas": filas,
         "resumen_agente": resumen_agente,

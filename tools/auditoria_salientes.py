@@ -22,6 +22,7 @@ VENTANA_CASO_MINUTOS = 10
 TURNO_SIN_TURNO = "Sin turno"
 STATE_NAMESPACE = "auditoria_salientes"
 STATE_TTL_HOURS = 24
+STATE_INLINE_LIMIT_BYTES = 8 * 1024 * 1024
 
 ESTADO_CONTESTADA = "Cumple por contestada"
 ESTADO_COMPLETO = "Cumple completo"
@@ -604,12 +605,13 @@ def respuesta_csv_desde_df(df, nombre_archivo):
 def serializar_resultado_auditoria(df_casos):
     return guardar_estado_temporal(
         {
-            "df_casos_json": df_casos.to_json(orient="records", force_ascii=False),
+            "casos": df_casos.to_dict(orient="records"),
         },
         secret_key=current_app.secret_key,
         salt="auditoria-salientes-payload",
         namespace=STATE_NAMESPACE,
         ttl_hours=STATE_TTL_HOURS,
+        inline_limit_bytes=STATE_INLINE_LIMIT_BYTES,
     )
 
 
@@ -624,10 +626,15 @@ def cargar_resultado_auditoria_desde_payload(payload):
         namespace=STATE_NAMESPACE,
     )
 
-    if not item or "df_casos_json" not in item:
+    if not item:
         return None
 
-    df_casos = pd.DataFrame(json.loads(item["df_casos_json"]))
+    if "casos" in item:
+        df_casos = pd.DataFrame(item["casos"])
+    elif "df_casos_json" in item:
+        df_casos = pd.DataFrame(json.loads(item["df_casos_json"]))
+    else:
+        return None
     if df_casos.empty:
         return pd.DataFrame(columns=COLUMNAS_DETALLE + ["_estado", "_agente"])
 

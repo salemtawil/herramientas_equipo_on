@@ -1,5 +1,12 @@
-2026-06-09 11:27:41,384 INFO werkzeug: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+2026-06-09 11:50:00,816 INFO werkzeug: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
  * Running on http://127.0.0.1:5000
-2026-06-09 11:27:41,385 INFO werkzeug: [33mPress CTRL+C to quit[0m
-2026-06-09 11:27:42,878 INFO werkzeug: 127.0.0.1 - - [09/Jun/2026 11:27:42] "GET /auditoria-csat HTTP/1.1" 200 -
-2026-06-09 11:27:55,174 INFO werkzeug: 127.0.0.1 - - [09/Jun/2026 11:27:55] "GET /auditoria-csat HTTP/1.1" 200 -
+2026-06-09 11:50:00,817 INFO werkzeug: [33mPress CTRL+C to quit[0m
+2026-06-09 11:50:02,416 INFO werkzeug: 127.0.0.1 - - [09/Jun/2026 11:50:02] "GET /auditoria-csat HTTP/1.1" 200 -
+2026-06-09 11:50:15,209 INFO werkzeug: 127.0.0.1 - - [09/Jun/2026 11:50:15] "GET /auditoria-csat HTTP/1.1" 200 -
+2026-06-09 11:50:31,139 INFO werkzeug: 127.0.0.1 - - [09/Jun/2026 11:50:31] "POST /auditoria-csat HTTP/1.1" 200 -
+2026-06-09 13:10:45,259 INFO werkzeug: 127.0.0.1 - - [09/Jun/2026 13:10:45] "GET /auditoria-salientes HTTP/1.1" 200 -
+2026-06-09 13:10:45,468 INFO werkzeug: 127.0.0.1 - - [09/Jun/2026 13:10:45] "GET /static/styles.css?v=19 HTTP/1.1" 200 -
+2026-06-09 13:10:45,601 INFO werkzeug: 127.0.0.1 - - [09/Jun/2026 13:10:45] "GET /static/app.js?v=4 HTTP/1.1" 200 -
+2026-06-09 13:12:19,050 INFO werkzeug: 127.0.0.1 - - [09/Jun/2026 13:12:19] "GET /auditoria-salientes HTTP/1.1" 200 -
+2026-06-09 13:12:19,318 INFO werkzeug: 127.0.0.1 - - [09/Jun/2026 13:12:19] "[36mGET /static/styles.css?v=19 HTTP/1.1[0m" 304 -
+2026-06-09 13:12:19,413 INFO werkzeug: 127.0.0.1 - - [09/Jun/2026 13:12:19] "[36mGET /static/app.js?v=4 HTTP/1.1[0m" 304 -

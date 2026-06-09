@@ -48,6 +48,9 @@ Opcionales según funcionalidad:
 - `OPENAI_API_KEY`
 - `OPENAI_CSAT_MODEL`
 - `OPENAI_CSAT_MAX_CASES`
+- `CSAT_AI_PROVIDER`
+- `OLLAMA_BASE_URL`
+- `OLLAMA_CSAT_MODEL`
 
 ## Deploy en Vercel
 
@@ -74,7 +77,8 @@ Antes de desplegar:
 
 - `usuarios_a_sheets` y `auditoria_salientes` guardan estado temporal firmado. Si el estado es pequeño, viaja inline; si crece, se apoya en almacenamiento temporal del runtime.
 - `auditoria_csat` guarda su análisis temporal en almacenamiento efímero del runtime.
-- `auditoria_csat` puede auditar negativas pendientes con IA si `OPENAI_API_KEY` está configurada. La IA usa transcripción del CSV cuando existe; si el CSV solo trae un link privado, audita con el comentario disponible hasta conectar una API backend que entregue el transcript completo.
+- `auditoria_csat` puede auditar negativas pendientes con IA si `OPENAI_API_KEY` está configurada o si `CSAT_AI_PROVIDER=ollama` apunta a un Ollama local. La IA usa transcripción del CSV cuando existe; si el CSV solo trae un link privado, audita con el comentario disponible hasta conectar una API backend que entregue el transcript completo.
+- Ollama local no corre dentro de Vercel ni puede usar el `127.0.0.1` de una computadora personal desde producción. Para Vercel, usa OpenAI u otro proveedor cloud, o expón un servidor Ollama propio con URL segura y accesible desde Vercel.
 - `usuarios_activos` depende de APIs externas y puede fallar por timeouts o credenciales vencidas.
 - El repo contiene una carpeta `tools/trash/` con scripts archivados que no forman parte del runtime activo.
 - Las variables y dependencias asociadas a `Paripe` quedaron fuera de la documentación del runtime activo; hoy solo viven en scripts archivados dentro de `tools/trash/`.
