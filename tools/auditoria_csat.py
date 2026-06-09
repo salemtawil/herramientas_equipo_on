@@ -1094,7 +1094,11 @@ def auditoria_csat():
                 analysis_id = limpiar_texto(request.form.get("analysis_id"))
                 estado = cargar_analisis(analysis_id)
                 if not estado:
-                    advertencia = "No se encontró el análisis activo. Vuelve a cargar el CSV."
+                    advertencia = (
+                        "El análisis activo ya no está disponible. "
+                        "Puede ocurrir si Flask se reinició o si el estado temporal fue limpiado. "
+                        "Vuelve a cargar el CSV y ejecuta la auditoría con IA desde esa misma pantalla."
+                    )
                 else:
                     estado = actualizar_estado_desde_formulario(estado, request.form)
                     guardar_analisis(estado)

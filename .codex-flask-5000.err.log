@@ -1,5 +1,4 @@
-2026-06-09 10:59:11,382 INFO werkzeug: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+2026-06-09 11:07:26,131 INFO werkzeug: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
  * Running on http://127.0.0.1:5000
-2026-06-09 10:59:11,382 INFO werkzeug: [33mPress CTRL+C to quit[0m
-2026-06-09 10:59:12,931 INFO werkzeug: 127.0.0.1 - - [09/Jun/2026 10:59:12] "GET /auditoria-csat HTTP/1.1" 200 -
-2026-06-09 10:59:31,133 INFO werkzeug: 127.0.0.1 - - [09/Jun/2026 10:59:31] "GET /auditoria-csat HTTP/1.1" 200 -
+2026-06-09 11:07:26,131 INFO werkzeug: [33mPress CTRL+C to quit[0m
+2026-06-09 11:07:27,618 INFO werkzeug: 127.0.0.1 - - [09/Jun/2026 11:07:27] "GET /auditoria-csat HTTP/1.1" 200 -
