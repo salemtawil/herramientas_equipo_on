@@ -1,8 +1,10 @@
 import base64
 import hashlib
 import hmac
+import json
 import os
 import re
+import time
 import requests
 import boto3
 
@@ -12,10 +14,11 @@ COMPINCHE_BONUS_URL = "https://api.compinche.io/api/flex/v1/admin/bonus"
 
 COMPINCHE_ID_TOKEN = os.getenv("COMPINCHE_ID_TOKEN", "")
 COMPINCHE_REFRESH_TOKEN = os.getenv("COMPINCHE_REFRESH_TOKEN", "")
-COMPINCHE_CLIENT_ID = os.getenv("COMPINCHE_CLIENT_ID", "")
+COMPINCHE_CLIENT_ID = os.getenv("COMPINCHE_CLIENT_ID") or "7qg7enbsnlm13pend7aeplivu2"
 COMPINCHE_CLIENT_SECRET = os.getenv("COMPINCHE_CLIENT_SECRET", "")
 COMPINCHE_USERNAME = os.getenv("COMPINCHE_USERNAME", "") or os.getenv("COMPINCHE_PHONE", "")
 COMPINCHE_PASSWORD = os.getenv("COMPINCHE_PASSWORD", "")
+COMPINCHE_USER_POOL_ID = os.getenv("COMPINCHE_USER_POOL_ID") or "us-east-1_KRph7TcMm"
 COMPINCHE_AWS_REGION = os.getenv("AWS_DEFAULT_REGION") or "us-east-1"
 PROMO_FIELD_PATTERN = re.compile(
     r"promo|promoc|promotion|campaign|coupon|discount|offer|deal",
@@ -59,6 +62,31 @@ def _guardar_tokens(auth):
             _TOKEN_CACHE[key] = value
     return tokens
 
+def _decodificar_jwt_payload(token):
+    try:
+        payload = token.split(".")[1]
+        payload += "=" * (-len(payload) % 4)
+        return json.loads(base64.urlsafe_b64decode(payload.encode("utf-8")).decode("utf-8"))
+    except Exception:
+        return {}
+
+def _obtener_user_pool_id():
+    if COMPINCHE_USER_POOL_ID:
+        return COMPINCHE_USER_POOL_ID
+
+    payload = _decodificar_jwt_payload(COMPINCHE_ID_TOKEN)
+    issuer = payload.get("iss", "")
+    if "/" in issuer:
+        return issuer.rstrip("/").split("/")[-1]
+    return ""
+
+def _token_expirado_o_por_expirar(token, margen_segundos=300):
+    payload = _decodificar_jwt_payload(token)
+    expira_en = payload.get("exp")
+    if not isinstance(expira_en, (int, float)):
+        return False
+    return expira_en <= time.time() + margen_segundos
+
 def refrescar_compinche_token():
     refresh_token = _TOKEN_CACHE.get("refresh_token") or COMPINCHE_REFRESH_TOKEN
 
@@ -76,12 +104,7 @@ def refrescar_compinche_token():
 
     return _guardar_tokens(response["AuthenticationResult"])
 
-def iniciar_sesion_compinche():
-    if not COMPINCHE_USERNAME or not COMPINCHE_PASSWORD:
-        raise RuntimeError(
-            "Configura COMPINCHE_USERNAME y COMPINCHE_PASSWORD para renovar tokens vencidos."
-        )
-
+def _iniciar_sesion_compinche_client():
     response = _cliente_cognito().initiate_auth(
         ClientId=COMPINCHE_CLIENT_ID,
         AuthFlow="USER_PASSWORD_AUTH",
@@ -93,8 +116,46 @@ def iniciar_sesion_compinche():
 
     return _guardar_tokens(response["AuthenticationResult"])
 
+def _iniciar_sesion_compinche_admin():
+    user_pool_id = _obtener_user_pool_id()
+    if not user_pool_id:
+        raise RuntimeError(
+            "Configura COMPINCHE_USER_POOL_ID para usar ADMIN_USER_PASSWORD_AUTH."
+        )
+
+    response = _cliente_cognito().admin_initiate_auth(
+        UserPoolId=user_pool_id,
+        ClientId=COMPINCHE_CLIENT_ID,
+        AuthFlow="ADMIN_USER_PASSWORD_AUTH",
+        AuthParameters=_auth_parameters({
+            "USERNAME": COMPINCHE_USERNAME,
+            "PASSWORD": COMPINCHE_PASSWORD,
+        }),
+    )
+
+    return _guardar_tokens(response["AuthenticationResult"])
+
+def iniciar_sesion_compinche():
+    if not COMPINCHE_USERNAME or not COMPINCHE_PASSWORD:
+        raise RuntimeError(
+            "Configura COMPINCHE_USERNAME y COMPINCHE_PASSWORD para renovar tokens vencidos."
+        )
+
+    try:
+        return _iniciar_sesion_compinche_client()
+    except Exception as error:
+        if "USER_PASSWORD_AUTH flow not enabled" not in str(error):
+            raise
+        return _iniciar_sesion_compinche_admin()
+
 def _obtener_token_compinche():
-    return _TOKEN_CACHE.get("id_token") or COMPINCHE_ID_TOKEN
+    token = _TOKEN_CACHE.get("id_token") or COMPINCHE_ID_TOKEN
+    if token and _token_expirado_o_por_expirar(token):
+        try:
+            return _renovar_token_compinche()
+        except Exception:
+            return token
+    return token
 
 def _renovar_token_compinche():
     try:

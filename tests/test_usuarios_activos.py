@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 import unittest
 from unittest.mock import patch
 
@@ -129,3 +130,43 @@ class UsuariosActivosTests(unittest.TestCase):
             token = api_compinche._renovar_token_compinche()
 
         self.assertEqual("token-nuevo", token)
+
+    def test_compinche_login_usa_admin_si_user_password_auth_no_esta_habilitado(self):
+        with patch.object(api_compinche, "COMPINCHE_USERNAME", "usuario"), patch.object(
+            api_compinche,
+            "COMPINCHE_PASSWORD",
+            "password",
+        ), patch(
+            "tools.api_compinche._iniciar_sesion_compinche_client",
+            side_effect=Exception("USER_PASSWORD_AUTH flow not enabled for this client"),
+        ), patch(
+            "tools.api_compinche._iniciar_sesion_compinche_admin",
+            return_value={"id_token": "token-admin"},
+        ) as admin_login:
+            tokens = api_compinche.iniciar_sesion_compinche()
+
+        self.assertEqual("token-admin", tokens["id_token"])
+        admin_login.assert_called_once()
+
+    def test_compinche_obtiene_token_nuevo_si_id_token_esta_vencido(self):
+        header = "eyJhbGciOiJub25lIn0"
+        payload = (
+            api_compinche.base64.urlsafe_b64encode(
+                api_compinche.json.dumps({"exp": int(time.time()) - 60}).encode("utf-8")
+            )
+            .decode("utf-8")
+            .rstrip("=")
+        )
+        token_vencido = f"{header}.{payload}."
+
+        with patch.object(api_compinche, "COMPINCHE_ID_TOKEN", token_vencido), patch.dict(
+            api_compinche._TOKEN_CACHE,
+            {"id_token": None, "access_token": None, "refresh_token": None},
+        ), patch(
+            "tools.api_compinche._renovar_token_compinche",
+            return_value="token-renovado",
+        ) as renovar:
+            token = api_compinche._obtener_token_compinche()
+
+        self.assertEqual("token-renovado", token)
+        renovar.assert_called_once()
