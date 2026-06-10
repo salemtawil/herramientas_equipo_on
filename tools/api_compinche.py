@@ -1,3 +1,6 @@
+import base64
+import hashlib
+import hmac
 import os
 import re
 import requests
@@ -10,27 +13,94 @@ COMPINCHE_BONUS_URL = "https://api.compinche.io/api/flex/v1/admin/bonus"
 COMPINCHE_ID_TOKEN = os.getenv("COMPINCHE_ID_TOKEN", "")
 COMPINCHE_REFRESH_TOKEN = os.getenv("COMPINCHE_REFRESH_TOKEN", "")
 COMPINCHE_CLIENT_ID = os.getenv("COMPINCHE_CLIENT_ID", "")
+COMPINCHE_CLIENT_SECRET = os.getenv("COMPINCHE_CLIENT_SECRET", "")
+COMPINCHE_USERNAME = os.getenv("COMPINCHE_USERNAME", "") or os.getenv("COMPINCHE_PHONE", "")
+COMPINCHE_PASSWORD = os.getenv("COMPINCHE_PASSWORD", "")
+COMPINCHE_AWS_REGION = os.getenv("AWS_DEFAULT_REGION") or "us-east-1"
 PROMO_FIELD_PATTERN = re.compile(
     r"promo|promoc|promotion|campaign|coupon|discount|offer|deal",
     re.IGNORECASE,
 )
+_TOKEN_CACHE = {
+    "id_token": None,
+    "access_token": None,
+    "refresh_token": None,
+}
+
+def _cliente_cognito():
+    return boto3.client("cognito-idp", region_name=COMPINCHE_AWS_REGION)
+
+def _secret_hash(username):
+    if not COMPINCHE_CLIENT_SECRET:
+        return None
+
+    digest = hmac.new(
+        COMPINCHE_CLIENT_SECRET.encode("utf-8"),
+        f"{username}{COMPINCHE_CLIENT_ID}".encode("utf-8"),
+        hashlib.sha256,
+    ).digest()
+    return base64.b64encode(digest).decode("utf-8")
+
+def _auth_parameters(params):
+    username = params.get("USERNAME")
+    secret_hash = _secret_hash(username) if username else None
+    if secret_hash:
+        params["SECRET_HASH"] = secret_hash
+    return params
+
+def _guardar_tokens(auth):
+    tokens = {
+        "id_token": auth.get("IdToken"),
+        "access_token": auth.get("AccessToken"),
+        "refresh_token": auth.get("RefreshToken"),
+    }
+    for key, value in tokens.items():
+        if value:
+            _TOKEN_CACHE[key] = value
+    return tokens
 
 def refrescar_compinche_token():
-    client = boto3.client("cognito-idp", region_name="us-east-1")
+    refresh_token = _TOKEN_CACHE.get("refresh_token") or COMPINCHE_REFRESH_TOKEN
 
-    response = client.initiate_auth(
+    auth_parameters = {
+        "REFRESH_TOKEN": refresh_token,
+    }
+    if COMPINCHE_USERNAME:
+        auth_parameters["USERNAME"] = COMPINCHE_USERNAME
+
+    response = _cliente_cognito().initiate_auth(
         ClientId=COMPINCHE_CLIENT_ID,
         AuthFlow="REFRESH_TOKEN_AUTH",
-        AuthParameters={
-            "REFRESH_TOKEN": COMPINCHE_REFRESH_TOKEN
-        }
+        AuthParameters=_auth_parameters(auth_parameters),
     )
 
-    auth = response["AuthenticationResult"]
-    return {
-        "id_token": auth.get("IdToken"),
-        "access_token": auth.get("AccessToken")
-    }
+    return _guardar_tokens(response["AuthenticationResult"])
+
+def iniciar_sesion_compinche():
+    if not COMPINCHE_USERNAME or not COMPINCHE_PASSWORD:
+        raise RuntimeError(
+            "Configura COMPINCHE_USERNAME y COMPINCHE_PASSWORD para renovar tokens vencidos."
+        )
+
+    response = _cliente_cognito().initiate_auth(
+        ClientId=COMPINCHE_CLIENT_ID,
+        AuthFlow="USER_PASSWORD_AUTH",
+        AuthParameters=_auth_parameters({
+            "USERNAME": COMPINCHE_USERNAME,
+            "PASSWORD": COMPINCHE_PASSWORD,
+        }),
+    )
+
+    return _guardar_tokens(response["AuthenticationResult"])
+
+def _obtener_token_compinche():
+    return _TOKEN_CACHE.get("id_token") or COMPINCHE_ID_TOKEN
+
+def _renovar_token_compinche():
+    try:
+        return refrescar_compinche_token()["id_token"]
+    except Exception:
+        return iniciar_sesion_compinche()["id_token"]
 
 def _headers(token):
     return {
@@ -63,28 +133,26 @@ def obtener_bonus_compinche(token):
     return _normalizar_bonus_compinche(_request_json(COMPINCHE_BONUS_URL, token))
 
 def _obtener_data_compinche():
-    token = COMPINCHE_ID_TOKEN
+    token = _obtener_token_compinche()
 
     try:
         usuarios = obtener_usuarios_compinche(token)
         admins = obtener_admins_compinche(token)
     except Exception:
-        nuevos = refrescar_compinche_token()
-        token = nuevos["id_token"]
+        token = _renovar_token_compinche()
         usuarios = obtener_usuarios_compinche(token)
         admins = obtener_admins_compinche(token)
 
     return usuarios, admins
 
 def _obtener_bonus_stats_compinche():
-    token = COMPINCHE_ID_TOKEN
+    token = _obtener_token_compinche()
 
     try:
         return obtener_bonus_compinche(token)
     except Exception:
         try:
-            nuevos = refrescar_compinche_token()
-            return obtener_bonus_compinche(nuevos["id_token"])
+            return obtener_bonus_compinche(_renovar_token_compinche())
         except Exception:
             return None
 

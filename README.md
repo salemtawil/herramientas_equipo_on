@@ -39,6 +39,9 @@ Opcionales según funcionalidad:
 - `COMPINCHE_ID_TOKEN`
 - `COMPINCHE_REFRESH_TOKEN`
 - `COMPINCHE_CLIENT_ID`
+- `COMPINCHE_CLIENT_SECRET`
+- `COMPINCHE_USERNAME`
+- `COMPINCHE_PASSWORD`
 - `AWS_ACCESS_KEY_ID`
 - `AWS_SECRET_ACCESS_KEY`
 - `AWS_DEFAULT_REGION`
@@ -72,6 +75,9 @@ Antes de desplegar:
    - `AWS_ACCESS_KEY_ID`
    - `AWS_SECRET_ACCESS_KEY`
    - `AWS_DEFAULT_REGION=us-east-1`
+   - `COMPINCHE_USERNAME`
+   - `COMPINCHE_PASSWORD`
+   - `COMPINCHE_CLIENT_SECRET` solo si el App Client de Cognito usa client secret.
 
 ## Limitaciones conocidas
 

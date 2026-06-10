@@ -6,6 +6,7 @@ from unittest.mock import patch
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from app import app
+from tools import api_compinche
 from tools.api_compinche import obtener_diagnostico_promo_compinche
 from tools.api_compinche import obtener_metricas_compinche_api
 
@@ -116,3 +117,15 @@ class UsuariosActivosTests(unittest.TestCase):
         )
         self.assertNotIn("Persona Demo", str(diagnostico))
         self.assertNotIn("phoneNumber': '1", str(diagnostico))
+
+    def test_compinche_renueva_con_login_si_refresh_expira(self):
+        with patch(
+            "tools.api_compinche.refrescar_compinche_token",
+            side_effect=Exception("Refresh Token has expired"),
+        ), patch(
+            "tools.api_compinche.iniciar_sesion_compinche",
+            return_value={"id_token": "token-nuevo"},
+        ):
+            token = api_compinche._renovar_token_compinche()
+
+        self.assertEqual("token-nuevo", token)
