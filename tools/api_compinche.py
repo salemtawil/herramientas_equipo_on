@@ -1,4 +1,5 @@
 import base64
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import hmac
 import json
@@ -197,14 +198,18 @@ def _obtener_data_compinche():
     token = _obtener_token_compinche()
 
     try:
-        usuarios = obtener_usuarios_compinche(token)
-        admins = obtener_admins_compinche(token)
+        usuarios, admins = _obtener_usuarios_y_admins_compinche(token)
     except Exception:
         token = _renovar_token_compinche()
-        usuarios = obtener_usuarios_compinche(token)
-        admins = obtener_admins_compinche(token)
+        usuarios, admins = _obtener_usuarios_y_admins_compinche(token)
 
     return usuarios, admins
+
+def _obtener_usuarios_y_admins_compinche(token):
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        usuarios_future = executor.submit(obtener_usuarios_compinche, token)
+        admins_future = executor.submit(obtener_admins_compinche, token)
+        return usuarios_future.result(), admins_future.result()
 
 def _obtener_bonus_stats_compinche():
     token = _obtener_token_compinche()
@@ -290,7 +295,12 @@ def _normalizar_bonus_compinche(data):
     }
 
 def obtener_metricas_compinche_api():
-    usuarios, admins = _obtener_data_compinche()
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        data_future = executor.submit(_obtener_data_compinche)
+        bonus_future = executor.submit(_obtener_bonus_stats_compinche)
+        usuarios, admins = data_future.result()
+        bonus_stats = bonus_future.result()
+
     usuarios_filtrados = _usuarios_sin_admins(usuarios, admins)
 
     active_users = sum(
@@ -322,7 +332,7 @@ def obtener_metricas_compinche_api():
         "active_users": active_users,
         "running_users": running_users,
         "active_by_promo_users": active_by_promo_users,
-        "bonus_stats": _obtener_bonus_stats_compinche(),
+        "bonus_stats": bonus_stats,
     }
 
 def obtener_diagnostico_promo_compinche():

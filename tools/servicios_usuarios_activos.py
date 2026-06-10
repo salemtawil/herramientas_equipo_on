@@ -1,3 +1,5 @@
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import as_completed
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -77,89 +79,107 @@ def _actualizar_estado(estado, system, **kwargs):
 def _proceso_actualizacion_unica(estado):
     ahora = obtener_timestamp_eastern()
 
-    try:
-        metricas_compinche = obtener_metricas_compinche_api()
+    tareas = {}
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        tareas[executor.submit(obtener_metricas_compinche_api)] = "Compinche"
+        tareas[executor.submit(obtener_metricas_multiadmin)] = "Multiadmin"
 
-        _actualizar_estado(
-            estado,
-            "Compinche",
-            active_users=metricas_compinche.get("active_users", 0),
-            running_users=metricas_compinche.get("running_users", 0),
-            active_by_promo_users=metricas_compinche.get("active_by_promo_users", 0),
-            bonus_stats=metricas_compinche.get("bonus_stats"),
-            updated_at=ahora,
-            progress="Completado",
-            error=None,
-        )
-    except Exception as e:
-        _actualizar_estado(
-            estado,
-            "Compinche",
-            updated_at=ahora,
-            progress="Error",
-            error=str(e),
-        )
+        for future in as_completed(tareas):
+            nombre = tareas[future]
+            try:
+                if nombre == "Compinche":
+                    _aplicar_metricas_compinche(estado, future.result(), ahora)
+                else:
+                    _aplicar_metricas_multiadmin(estado, future.result(), ahora)
+            except Exception as e:
+                if nombre == "Compinche":
+                    _marcar_error_compinche(estado, ahora, str(e))
+                else:
+                    _marcar_error_multiadmin(estado, ahora, str(e))
 
-    try:
-        metricas = obtener_metricas_multiadmin()
 
-        _actualizar_estado(
-            estado,
-            "Paripe",
-            good_standing_users=metricas.get("Paripe", {}).get("good_standing_users", 0),
-            photo_pool=metricas.get("Paripe", {}).get("photo_pool", 0),
-            updated_at=ahora,
-            progress="Completado",
-            error=None,
-        )
+def _aplicar_metricas_compinche(estado, metricas_compinche, ahora):
+    _actualizar_estado(
+        estado,
+        "Compinche",
+        active_users=metricas_compinche.get("active_users", 0),
+        running_users=metricas_compinche.get("running_users", 0),
+        active_by_promo_users=metricas_compinche.get("active_by_promo_users", 0),
+        bonus_stats=metricas_compinche.get("bonus_stats"),
+        updated_at=ahora,
+        progress="Completado",
+        error=None,
+    )
 
-        _actualizar_estado(
-            estado,
-            "camarada",
-            active_users=metricas.get("camarada", {}).get("active_users", 0),
-            running_users=metricas.get("camarada", {}).get("running_users", 0),
-            updated_at=ahora,
-            progress="Completado",
-            error=None,
-        )
 
-        _actualizar_estado(
-            estado,
-            "complice",
-            active_users=metricas.get("complice", {}).get("active_users", 0),
-            running_users=metricas.get("complice", {}).get("running_users", 0),
-            updated_at=ahora,
-            progress="Completado",
-            error=None,
-        )
+def _marcar_error_compinche(estado, ahora, error):
+    _actualizar_estado(
+        estado,
+        "Compinche",
+        updated_at=ahora,
+        progress="Error",
+        error=error,
+    )
 
-        _actualizar_estado(
-            estado,
-            "secuaz",
-            active_users=metricas.get("secuaz", {}).get("active_users", 0),
-            running_users=metricas.get("secuaz", {}).get("running_users", 0),
-            updated_at=ahora,
-            progress="Completado",
-            error=None,
-        )
 
-        _actualizar_estado(
-            estado,
-            "ready4drive",
-            active_users=metricas.get("ready4drive", {}).get("active_users", 0),
-            running_users=metricas.get("ready4drive", {}).get("running_users", 0),
-            updated_at=ahora,
-            progress="Completado",
-            error=None,
-        )
+def _aplicar_metricas_multiadmin(estado, metricas, ahora):
+    _actualizar_estado(
+        estado,
+        "Paripe",
+        good_standing_users=metricas.get("Paripe", {}).get("good_standing_users", 0),
+        photo_pool=metricas.get("Paripe", {}).get("photo_pool", 0),
+        updated_at=ahora,
+        progress="Completado",
+        error=None,
+    )
 
-    except Exception as e:
-        error = str(e)
-        _actualizar_estado(estado, "Paripe", updated_at=ahora, progress="Error", error=error)
-        _actualizar_estado(estado, "camarada", updated_at=ahora, progress="Error", error=error)
-        _actualizar_estado(estado, "complice", updated_at=ahora, progress="Error", error=error)
-        _actualizar_estado(estado, "secuaz", updated_at=ahora, progress="Error", error=error)
-        _actualizar_estado(estado, "ready4drive", updated_at=ahora, progress="Error", error=error)
+    _actualizar_estado(
+        estado,
+        "camarada",
+        active_users=metricas.get("camarada", {}).get("active_users", 0),
+        running_users=metricas.get("camarada", {}).get("running_users", 0),
+        updated_at=ahora,
+        progress="Completado",
+        error=None,
+    )
+
+    _actualizar_estado(
+        estado,
+        "complice",
+        active_users=metricas.get("complice", {}).get("active_users", 0),
+        running_users=metricas.get("complice", {}).get("running_users", 0),
+        updated_at=ahora,
+        progress="Completado",
+        error=None,
+    )
+
+    _actualizar_estado(
+        estado,
+        "secuaz",
+        active_users=metricas.get("secuaz", {}).get("active_users", 0),
+        running_users=metricas.get("secuaz", {}).get("running_users", 0),
+        updated_at=ahora,
+        progress="Completado",
+        error=None,
+    )
+
+    _actualizar_estado(
+        estado,
+        "ready4drive",
+        active_users=metricas.get("ready4drive", {}).get("active_users", 0),
+        running_users=metricas.get("ready4drive", {}).get("running_users", 0),
+        updated_at=ahora,
+        progress="Completado",
+        error=None,
+    )
+
+
+def _marcar_error_multiadmin(estado, ahora, error):
+    _actualizar_estado(estado, "Paripe", updated_at=ahora, progress="Error", error=error)
+    _actualizar_estado(estado, "camarada", updated_at=ahora, progress="Error", error=error)
+    _actualizar_estado(estado, "complice", updated_at=ahora, progress="Error", error=error)
+    _actualizar_estado(estado, "secuaz", updated_at=ahora, progress="Error", error=error)
+    _actualizar_estado(estado, "ready4drive", updated_at=ahora, progress="Error", error=error)
 
 
 def _ejecutar_actualizacion_total():
