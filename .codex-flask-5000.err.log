@@ -13,3 +13,154 @@
 2026-06-10 09:55:56,473 INFO werkzeug:  * Restarting with stat
 2026-06-10 09:55:58,215 WARNING werkzeug:  * Debugger is active!
 2026-06-10 09:55:58,223 INFO werkzeug:  * Debugger PIN: 128-671-921
+2026-06-10 10:08:16,709 INFO werkzeug:  * Detected change in 'C:\\Users\\COMPI\\Documents\\GitHub\\herramientas_equipo_on\\tools\\servicios_usuarios_activos.py', reloading
+2026-06-10 10:08:17,048 INFO werkzeug:  * Restarting with stat
+2026-06-10 10:08:21,777 WARNING werkzeug:  * Debugger is active!
+2026-06-10 10:08:21,782 INFO werkzeug:  * Debugger PIN: 128-671-921
+2026-06-10 10:08:31,922 INFO werkzeug:  * Detected change in 'C:\\Users\\COMPI\\Documents\\GitHub\\herramientas_equipo_on\\tools\\api_compinche.py', reloading
+2026-06-10 10:08:32,270 INFO werkzeug:  * Restarting with stat
+2026-06-10 10:08:34,657 WARNING werkzeug:  * Debugger is active!
+2026-06-10 10:08:34,674 INFO werkzeug:  * Debugger PIN: 128-671-921
+2026-06-10 10:10:20,940 INFO werkzeug:  * Detected change in 'C:\\Users\\COMPI\\Documents\\GitHub\\herramientas_equipo_on\\tools\\servicios_usuarios_activos.py', reloading
+2026-06-10 10:10:21,205 INFO werkzeug:  * Restarting with stat
+2026-06-10 10:10:23,188 WARNING werkzeug:  * Debugger is active!
+2026-06-10 10:10:23,195 INFO werkzeug:  * Debugger PIN: 128-671-921
+2026-06-10 12:12:39,223 INFO werkzeug:  * Detected change in 'C:\\Users\\COMPI\\Documents\\GitHub\\herramientas_equipo_on\\app.py', reloading
+2026-06-10 12:12:39,869 INFO werkzeug:  * Restarting with stat
+2026-06-10 12:12:42,773 WARNING werkzeug:  * Debugger is active!
+2026-06-10 12:12:42,780 INFO werkzeug:  * Debugger PIN: 128-671-921
+2026-06-10 12:15:41,065 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 12:15:41] "GET /informe-semanal-cs HTTP/1.1" 200 -
+2026-06-10 12:16:00,013 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 12:16:00] "GET /informe-semanal-cs HTTP/1.1" 200 -
+2026-06-10 12:16:00,148 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 12:16:00] "GET /static/styles.css?v=19 HTTP/1.1" 200 -
+2026-06-10 12:16:00,150 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 12:16:00] "[36mGET /static/app.js?v=4 HTTP/1.1[0m" 304 -
+2026-06-10 12:16:30,640 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 12:16:30] "POST /informe-semanal-cs HTTP/1.1" 200 -
+2026-06-10 12:16:30,691 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 12:16:30] "[36mGET /static/styles.css?v=19 HTTP/1.1[0m" 304 -
+2026-06-10 12:16:30,693 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 12:16:30] "[36mGET /static/app.js?v=4 HTTP/1.1[0m" 304 -
+2026-06-10 12:17:02,678 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 12:17:02] "GET / HTTP/1.1" 200 -
+2026-06-10 12:37:52,817 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 12:37:52] "GET /informe-semanal-cs HTTP/1.1" 200 -
+2026-06-10 12:37:52,853 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 12:37:52] "GET /static/styles.css?v=19 HTTP/1.1" 200 -
+2026-06-10 12:37:52,860 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 12:37:52] "GET /static/app.js?v=4 HTTP/1.1" 200 -
+2026-06-10 12:37:53,198 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 12:37:53] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2026-06-10 12:58:55,296 INFO werkzeug:  * Detected change in 'C:\\Users\\COMPI\\Documents\\GitHub\\herramientas_equipo_on\\tools\\informe_semanal_cs.py', reloading
+2026-06-10 12:58:56,019 INFO werkzeug:  * Restarting with stat
+2026-06-10 12:59:01,494 WARNING werkzeug:  * Debugger is active!
+2026-06-10 12:59:01,503 INFO werkzeug:  * Debugger PIN: 128-671-921
+2026-06-10 13:22:22,074 INFO werkzeug:  * Detected change in 'C:\\Users\\COMPI\\Documents\\GitHub\\herramientas_equipo_on\\tools\\informe_semanal_cs.py', reloading
+2026-06-10 13:22:22,453 INFO werkzeug:  * Restarting with stat
+2026-06-10 13:22:25,237 WARNING werkzeug:  * Debugger is active!
+2026-06-10 13:22:25,252 INFO werkzeug:  * Debugger PIN: 128-671-921
+2026-06-10 13:24:12,873 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 13:24:12] "GET /informe-semanal-cs HTTP/1.1" 200 -
+2026-06-10 13:24:12,984 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 13:24:12] "GET /static/styles.css?v=19 HTTP/1.1" 200 -
+2026-06-10 13:24:12,991 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 13:24:12] "GET /static/app.js?v=4 HTTP/1.1" 200 -
+2026-06-10 13:26:42,573 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 13:26:42] "GET /informe-semanal-cs HTTP/1.1" 200 -
+2026-06-10 13:26:42,600 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 13:26:42] "[36mGET /static/app.js?v=4 HTTP/1.1[0m" 304 -
+2026-06-10 13:26:42,621 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 13:26:42] "GET /static/styles.css?v=19 HTTP/1.1" 200 -
+2026-06-10 13:27:03,348 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 13:27:03] "GET /informe-semanal-cs HTTP/1.1" 200 -
+2026-06-10 13:27:03,365 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 13:27:03] "[36mGET /static/styles.css?v=19 HTTP/1.1[0m" 304 -
+2026-06-10 13:27:03,375 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 13:27:03] "[36mGET /static/app.js?v=4 HTTP/1.1[0m" 304 -
+2026-06-10 13:27:59,475 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 13:27:59] "GET /informe-semanal-cs HTTP/1.1" 200 -
+2026-06-10 13:27:59,514 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 13:27:59] "GET /static/styles.css?v=19 HTTP/1.1" 200 -
+2026-06-10 13:27:59,527 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 13:27:59] "[36mGET /static/app.js?v=4 HTTP/1.1[0m" 304 -
+2026-06-10 13:37:31,169 INFO werkzeug:  * Detected change in 'C:\\Users\\COMPI\\Documents\\GitHub\\herramientas_equipo_on\\tools\\informe_semanal_cs.py', reloading
+2026-06-10 13:37:31,502 INFO werkzeug:  * Restarting with stat
+2026-06-10 13:37:34,887 WARNING werkzeug:  * Debugger is active!
+2026-06-10 13:37:34,902 INFO werkzeug:  * Debugger PIN: 128-671-921
+2026-06-10 13:38:45,863 INFO werkzeug:  * Detected change in 'C:\\Users\\COMPI\\Documents\\GitHub\\herramientas_equipo_on\\tests\\test_informe_semanal_cs.py', reloading
+2026-06-10 13:38:46,078 INFO werkzeug:  * Restarting with stat
+2026-06-10 13:38:47,778 WARNING werkzeug:  * Debugger is active!
+2026-06-10 13:38:47,786 INFO werkzeug:  * Debugger PIN: 128-671-921
+2026-06-10 13:38:55,865 INFO werkzeug:  * Detected change in 'C:\\Users\\COMPI\\Documents\\GitHub\\herramientas_equipo_on\\tests\\test_informe_semanal_cs.py', reloading
+2026-06-10 13:38:56,074 INFO werkzeug:  * Restarting with stat
+2026-06-10 13:38:57,781 WARNING werkzeug:  * Debugger is active!
+2026-06-10 13:38:57,788 INFO werkzeug:  * Debugger PIN: 128-671-921
+2026-06-10 13:39:19,257 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 13:39:19] "GET /informe-semanal-cs HTTP/1.1" 200 -
+2026-06-10 13:39:19,350 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 13:39:19] "[36mGET /static/app.js?v=4 HTTP/1.1[0m" 304 -
+2026-06-10 13:39:19,358 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 13:39:19] "GET /static/styles.css?v=19 HTTP/1.1" 200 -
+2026-06-10 14:02:38,911 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 14:02:38] "GET /informe-semanal-cs HTTP/1.1" 200 -
+2026-06-10 14:02:38,959 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 14:02:38] "GET /static/styles.css?v=19 HTTP/1.1" 200 -
+2026-06-10 14:02:38,959 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 14:02:38] "[36mGET /static/app.js?v=4 HTTP/1.1[0m" 304 -
+2026-06-10 15:55:19,961 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 15:55:19] "POST /informe-semanal-cs HTTP/1.1" 200 -
+2026-06-10 15:55:20,012 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 15:55:20] "[36mGET /static/styles.css?v=19 HTTP/1.1[0m" 304 -
+2026-06-10 15:55:20,020 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 15:55:20] "[36mGET /static/app.js?v=4 HTTP/1.1[0m" 304 -
+2026-06-10 15:56:35,601 INFO werkzeug:  * Detected change in 'C:\\Users\\COMPI\\Documents\\GitHub\\herramientas_equipo_on\\tools\\informe_semanal_cs.py', reloading
+2026-06-10 15:56:36,146 INFO werkzeug:  * Restarting with stat
+2026-06-10 15:56:39,504 WARNING werkzeug:  * Debugger is active!
+2026-06-10 15:56:39,513 INFO werkzeug:  * Debugger PIN: 128-671-921
+2026-06-10 15:56:53,692 INFO werkzeug:  * Detected change in 'C:\\Users\\COMPI\\Documents\\GitHub\\herramientas_equipo_on\\tools\\informe_semanal_cs.py', reloading
+2026-06-10 15:56:54,005 INFO werkzeug:  * Restarting with stat
+2026-06-10 15:56:56,573 WARNING werkzeug:  * Debugger is active!
+2026-06-10 15:56:56,581 INFO werkzeug:  * Debugger PIN: 128-671-921
+2026-06-10 15:57:05,743 INFO werkzeug:  * Detected change in 'C:\\Users\\COMPI\\Documents\\GitHub\\herramientas_equipo_on\\tests\\test_informe_semanal_cs.py', reloading
+2026-06-10 15:57:06,076 INFO werkzeug:  * Restarting with stat
+2026-06-10 15:57:09,873 WARNING werkzeug:  * Debugger is active!
+2026-06-10 15:57:09,880 INFO werkzeug:  * Debugger PIN: 128-671-921
+2026-06-10 15:57:14,951 INFO werkzeug:  * Detected change in 'C:\\Users\\COMPI\\Documents\\GitHub\\herramientas_equipo_on\\tests\\test_informe_semanal_cs.py', reloading
+2026-06-10 15:57:15,313 INFO werkzeug:  * Restarting with stat
+2026-06-10 15:57:17,723 WARNING werkzeug:  * Debugger is active!
+2026-06-10 15:57:17,732 INFO werkzeug:  * Debugger PIN: 128-671-921
+2026-06-10 15:57:38,555 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 15:57:38] "GET /informe-semanal-cs HTTP/1.1" 200 -
+2026-06-10 15:57:38,669 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 15:57:38] "[36mGET /static/app.js?v=4 HTTP/1.1[0m" 304 -
+2026-06-10 15:57:38,733 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 15:57:38] "[36mGET /static/styles.css?v=19 HTTP/1.1[0m" 304 -
+2026-06-10 15:58:45,654 INFO werkzeug:  * Detected change in 'C:\\Users\\COMPI\\Documents\\GitHub\\herramientas_equipo_on\\tools\\informe_semanal_cs.py', reloading
+2026-06-10 15:58:45,915 INFO werkzeug:  * Restarting with stat
+2026-06-10 15:58:48,191 WARNING werkzeug:  * Debugger is active!
+2026-06-10 15:58:48,201 INFO werkzeug:  * Debugger PIN: 128-671-921
+2026-06-10 15:59:03,378 INFO werkzeug:  * Detected change in 'C:\\Users\\COMPI\\Documents\\GitHub\\herramientas_equipo_on\\tests\\test_informe_semanal_cs.py', reloading
+2026-06-10 15:59:03,680 INFO werkzeug:  * Restarting with stat
+2026-06-10 15:59:06,018 WARNING werkzeug:  * Debugger is active!
+2026-06-10 15:59:06,038 INFO werkzeug:  * Debugger PIN: 128-671-921
+2026-06-10 16:07:04,209 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 16:07:04] "POST /informe-semanal-cs HTTP/1.1" 200 -
+2026-06-10 16:07:04,338 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 16:07:04] "[36mGET /static/styles.css?v=19 HTTP/1.1[0m" 304 -
+2026-06-10 16:07:04,344 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 16:07:04] "[36mGET /static/app.js?v=4 HTTP/1.1[0m" 304 -
+2026-06-10 16:26:21,503 INFO werkzeug:  * Detected change in 'C:\\Users\\COMPI\\Documents\\GitHub\\herramientas_equipo_on\\app.py', reloading
+2026-06-10 16:26:21,836 INFO werkzeug:  * Restarting with stat
+2026-06-10 16:26:24,001 WARNING werkzeug:  * Debugger is active!
+2026-06-10 16:26:24,009 INFO werkzeug:  * Debugger PIN: 128-671-921
+2026-06-10 16:26:42,214 INFO werkzeug:  * Detected change in 'C:\\Users\\COMPI\\Documents\\GitHub\\herramientas_equipo_on\\tools\\informe_semanal_cs.py', reloading
+2026-06-10 16:26:42,466 INFO werkzeug:  * Restarting with stat
+2026-06-10 16:26:44,468 WARNING werkzeug:  * Debugger is active!
+2026-06-10 16:26:44,488 INFO werkzeug:  * Debugger PIN: 128-671-921
+2026-06-10 16:28:17,112 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 16:28:17] "GET /informe-semanal-cs HTTP/1.1" 200 -
+2026-06-10 16:40:11,512 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 16:40:11] "POST /informe-semanal-cs HTTP/1.1" 200 -
+2026-06-10 16:40:11,658 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 16:40:11] "[36mGET /static/app.js?v=4 HTTP/1.1[0m" 304 -
+2026-06-10 16:40:11,666 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 16:40:11] "GET /static/styles.css?v=19 HTTP/1.1" 200 -
+2026-06-10 16:40:52,437 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 16:40:52] "GET /informe-semanal-cs HTTP/1.1" 200 -
+2026-06-10 16:41:10,082 INFO werkzeug:  * Detected change in 'C:\\Users\\COMPI\\Documents\\GitHub\\herramientas_equipo_on\\app.py', reloading
+2026-06-10 16:41:10,364 INFO werkzeug:  * Restarting with stat
+ * Tip: There are .env files present. Install python-dotenv to use them.
+2026-06-10 16:41:12,210 WARNING werkzeug:  * Debugger is active!
+2026-06-10 16:41:12,214 INFO werkzeug:  * Debugger PIN: 128-671-921
+2026-06-10 16:41:13,211 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 16:41:13] "GET /informe-semanal-cs HTTP/1.1" 200 -
+2026-06-10 16:42:05,870 INFO werkzeug:  * Detected change in 'C:\\Users\\COMPI\\Documents\\GitHub\\herramientas_equipo_on\\tools\\informe_semanal_cs.py', reloading
+2026-06-10 16:42:06,154 INFO werkzeug:  * Restarting with stat
+ * Tip: There are .env files present. Install python-dotenv to use them.
+2026-06-10 16:42:08,224 WARNING werkzeug:  * Debugger is active!
+2026-06-10 16:42:08,229 INFO werkzeug:  * Debugger PIN: 128-671-921
+2026-06-10 16:42:19,358 INFO werkzeug:  * Detected change in 'C:\\Users\\COMPI\\Documents\\GitHub\\herramientas_equipo_on\\tests\\test_informe_semanal_cs.py', reloading
+2026-06-10 16:42:19,613 INFO werkzeug:  * Restarting with stat
+ * Tip: There are .env files present. Install python-dotenv to use them.
+2026-06-10 16:42:21,709 WARNING werkzeug:  * Debugger is active!
+2026-06-10 16:42:21,714 INFO werkzeug:  * Debugger PIN: 128-671-921
+2026-06-10 17:00:59,430 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 17:00:59] "GET / HTTP/1.1" 200 -
+2026-06-10 17:00:59,741 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 17:00:59] "GET /static/styles.css?v=19 HTTP/1.1" 200 -
+2026-06-10 17:00:59,840 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 17:00:59] "GET /auditoria-csat HTTP/1.1" 200 -
+2026-06-10 17:00:59,848 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 17:00:59] "GET /informe-semanal-cs HTTP/1.1" 200 -
+2026-06-10 17:04:33,474 INFO werkzeug:  * Detected change in 'C:\\Users\\COMPI\\Documents\\GitHub\\herramientas_equipo_on\\tools\\informe_semanal_cs.py', reloading
+2026-06-10 17:04:33,951 INFO werkzeug:  * Restarting with stat
+ * Tip: There are .env files present. Install python-dotenv to use them.
+2026-06-10 17:04:36,441 WARNING werkzeug:  * Debugger is active!
+2026-06-10 17:04:36,446 INFO werkzeug:  * Debugger PIN: 128-671-921
+2026-06-10 17:05:18,848 INFO werkzeug:  * Detected change in 'C:\\Users\\COMPI\\Documents\\GitHub\\herramientas_equipo_on\\tests\\test_informe_semanal_cs.py', reloading
+2026-06-10 17:05:19,075 INFO werkzeug:  * Restarting with stat
+ * Tip: There are .env files present. Install python-dotenv to use them.
+2026-06-10 17:05:20,852 WARNING werkzeug:  * Debugger is active!
+2026-06-10 17:05:20,857 INFO werkzeug:  * Debugger PIN: 128-671-921
+2026-06-10 17:15:15,156 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 17:15:15] "GET /usuarios-activos/ HTTP/1.1" 200 -
+2026-06-10 17:15:15,400 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 17:15:15] "[36mGET /static/styles.css?v=19 HTTP/1.1[0m" 304 -
+2026-06-10 17:15:15,403 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 17:15:15] "GET /static/system-logos/camarada_48.svg HTTP/1.1" 200 -
+2026-06-10 17:15:15,412 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 17:15:15] "GET /static/system-logos/paripe_48.svg HTTP/1.1" 200 -
+2026-06-10 17:15:15,413 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 17:15:15] "[36mGET /static/app.js?v=4 HTTP/1.1[0m" 304 -
+2026-06-10 17:15:15,417 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 17:15:15] "GET /static/system-logos/complice_48.svg HTTP/1.1" 200 -
+2026-06-10 17:15:15,423 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 17:15:15] "GET /static/system-logos/ready4drive_48.svg HTTP/1.1" 200 -
+2026-06-10 17:15:15,427 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 17:15:15] "GET /static/system-logos/compinche_48.svg HTTP/1.1" 200 -
+2026-06-10 17:15:27,069 INFO werkzeug: 127.0.0.1 - - [10/Jun/2026 17:15:27] "POST /usuarios-activos/actualizar HTTP/1.1" 200 -

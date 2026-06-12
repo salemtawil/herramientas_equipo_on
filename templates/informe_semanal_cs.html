@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+
+{% block title %}Informe Semanal CS{% endblock %}
+{% block page_name %}Informe Semanal CS{% endblock %}
+
+{% block content %}
+<div class="page-stack informe-semanal-cs-page">
+  <section class="card page-hero report-hero">
+    <div class="page-section-title">
+      <div>
+        <h1>Informe Semanal CS</h1>
+        <p>Arma el informe ejecutivo semanal desde el PDF anterior, la bitácora nueva y notas puntuales del período.</p>
+      </div>
+      <span class="hero-badge">Generador</span>
+    </div>
+
+    {% if mensaje %}
+      <div class="success top-space">{{ mensaje }}</div>
+    {% endif %}
+    {% if advertencia %}
+      <div class="warning top-space">{{ advertencia }}</div>
+    {% endif %}
+    {% for warning in warnings %}
+      <div class="warning top-space">{{ warning }}</div>
+    {% endfor %}
+  </section>
+
+  <div class="report-workspace">
+    <form class="card report-input-panel" method="post" enctype="multipart/form-data" data-processing-message="Generando informe semanal de CS...">
+      <div class="page-section-title">
+        <div>
+          <h2>Fuentes del informe</h2>
+          <p class="small">Todo se usa solo para esta generación. No se guarda historial.</p>
+        </div>
+        <span class="hero-badge hero-badge-soft {% if ia_estado and ia_estado.is_ready %}is-ready{% else %}is-muted{% endif %}">
+          {{ ia_estado.label if ia_estado else "IA sin configurar" }}
+        </span>
+      </div>
+
+      <div class="form-stack">
+        <div class="row-2">
+          <div>
+            <label class="small" for="nombre_informe">Nombre</label>
+            <input id="nombre_informe" type="text" name="nombre_informe" value="{{ datos.nombre_informe }}" placeholder="Informe General CS">
+          </div>
+          <div>
+            <label class="small" for="periodo">Período</label>
+            <input id="periodo" type="text" name="periodo" value="{{ datos.periodo }}" placeholder="01/06/26 al 07/06/26">
+          </div>
+        </div>
+
+        <div class="report-bitacora-upload">
+          <label class="small" for="bitacora_archivo">PDF o archivo con la bitácora recopilada</label>
+          <input id="bitacora_archivo" type="file" name="bitacora_archivo" accept=".txt,.md,.csv,.json,.log,.pdf,.png,.jpg,.jpeg,.webp,.xlsx,.xls,.ods">
+          <p class="small report-help">Este es el insumo principal del informe. Con IA configurada, el contenido extraído se organiza en la estructura final.</p>
+        </div>
+
+        <div class="report-field-group">
+          <div>
+            <label class="small" for="informe_anterior_archivo">PDF o archivo del informe anterior</label>
+            <input id="informe_anterior_archivo" type="file" name="informe_anterior_archivo" accept=".txt,.md,.csv,.json,.log,.pdf,.png,.jpg,.jpeg,.webp,.xlsx,.xls,.ods">
+          </div>
+          <div>
+            <label class="small" for="archivos_adicionales">Archivos adicionales</label>
+            <input id="archivos_adicionales" type="file" name="archivos_adicionales" multiple accept=".txt,.md,.csv,.json,.log,.pdf,.png,.jpg,.jpeg,.webp,.xlsx,.xls,.ods">
+          </div>
+        </div>
+
+        <p class="small report-help">Se extrae texto de PDF, TXT, Markdown, CSV, JSON y logs de hasta 40 MB. Imágenes y hojas quedan señaladas como recibidas.</p>
+
+        <div>
+          <label class="small" for="informe_anterior">Informe anterior pegado</label>
+          <textarea id="informe_anterior" name="informe_anterior" rows="5" placeholder="Opcional si ya subiste el PDF. Úsalo para pegar texto adicional o corregido.">{{ datos.informe_anterior }}</textarea>
+        </div>
+
+        <div>
+          <label class="small" for="bitacora">Texto adicional de bitácora</label>
+          <textarea id="bitacora" name="bitacora" rows="8" placeholder="Opcional. Pega aquí información extra que no esté en el archivo.">{{ datos.bitacora }}</textarea>
+        </div>
+
+        <div>
+          <label class="small" for="notas">Notas o énfasis</label>
+          <textarea id="notas" name="notas" rows="5" placeholder="Ej. conservar detalle de incidencias, tono ejecutivo, no resumir casos de sistemas.">{{ datos.notas }}</textarea>
+        </div>
+      </div>
+
+      <div class="acciones-barra report-actions">
+        <button type="submit" name="accion" value="generar">Generar informe</button>
+        <button type="submit" class="btn secondary" name="accion" value="regenerar">Regenerar</button>
+      </div>
+    </form>
+
+    <section class="card report-output-panel">
+      <div class="page-section-title">
+        <div>
+          <h2>Resultado editable</h2>
+          <p class="small">Revisa, ajusta y copia el informe final.</p>
+        </div>
+        {% if fuente_generacion %}
+          <span class="hero-badge hero-badge-soft">{{ fuente_generacion }}</span>
+        {% endif %}
+      </div>
+
+      <textarea
+        id="informe-generado"
+        class="report-editor"
+        rows="30"
+        placeholder="El informe aparecerá aquí después de generar."
+      >{{ informe_generado }}</textarea>
+
+      <div class="acciones-barra report-actions">
+        <button type="button" class="btn secondary" data-copy-report>Copiar informe</button>
+        <button type="button" class="btn secondary" data-download-report>Descargar .md</button>
+        <span class="small" data-copy-status aria-live="polite"></span>
+      </div>
+    </section>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+  <script>
+    (function () {
+      const editor = document.getElementById("informe-generado");
+      const copyButton = document.querySelector("[data-copy-report]");
+      const downloadButton = document.querySelector("[data-download-report]");
+      const status = document.querySelector("[data-copy-status]");
+
+      function setStatus(text) {
+        if (status) status.textContent = text;
+      }
+
+      if (copyButton && editor) {
+        copyButton.addEventListener("click", async () => {
+          if (!editor.value.trim()) {
+            setStatus("No hay informe para copiar.");
+            return;
+          }
+
+          try {
+            await navigator.clipboard.writeText(editor.value);
+            setStatus("Informe copiado.");
+          } catch (error) {
+            editor.focus();
+            editor.select();
+            document.execCommand("copy");
+            setStatus("Informe copiado.");
+          }
+        });
+      }
+
+      if (downloadButton && editor) {
+        downloadButton.addEventListener("click", () => {
+          if (!editor.value.trim()) {
+            setStatus("No hay informe para descargar.");
+            return;
+          }
+
+          const blob = new Blob([editor.value], { type: "text/markdown;charset=utf-8" });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = "informe_semanal_cs.md";
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          URL.revokeObjectURL(url);
+          setStatus("Descarga preparada.");
+        });
+      }
+    })();
+  </script>
+{% endblock %}

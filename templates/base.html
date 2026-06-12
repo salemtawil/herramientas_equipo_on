@@ -58,6 +58,10 @@
           <span class="sidebar-link__eyebrow">Calidad</span>
           <strong>Auditoría CSAT</strong>
         </a>
+        <a class="sidebar-link {% if endpoint == 'informe_semanal_cs.informe_semanal_cs' %}is-active{% endif %}" href="{{ url_for('informe_semanal_cs.informe_semanal_cs') }}">
+          <span class="sidebar-link__eyebrow">Informe</span>
+          <strong>Informe Semanal CS</strong>
+        </a>
         <a class="sidebar-link {% if endpoint == 'auditoria_salientes.auditoria_salientes' %}is-active{% endif %}" href="{{ url_for('auditoria_salientes.auditoria_salientes') }}">
           <span class="sidebar-link__eyebrow">Cumplimiento</span>
           <strong>Auditoría de salientes</strong>

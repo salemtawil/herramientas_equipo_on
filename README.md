@@ -12,6 +12,7 @@ pip install -r requirements.txt
 ```
 
 3. Define variables de entorno según las herramientas que vayas a usar.
+   En local puedes crear un archivo `.env`; la app lo carga automáticamente al iniciar.
 4. Ejecuta la app:
 
 ```bash
@@ -52,9 +53,14 @@ Opcionales según funcionalidad:
 - `OPENAI_API_KEY`
 - `OPENAI_CSAT_MODEL`
 - `OPENAI_CSAT_MAX_CASES`
+- `OPENAI_WEEKLY_REPORT_MODEL`
+- `GEMINI_API_KEY`
+- `GEMINI_WEEKLY_REPORT_MODEL`
 - `CSAT_AI_PROVIDER`
+- `WEEKLY_REPORT_AI_PROVIDER`
 - `OLLAMA_BASE_URL`
 - `OLLAMA_CSAT_MODEL`
+- `OLLAMA_WEEKLY_REPORT_MODEL`
 
 ## Deploy en Vercel
 
@@ -81,11 +87,42 @@ Antes de desplegar:
    - `COMPINCHE_USER_POOL_ID=us-east-1_KRph7TcMm` si el login necesita `ADMIN_USER_PASSWORD_AUTH`.
    - `COMPINCHE_CLIENT_SECRET` solo si el App Client de Cognito usa client secret.
 
+## Conectar IA para Informe Semanal CS
+
+Opción recomendada para Vercel: Gemini API.
+
+```env
+GEMINI_API_KEY=tu_api_key
+WEEKLY_REPORT_AI_PROVIDER=gemini
+GEMINI_WEEKLY_REPORT_MODEL=gemini-2.5-flash
+```
+
+En Vercel, configura esas mismas variables como Environment Variables.
+
+Para usar OpenAI en local, crea `.env` en la raíz del proyecto:
+
+```env
+OPENAI_API_KEY=tu_api_key
+WEEKLY_REPORT_AI_PROVIDER=openai
+OPENAI_WEEKLY_REPORT_MODEL=gpt-4.1-mini
+```
+
+Luego reinicia Flask.
+
+También puedes usar Ollama local:
+
+```env
+WEEKLY_REPORT_AI_PROVIDER=ollama
+OLLAMA_BASE_URL=http://127.0.0.1:11434
+OLLAMA_WEEKLY_REPORT_MODEL=qwen2.5:7b
+```
+
 ## Limitaciones conocidas
 
 - `usuarios_a_sheets` y `auditoria_salientes` guardan estado temporal firmado. Si el estado es pequeño, viaja inline; si crece, se apoya en almacenamiento temporal del runtime.
 - `auditoria_csat` guarda su análisis temporal en almacenamiento efímero del runtime.
 - `auditoria_csat` puede auditar negativas pendientes con IA si `OPENAI_API_KEY` está configurada o si `CSAT_AI_PROVIDER=ollama` apunta a un Ollama local. La IA usa transcripción del CSV cuando existe; si el CSV solo trae un link privado, audita con el comentario disponible hasta conectar una API backend que entregue el transcript completo.
+- `informe_semanal_cs` genera informes con Gemini si `GEMINI_API_KEY` está configurada y `WEEKLY_REPORT_AI_PROVIDER=gemini`. También puede usar OpenAI u Ollama. Si no hay proveedor de IA, devuelve una base editable con las secciones obligatorias. En esta V1 extrae texto de PDF, TXT, Markdown, CSV, JSON y logs; imágenes y hojas de cálculo quedan marcadas como recibidas sin extracción.
 - Ollama local no corre dentro de Vercel ni puede usar el `127.0.0.1` de una computadora personal desde producción. Para Vercel, usa OpenAI u otro proveedor cloud, o expón un servidor Ollama propio con URL segura y accesible desde Vercel.
 - `usuarios_activos` depende de APIs externas y puede fallar por timeouts o credenciales vencidas.
 - El repo contiene una carpeta `tools/trash/` con scripts archivados que no forman parte del runtime activo.

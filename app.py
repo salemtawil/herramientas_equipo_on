@@ -1,9 +1,14 @@
 import logging
 import os
 from flask import Flask, render_template
+from utils.env import cargar_env_local
+
+cargar_env_local()
+
 from tools.auditoria_csat import auditoria_csat_bp
 from tools.auditoria_salientes import auditoria_salientes_bp
 from tools.break_admin import break_admin_bp
+from tools.informe_semanal_cs import informe_semanal_cs_bp
 from tools.reporte_agentes import reporte_agentes_bp
 from tools.usuarios_activos import usuarios_activos_bp
 from tools.comparar_csv import comparar_csv_bp
@@ -33,6 +38,7 @@ app.register_blueprint(usuarios_a_sheets_bp)
 app.register_blueprint(auditoria_csat_bp)
 app.register_blueprint(auditoria_salientes_bp)
 app.register_blueprint(break_admin_bp)
+app.register_blueprint(informe_semanal_cs_bp)
 
 
 @app.route("/")

@@ -172,6 +172,23 @@
     </article>
   </section>
 
+  <section class="platform-summary-panel">
+    <div class="platform-summary-panel__main">
+      <span class="platform-summary-panel__eyebrow">Resumen general</span>
+      <h2>Usuarios en plataformas</h2>
+    </div>
+    <div class="platform-summary-panel__stats">
+      <div>
+        <span>Usuarios reales</span>
+        <strong id="total-real-users">-</strong>
+      </div>
+      <div>
+        <span>Usuarios totales</span>
+        <strong id="total-platform-users">-</strong>
+      </div>
+    </div>
+  </section>
+
   <section class="compinche-bonus-panel" id="compinche-bonus-panel" hidden>
     <div class="compinche-bonus-panel__main">
       <span class="compinche-bonus-panel__eyebrow">Compinche bonus</span>
@@ -239,6 +256,26 @@ function calcularUsuariosReales(activeUsers, promoUsers) {
   return Math.max(active - promo, 0);
 }
 
+function numberOrZero(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function renderPlatformSummary({ compinche, paripe, camarada, complice, secuaz, ready4drive }) {
+  const compincheTotal = numberOrZero(compinche?.active_users);
+  const compinchePromo = numberOrZero(compinche?.active_by_promo_users);
+  const compincheReal = Math.max(compincheTotal - compinchePromo, 0);
+  const otherSystemsTotal =
+    numberOrZero(paripe?.good_standing_users) +
+    numberOrZero(camarada?.active_users) +
+    numberOrZero(complice?.active_users) +
+    numberOrZero(secuaz?.active_users) +
+    numberOrZero(ready4drive?.active_users);
+
+  document.getElementById("total-real-users").textContent = (compincheReal + otherSystemsTotal).toLocaleString("en-US");
+  document.getElementById("total-platform-users").textContent = (compincheTotal + otherSystemsTotal).toLocaleString("en-US");
+}
+
 function renderBonusStats(bonus) {
   const panel = document.getElementById("compinche-bonus-panel");
   if (!panel) return;
@@ -291,6 +328,7 @@ function renderData(items, updatedAt) {
   const ready4drive = items.find(item => item.system === "ready4drive");
 
   document.getElementById("general-updated").textContent = `Última actualización general (ET): ${formatUpdatedAt(updatedAt)}`;
+  renderPlatformSummary({ compinche, paripe, camarada, complice, secuaz, ready4drive });
   renderBonusStats(compinche?.bonus_stats);
 
   if (compinche) {
