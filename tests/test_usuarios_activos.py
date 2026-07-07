@@ -98,6 +98,39 @@ class UsuariosActivosTests(unittest.TestCase):
         self.assertEqual(1, metricas["active_by_promo_users"])
         self.assertEqual(bonus_stats, metricas["bonus_stats"])
 
+    def test_compinche_normaliza_good_standing_status_y_telefonos(self):
+        usuarios = [
+            {
+                "phoneNumber": "+58 412-000-0001",
+                "goodStanding": "false",
+                "status": "start",
+                "standingType": "paid",
+            },
+            {
+                "phoneNumber": "+58 412-000-0002",
+                "goodStanding": "true",
+                "status": " START ",
+                "standingType": "promo_trial",
+            },
+            {
+                "phoneNumber": "+58 412-000-0003",
+                "goodStanding": "true",
+                "status": "start",
+                "standingType": "paid",
+            },
+        ]
+        admins = [{"phoneNumber": "584120000003"}]
+
+        with patch("tools.api_compinche._obtener_data_compinche", return_value=(usuarios, admins)), patch(
+            "tools.api_compinche._obtener_bonus_stats_compinche",
+            return_value=None,
+        ):
+            metricas = obtener_metricas_compinche_api()
+
+        self.assertEqual(1, metricas["active_users"])
+        self.assertEqual(1, metricas["running_users"])
+        self.assertEqual(1, metricas["active_by_promo_users"])
+
     def test_compinche_diagnostico_promo_no_expone_valores(self):
         usuarios = [
             {

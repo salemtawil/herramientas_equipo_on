@@ -223,15 +223,20 @@ def _obtener_bonus_stats_compinche():
             return None
 
 def _usuarios_sin_admins(usuarios, admins):
+    def normalizar_phone(value):
+        if value is None:
+            return ""
+        return re.sub(r"\D", "", str(value))
+
     admin_phones = {
-        admin.get("phoneNumber")
+        normalizar_phone(admin.get("phoneNumber"))
         for admin in admins
-        if isinstance(admin, dict) and admin.get("phoneNumber")
+        if isinstance(admin, dict) and normalizar_phone(admin.get("phoneNumber"))
     }
 
     return [
         user for user in usuarios
-        if isinstance(user, dict) and user.get("phoneNumber") not in admin_phones
+        if isinstance(user, dict) and normalizar_phone(user.get("phoneNumber")) not in admin_phones
     ]
 
 def _valor_activo(value):
@@ -272,6 +277,24 @@ def _usuario_tiene_promo(user):
         return True
     return any(_valor_activo(value) for _, value in _campos_promo(user))
 
+def _usuario_good_standing(user):
+    value = user.get("goodStanding")
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        limpio = value.strip().lower()
+        if limpio in {"true", "1", "yes", "si", "sí", "good", "good_standing", "goodstanding", "active", "activo"}:
+            return True
+        if limpio in {"", "false", "0", "no", "none", "null", "-", "n/a", "bad", "inactive", "inactivo"}:
+            return False
+    return bool(value)
+
+def _usuario_running(user):
+    status = user.get("status")
+    return isinstance(status, str) and status.strip().lower() == "start"
+
 def _to_number(value):
     try:
         return float(value)
@@ -305,12 +328,12 @@ def obtener_metricas_compinche_api():
 
     active_users = sum(
         1 for user in usuarios_filtrados
-        if bool(user.get("goodStanding"))
+        if _usuario_good_standing(user)
     )
 
     running_users = sum(
         1 for user in usuarios_filtrados
-        if bool(user.get("goodStanding")) and user.get("status") == "start"
+        if _usuario_good_standing(user) and _usuario_running(user)
     )
 
     hay_campos_promo = any(
@@ -325,7 +348,7 @@ def obtener_metricas_compinche_api():
     if hay_campos_promo:
         active_by_promo_users = sum(
             1 for user in usuarios_filtrados
-            if bool(user.get("goodStanding")) and _usuario_tiene_promo(user)
+            if _usuario_good_standing(user) and _usuario_tiene_promo(user)
         )
 
     return {
@@ -348,7 +371,7 @@ def obtener_diagnostico_promo_compinche():
     standing_type_counts = {}
 
     for user in usuarios_filtrados:
-        is_active = bool(user.get("goodStanding"))
+        is_active = _usuario_good_standing(user)
         standing_type = user.get("standingType")
         if isinstance(standing_type, str):
             item = standing_type_counts.setdefault(
@@ -390,10 +413,10 @@ def obtener_diagnostico_promo_compinche():
 
     return {
         "total_usuarios": len(usuarios_filtrados),
-        "usuarios_activos": sum(1 for user in usuarios_filtrados if bool(user.get("goodStanding"))),
+        "usuarios_activos": sum(1 for user in usuarios_filtrados if _usuario_good_standing(user)),
         "active_by_promo_users_detectado": sum(
             1 for user in usuarios_filtrados
-            if bool(user.get("goodStanding")) and _usuario_tiene_promo(user)
+            if _usuario_good_standing(user) and _usuario_tiene_promo(user)
         ),
         "campos_top_level": campos_top_level,
         "campos_promo_detectados": campos_promo,
