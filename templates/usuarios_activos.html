@@ -45,8 +45,8 @@
         </div>
       </div>
       <div class="stat-list stat-list--compinche">
-        <div class="stat-line"><span>Users</span><strong id="compinche-active">-</strong></div>
-        <div class="stat-line"><span>Users T</span><strong id="compinche-total">-</strong></div>
+        <div class="stat-line"><span>Activos</span><strong id="compinche-active">-</strong></div>
+        <div class="stat-line"><span>Reales</span><strong id="compinche-total">-</strong></div>
         <div class="stat-line"><span>Promo</span><strong id="compinche-promo">-</strong></div>
         <div class="stat-line"><span>Run</span><strong id="compinche-running">-</strong></div>
       </div>
@@ -332,11 +332,11 @@ function renderData(items, updatedAt) {
   renderBonusStats(compinche?.bonus_stats);
 
   if (compinche) {
-    document.getElementById("compinche-active").textContent = calcularUsuariosReales(
+    document.getElementById("compinche-active").textContent = compinche.active_users ?? "-";
+    document.getElementById("compinche-total").textContent = calcularUsuariosReales(
       compinche.active_users,
       compinche.active_by_promo_users,
     );
-    document.getElementById("compinche-total").textContent = compinche.active_users ?? "-";
     document.getElementById("compinche-running").textContent = compinche.running_users ?? "-";
     document.getElementById("compinche-promo").textContent = compinche.active_by_promo_users ?? "-";
     renderSystemState("compinche", compinche);
