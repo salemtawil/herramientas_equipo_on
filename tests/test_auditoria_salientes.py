@@ -12,6 +12,8 @@ from tools.auditoria_salientes import (
     ESTADO_NO_CUMPLE,
     ESTADO_SEGUNDO_INTENTO,
     analizar_casos,
+    asignar_turnos_a_casos,
+    construir_resumen_general,
     preparar_dataframe_historial,
 )
 
@@ -149,6 +151,42 @@ class AuditoriaSalientesTests(unittest.TestCase):
         self.assertEqual(2, len(df_casos))
         self.assertEqual(ESTADO_CONTESTADA, df_casos.iloc[0]["Estado final"])
         self.assertEqual(ESTADO_NO_CUMPLE, df_casos.iloc[1]["Estado final"])
+
+    def test_cierra_caso_contestado_aunque_siguiente_este_en_ventana(self):
+        df = pd.DataFrame(
+            [
+                {
+                    "Agente": "Ana Perez",
+                    "Numero llamado": "5551112222",
+                    "Fecha llamada": "2026-05-10 09:00:00",
+                    "Duracion": "80",
+                },
+                {
+                    "Agente": "Ana Perez",
+                    "Numero llamado": "5551112222",
+                    "Fecha llamada": "2026-05-10 09:05:00",
+                    "Duracion": "7",
+                },
+            ]
+        )
+
+        df_preparado, _ = preparar_dataframe_historial(df)
+        df_casos = analizar_casos(df_preparado)
+
+        self.assertEqual(2, len(df_casos))
+        self.assertEqual(ESTADO_CONTESTADA, df_casos.iloc[0]["Estado final"])
+        self.assertEqual(ESTADO_NO_CUMPLE, df_casos.iloc[1]["Estado final"])
+
+    def test_csv_vacio_con_columnas_no_rompe_resumen(self):
+        df = pd.DataFrame(columns=["Agente", "Numero llamado", "Fecha llamada", "Duracion"])
+
+        df_preparado, _ = preparar_dataframe_historial(df)
+        df_casos = asignar_turnos_a_casos(analizar_casos(df_preparado))
+        resumen = construir_resumen_general(df_casos)
+
+        self.assertEqual(0, resumen["Total de casos evaluados"])
+        self.assertEqual(0.0, resumen["Porcentaje general de cumplimiento"])
+        self.assertIn("_estado", df_casos.columns)
 
 
 if __name__ == "__main__":

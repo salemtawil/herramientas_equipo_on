@@ -192,11 +192,15 @@
   <section class="compinche-bonus-panel" id="compinche-bonus-panel" hidden>
     <div class="compinche-bonus-panel__main">
       <span class="compinche-bonus-panel__eyebrow">Compinche bonus</span>
-      <h2>Meta mensual</h2>
+      <h2>Cumplimiento de meta</h2>
       <p id="compinche-bonus-updated">Sin datos</p>
+      <strong class="compinche-bonus-panel__status" id="compinche-bonus-status">-</strong>
     </div>
-    <div class="compinche-bonus-panel__progress" aria-label="Progreso de meta mensual">
-      <div class="compinche-bonus-panel__progress-bar" id="compinche-bonus-progress-bar"></div>
+    <div class="compinche-bonus-panel__pace">
+      <div class="compinche-bonus-panel__progress" aria-label="Progreso de meta mensual">
+        <div class="compinche-bonus-panel__progress-bar" id="compinche-bonus-progress-bar"></div>
+      </div>
+      <p id="compinche-bonus-pace">Sin datos de ritmo</p>
     </div>
     <div class="compinche-bonus-panel__stats">
       <div>
@@ -210,6 +214,18 @@
       <div>
         <span>Avance</span>
         <strong id="compinche-bonus-percent">-</strong>
+      </div>
+      <div>
+        <span>Esperado hoy</span>
+        <strong id="compinche-bonus-expected">-</strong>
+      </div>
+      <div>
+        <span>Proyección</span>
+        <strong id="compinche-bonus-projected">-</strong>
+      </div>
+      <div>
+        <span>Falta / día</span>
+        <strong id="compinche-bonus-required-daily">-</strong>
       </div>
     </div>
   </section>
@@ -236,6 +252,17 @@ function formatUpdatedAt(value) {
   return `${hours}:${minutes} ${suffix}`;
 }
 
+function formatDateTime(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return "-";
+
+  let hours = date.getHours();
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  const suffix = hours >= 12 ? "PM" : "AM";
+  hours = hours % 12 || 12;
+
+  return `${date.getDate()}/${date.getMonth() + 1}/${date.getFullYear()} ${hours}:${minutes} ${suffix}`;
+}
+
 function formatMoney(value) {
   const number = Number(value);
   if (!Number.isFinite(number)) return "-";
@@ -246,6 +273,92 @@ function formatPercent(value) {
   const number = Number(value);
   if (!Number.isFinite(number)) return "-";
   return `${Math.round(number * 10) / 10}%`;
+}
+
+function parseBonusDate(value) {
+  if (value === null || value === undefined || value === "") return null;
+
+  if (typeof value === "number") {
+    return new Date(value > 1000000000000 ? value : value * 1000);
+  }
+
+  const text = String(value).trim();
+  if (!text) return null;
+
+  const numericValue = Number(text);
+  if (Number.isFinite(numericValue)) {
+    return new Date(numericValue > 1000000000000 ? numericValue : numericValue * 1000);
+  }
+
+  const directDate = new Date(text);
+  if (!Number.isNaN(directDate.getTime())) return directDate;
+
+  const localMatch = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2}))?/);
+  if (localMatch) {
+    return new Date(
+      Number(localMatch[3]),
+      Number(localMatch[2]) - 1,
+      Number(localMatch[1]),
+      Number(localMatch[4] || 0),
+      Number(localMatch[5] || 0),
+    );
+  }
+
+  return null;
+}
+
+function getMonthProgress(referenceDate) {
+  const date = referenceDate instanceof Date && !Number.isNaN(referenceDate.getTime())
+    ? referenceDate
+    : new Date();
+  const year = date.getFullYear();
+  const month = date.getMonth();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const currentDay = Math.min(Math.max(date.getDate(), 1), daysInMonth);
+  const elapsedToday = (date.getHours() + (date.getMinutes() / 60) + (date.getSeconds() / 3600)) / 24;
+  const elapsedDays = Math.max((currentDay - 1) + elapsedToday, 1 / 24);
+
+  return {
+    currentDay,
+    daysInMonth,
+    elapsedDays,
+    remainingDays: Math.max(daysInMonth - elapsedDays, 0),
+    elapsedRatio: elapsedDays / daysInMonth,
+  };
+}
+
+function describeGoalPace(current, goal, monthProgress) {
+  if (!Number.isFinite(current) || !Number.isFinite(goal) || goal <= 0) {
+    return null;
+  }
+
+  const expectedToday = goal * monthProgress.elapsedRatio;
+  const dailyAverage = current / monthProgress.elapsedDays;
+  const projected = dailyAverage * monthProgress.daysInMonth;
+  const remainingAmount = Math.max(goal - current, 0);
+  const requiredDaily = monthProgress.remainingDays > 0
+    ? remainingAmount / monthProgress.remainingDays
+    : remainingAmount;
+  const deltaToExpected = current - expectedToday;
+
+  let status = "En riesgo";
+  let statusClass = "is-risk";
+  if (current >= goal) {
+    status = "Meta lograda";
+    statusClass = "is-achieved";
+  } else if (projected >= goal) {
+    status = "Lograble";
+    statusClass = "is-on-track";
+  }
+
+  return {
+    expectedToday,
+    projected,
+    requiredDaily,
+    deltaToExpected,
+    status,
+    statusClass,
+  };
 }
 
 function calcularUsuariosReales(activeUsers, promoUsers) {
@@ -286,13 +399,40 @@ function renderBonusStats(bonus) {
 
   const percent = Number(bonus.percentage_completed);
   const safePercent = Number.isFinite(percent) ? Math.max(0, Math.min(percent, 100)) : 0;
-  const generatedAt = bonus.generated_at ? formatUpdatedAt(bonus.generated_at) : "-";
+  const generatedDate = parseBonusDate(bonus.generated_at);
+  const generatedAt = generatedDate ? formatDateTime(generatedDate) : "-";
+  const currentRevenue = Number(bonus.total_gross_revenue);
+  const goal = Number(bonus.goal_for_bonus);
+  const monthProgress = getMonthProgress(generatedDate);
+  const pace = describeGoalPace(currentRevenue, goal, monthProgress);
 
   document.getElementById("compinche-bonus-current").textContent = formatMoney(bonus.total_gross_revenue);
   document.getElementById("compinche-bonus-goal").textContent = formatMoney(bonus.goal_for_bonus);
   document.getElementById("compinche-bonus-percent").textContent = formatPercent(bonus.percentage_completed);
   document.getElementById("compinche-bonus-progress-bar").style.width = `${safePercent}%`;
   document.getElementById("compinche-bonus-updated").textContent = generatedAt !== "-" ? `Generado: ${generatedAt}` : "Sin datos";
+
+  const status = document.getElementById("compinche-bonus-status");
+  status.className = "compinche-bonus-panel__status";
+  if (pace) {
+    const deltaLabel = pace.deltaToExpected >= 0 ? "por encima" : "por debajo";
+    const remainingDaysLabel = Math.ceil(monthProgress.remainingDays);
+    const remainingLabel = remainingDaysLabel === 1 ? "1 día restante" : `${remainingDaysLabel} días restantes`;
+
+    status.textContent = pace.status;
+    status.classList.add(pace.statusClass);
+    document.getElementById("compinche-bonus-expected").textContent = formatMoney(pace.expectedToday);
+    document.getElementById("compinche-bonus-projected").textContent = formatMoney(pace.projected);
+    document.getElementById("compinche-bonus-required-daily").textContent = formatMoney(pace.requiredDaily);
+    document.getElementById("compinche-bonus-pace").textContent =
+      `Día ${monthProgress.currentDay} de ${monthProgress.daysInMonth}: ${formatMoney(Math.abs(pace.deltaToExpected))} ${deltaLabel} del ritmo esperado. ${remainingLabel}.`;
+  } else {
+    status.textContent = "Sin cálculo";
+    document.getElementById("compinche-bonus-expected").textContent = "-";
+    document.getElementById("compinche-bonus-projected").textContent = "-";
+    document.getElementById("compinche-bonus-required-daily").textContent = "-";
+    document.getElementById("compinche-bonus-pace").textContent = "Faltan datos de facturación o meta.";
+  }
 }
 
 function renderSystemState(prefix, item) {

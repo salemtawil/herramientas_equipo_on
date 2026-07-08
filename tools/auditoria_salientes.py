@@ -51,6 +51,8 @@ COLUMNAS_RESUMEN_TURNO = [
     "Porcentaje de cumplimiento",
 ]
 
+COLUMNAS_CASOS_INTERNAS = COLUMNAS_DETALLE + ["_estado", "_agente"]
+
 ALIAS_COLUMNAS = {
     "agente": [
         "fromName",
@@ -324,7 +326,7 @@ def formatear_fecha(valor, fallback=""):
 
 def clasificar_caso(llamadas):
     duraciones = [llamada["duracion_segundos"] for llamada in llamadas]
-    hubo_contestada = any(duracion is not None and duracion > 75 for duracion in duraciones)
+    hubo_contestada = any(_llamada_contestada(llamada) for llamada in llamadas)
     voicemail_probable = any(
         duracion is not None and 15 <= duracion <= 75
         for duracion in duraciones[1:]
@@ -340,6 +342,11 @@ def clasificar_caso(llamadas):
         return ESTADO_COMPLETO, False, True
 
     return ESTADO_SEGUNDO_INTENTO, False, False
+
+
+def _llamada_contestada(llamada):
+    duracion = llamada.get("duracion_segundos")
+    return duracion is not None and duracion > 75
 
 
 def construir_caso_desde_llamadas(llamadas, observacion=""):
@@ -411,7 +418,7 @@ def analizar_casos(df_preparado):
 
     df_validas = pd.DataFrame(validas)
     if df_validas.empty:
-        return pd.DataFrame(casos)
+        return pd.DataFrame(casos, columns=COLUMNAS_CASOS_INTERNAS)
 
     df_validas = df_validas.sort_values(
         by=["agente", "numero_normalizado", "fecha"]
@@ -429,7 +436,7 @@ def analizar_casos(df_preparado):
             inicio_caso = primera["fecha"]
 
             siguiente = indice + 1
-            while siguiente < len(llamadas):
+            while siguiente < len(llamadas) and not any(_llamada_contestada(llamada) for llamada in llamadas_caso):
                 actual = llamadas[siguiente]
                 if actual["fecha"] > inicio_caso + ventana:
                     break
@@ -441,7 +448,7 @@ def analizar_casos(df_preparado):
             indice = siguiente
 
     if not casos:
-        return pd.DataFrame(columns=COLUMNAS_DETALLE + ["_estado", "_agente"])
+        return pd.DataFrame(columns=COLUMNAS_CASOS_INTERNAS)
 
     df_casos = pd.DataFrame(casos)
     return df_casos.sort_values(
@@ -536,7 +543,7 @@ def construir_mapa_agente_turno():
 
 def asignar_turnos_a_casos(df_casos):
     if df_casos.empty:
-        df_resultado = df_casos.copy()
+        df_resultado = df_casos.reindex(columns=COLUMNAS_CASOS_INTERNAS).copy()
         df_resultado["_turno"] = []
         return df_resultado
 
@@ -636,7 +643,7 @@ def cargar_resultado_auditoria_desde_payload(payload):
     else:
         return None
     if df_casos.empty:
-        return pd.DataFrame(columns=COLUMNAS_DETALLE + ["_estado", "_agente"])
+        return pd.DataFrame(columns=COLUMNAS_CASOS_INTERNAS)
 
     return df_casos
 
