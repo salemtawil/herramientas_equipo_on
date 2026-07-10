@@ -8,6 +8,9 @@ import re
 import time
 import requests
 import boto3
+from botocore import UNSIGNED
+from botocore.config import Config
+from botocore.exceptions import NoCredentialsError
 
 COMPINCHE_USERS_URL = "https://api.compinche.io/api/flex/v1/all-users-table"
 COMPINCHE_ADMINS_URL = "https://api.compinche.io/api/flex/v1/admin"
@@ -31,8 +34,11 @@ _TOKEN_CACHE = {
     "refresh_token": None,
 }
 
-def _cliente_cognito():
-    return boto3.client("cognito-idp", region_name=COMPINCHE_AWS_REGION)
+def _cliente_cognito(requiere_credenciales=False):
+    config = None
+    if not requiere_credenciales:
+        config = Config(signature_version=UNSIGNED)
+    return boto3.client("cognito-idp", region_name=COMPINCHE_AWS_REGION, config=config)
 
 def _secret_hash(username):
     if not COMPINCHE_CLIENT_SECRET:
@@ -124,15 +130,20 @@ def _iniciar_sesion_compinche_admin():
             "Configura COMPINCHE_USER_POOL_ID para usar ADMIN_USER_PASSWORD_AUTH."
         )
 
-    response = _cliente_cognito().admin_initiate_auth(
-        UserPoolId=user_pool_id,
-        ClientId=COMPINCHE_CLIENT_ID,
-        AuthFlow="ADMIN_USER_PASSWORD_AUTH",
-        AuthParameters=_auth_parameters({
-            "USERNAME": COMPINCHE_USERNAME,
-            "PASSWORD": COMPINCHE_PASSWORD,
-        }),
-    )
+    try:
+        response = _cliente_cognito(requiere_credenciales=True).admin_initiate_auth(
+            UserPoolId=user_pool_id,
+            ClientId=COMPINCHE_CLIENT_ID,
+            AuthFlow="ADMIN_USER_PASSWORD_AUTH",
+            AuthParameters=_auth_parameters({
+                "USERNAME": COMPINCHE_USERNAME,
+                "PASSWORD": COMPINCHE_PASSWORD,
+            }),
+        )
+    except NoCredentialsError as error:
+        raise RuntimeError(
+            "Compinche necesita AWS_ACCESS_KEY_ID y AWS_SECRET_ACCESS_KEY para usar ADMIN_USER_PASSWORD_AUTH."
+        ) from error
 
     return _guardar_tokens(response["AuthenticationResult"])
 

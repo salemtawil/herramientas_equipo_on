@@ -2,6 +2,7 @@ import os
 import sys
 import time
 import unittest
+from unittest.mock import Mock
 from unittest.mock import patch
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -180,6 +181,35 @@ class UsuariosActivosTests(unittest.TestCase):
 
         self.assertEqual("token-admin", tokens["id_token"])
         admin_login.assert_called_once()
+
+    def test_compinche_cliente_publico_no_requiere_credenciales_aws(self):
+        with patch("tools.api_compinche.boto3.client") as boto_client:
+            api_compinche._cliente_cognito()
+
+        kwargs = boto_client.call_args.kwargs
+        self.assertEqual("cognito-idp", boto_client.call_args.args[0])
+        self.assertEqual(api_compinche.UNSIGNED, kwargs["config"].signature_version)
+
+    def test_compinche_admin_sin_credenciales_muestra_error_accionable(self):
+        cognito = Mock()
+        cognito.admin_initiate_auth.side_effect = api_compinche.NoCredentialsError()
+
+        with patch.object(api_compinche, "COMPINCHE_USERNAME", "usuario"), patch.object(
+            api_compinche,
+            "COMPINCHE_PASSWORD",
+            "password",
+        ), patch.object(
+            api_compinche,
+            "COMPINCHE_USER_POOL_ID",
+            "pool-id",
+        ), patch(
+            "tools.api_compinche._cliente_cognito",
+            return_value=cognito,
+        ) as cliente_cognito:
+            with self.assertRaisesRegex(RuntimeError, "AWS_ACCESS_KEY_ID"):
+                api_compinche._iniciar_sesion_compinche_admin()
+
+        cliente_cognito.assert_called_once_with(requiere_credenciales=True)
 
     def test_compinche_obtiene_token_nuevo_si_id_token_esta_vencido(self):
         header = "eyJhbGciOiJub25lIn0"
