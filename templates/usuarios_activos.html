@@ -363,6 +363,7 @@ function describeGoalPace(current, goal, monthProgress) {
 
 function calcularUsuariosReales(activeUsers, promoUsers) {
   const active = Number(activeUsers);
+  if (promoUsers == null) return "-";
   const promo = Number(promoUsers);
   if (!Number.isFinite(active)) return "-";
   if (!Number.isFinite(promo)) return active;

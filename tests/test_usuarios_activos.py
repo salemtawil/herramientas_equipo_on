@@ -9,6 +9,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from app import app
 from tools import api_compinche
+from tools.servicios_usuarios_activos import _estado_base
+from tools.servicios_usuarios_activos import _proceso_actualizacion_unica
 from tools.api_compinche import obtener_diagnostico_promo_compinche
 from tools.api_compinche import obtener_metricas_compinche_api
 
@@ -56,6 +58,35 @@ class UsuariosActivosTests(unittest.TestCase):
         self.assertIn('"source": "base"', html.replace("&#34;", '"'))
         compinche_api.assert_not_called()
         multiadmin_api.assert_not_called()
+
+    def test_compinche_usa_fallback_multiadmin_si_falla_api_directa(self):
+        estado = _estado_base()
+        metricas_multiadmin = {
+            "Compinche": {"active_users": 5673, "running_users": 928},
+            "Paripe": {"good_standing_users": 2822, "photo_pool": 59485},
+            "camarada": {"active_users": 32, "running_users": 3},
+            "complice": {"active_users": 26, "running_users": 0},
+            "secuaz": {"active_users": 12, "running_users": 3},
+            "ready4drive": {"active_users": 1264, "running_users": 499},
+        }
+
+        with patch(
+            "tools.servicios_usuarios_activos.obtener_metricas_compinche_api",
+            side_effect=RuntimeError("Unable to locate credentials"),
+        ), patch(
+            "tools.servicios_usuarios_activos.obtener_metricas_multiadmin",
+            return_value=metricas_multiadmin,
+        ), patch(
+            "tools.servicios_usuarios_activos.obtener_timestamp_eastern",
+            return_value="2026-07-10 13:33:00",
+        ):
+            _proceso_actualizacion_unica(estado)
+
+        self.assertEqual(5673, estado["Compinche"]["active_users"])
+        self.assertEqual(928, estado["Compinche"]["running_users"])
+        self.assertIsNone(estado["Compinche"]["active_by_promo_users"])
+        self.assertEqual("Completado", estado["Compinche"]["progress"])
+        self.assertIsNone(estado["Compinche"]["error"])
 
     def test_compinche_calcula_usuarios_activos_con_promo(self):
         usuarios = [

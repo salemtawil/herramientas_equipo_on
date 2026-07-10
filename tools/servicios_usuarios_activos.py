@@ -80,6 +80,8 @@ def _proceso_actualizacion_unica(estado):
     ahora = obtener_timestamp_eastern()
 
     tareas = {}
+    resultados = {}
+    errores = {}
     with ThreadPoolExecutor(max_workers=2) as executor:
         tareas[executor.submit(obtener_metricas_compinche_api)] = "Compinche"
         tareas[executor.submit(obtener_metricas_multiadmin)] = "Multiadmin"
@@ -87,15 +89,22 @@ def _proceso_actualizacion_unica(estado):
         for future in as_completed(tareas):
             nombre = tareas[future]
             try:
-                if nombre == "Compinche":
-                    _aplicar_metricas_compinche(estado, future.result(), ahora)
-                else:
-                    _aplicar_metricas_multiadmin(estado, future.result(), ahora)
+                resultados[nombre] = future.result()
             except Exception as e:
-                if nombre == "Compinche":
-                    _marcar_error_compinche(estado, ahora, str(e))
-                else:
-                    _marcar_error_multiadmin(estado, ahora, str(e))
+                errores[nombre] = str(e)
+
+    metricas_multiadmin = resultados.get("Multiadmin")
+    if metricas_multiadmin:
+        _aplicar_metricas_multiadmin(estado, metricas_multiadmin, ahora)
+    elif "Multiadmin" in errores:
+        _marcar_error_multiadmin(estado, ahora, errores["Multiadmin"])
+
+    if "Compinche" in resultados:
+        _aplicar_metricas_compinche(estado, resultados["Compinche"], ahora)
+    elif metricas_multiadmin and _tiene_metricas_compinche_multiadmin(metricas_multiadmin):
+        _aplicar_metricas_compinche_fallback(estado, metricas_multiadmin["Compinche"], ahora)
+    elif "Compinche" in errores:
+        _marcar_error_compinche(estado, ahora, errores["Compinche"])
 
 
 def _aplicar_metricas_compinche(estado, metricas_compinche, ahora):
@@ -119,6 +128,27 @@ def _marcar_error_compinche(estado, ahora, error):
         updated_at=ahora,
         progress="Error",
         error=error,
+    )
+
+
+def _tiene_metricas_compinche_multiadmin(metricas):
+    compinche = metricas.get("Compinche")
+    if not isinstance(compinche, dict):
+        return False
+    return "active_users" in compinche or "running_users" in compinche
+
+
+def _aplicar_metricas_compinche_fallback(estado, metricas_compinche, ahora):
+    _actualizar_estado(
+        estado,
+        "Compinche",
+        active_users=metricas_compinche.get("active_users", 0),
+        running_users=metricas_compinche.get("running_users", 0),
+        active_by_promo_users=None,
+        bonus_stats=None,
+        updated_at=ahora,
+        progress="Completado",
+        error=None,
     )
 
 
