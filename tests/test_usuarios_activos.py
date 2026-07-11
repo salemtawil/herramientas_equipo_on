@@ -8,7 +8,10 @@ from unittest.mock import patch
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from app import app
+from tools import api_multiadmin
 from tools import api_compinche
+from tools.servicios_usuarios_activos import _aplicar_metricas_multiadmin
+from tools.servicios_usuarios_activos import _estado_base
 from tools.api_compinche import obtener_diagnostico_promo_compinche
 from tools.api_compinche import obtener_metricas_compinche_api
 
@@ -45,8 +48,6 @@ class UsuariosActivosTests(unittest.TestCase):
             "tools.servicios_usuarios_activos.cargar_json_temporal",
             return_value=None,
         ), patch(
-            "tools.servicios_usuarios_activos.obtener_metricas_compinche_api",
-        ) as compinche_api, patch(
             "tools.servicios_usuarios_activos.obtener_metricas_multiadmin",
         ) as multiadmin_api:
             response = self.client.get("/usuarios-activos/")
@@ -54,8 +55,26 @@ class UsuariosActivosTests(unittest.TestCase):
         html = response.get_data(as_text=True)
         self.assertEqual(200, response.status_code)
         self.assertIn('"source": "base"', html.replace("&#34;", '"'))
-        compinche_api.assert_not_called()
         multiadmin_api.assert_not_called()
+
+    def test_multiadmin_resta_offset_admins_a_compinche(self):
+        self.assertEqual(5709, api_multiadmin._restar_admins_compinche(5753))
+        self.assertEqual(0, api_multiadmin._restar_admins_compinche(12))
+
+    def test_multiadmin_actualiza_compinche_con_activos_ajustados(self):
+        estado = _estado_base()
+        metricas = {
+            "Compinche": {"active_users": 5709, "running_users": 717},
+            "Paripe": {"good_standing_users": 2873, "photo_pool": 59448},
+        }
+
+        _aplicar_metricas_multiadmin(estado, metricas, "2026-07-11 10:00:00")
+
+        self.assertEqual(5709, estado["Compinche"]["active_users"])
+        self.assertEqual(717, estado["Compinche"]["running_users"])
+        self.assertIsNone(estado["Compinche"]["active_by_promo_users"])
+        self.assertEqual("Completado", estado["Compinche"]["progress"])
+        self.assertIsNone(estado["Compinche"]["error"])
 
     def test_compinche_calcula_usuarios_activos_con_promo(self):
         usuarios = [

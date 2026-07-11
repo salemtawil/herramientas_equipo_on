@@ -1,10 +1,22 @@
 import requests
 
 ENDPOINT_MULTIADMIN = "https://pti24ew7fbrhm55ftbbbc5hk6i0meyek.lambda-url.us-east-1.on.aws/"
+COMPINCHE_ADMIN_OFFSET = 44
 
 
 def _safe_dict(value):
     return value if isinstance(value, dict) else {}
+
+
+def _to_int(value):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _restar_admins_compinche(active_users):
+    return max(_to_int(active_users) - COMPINCHE_ADMIN_OFFSET, 0)
 
 
 def obtener_metricas_multiadmin():
@@ -24,8 +36,8 @@ def obtener_metricas_multiadmin():
 
     return {
         "Compinche": {
-            "active_users": compinche.get("active", 0) or 0,
-            "running_users": compinche.get("running", 0) or 0,
+            "active_users": _restar_admins_compinche(compinche.get("active")),
+            "running_users": _to_int(compinche.get("running")),
         },
         "Paripe": {
             "good_standing_users": paripe.get("active", 0) or 0,

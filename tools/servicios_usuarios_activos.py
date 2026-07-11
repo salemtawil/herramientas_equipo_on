@@ -3,7 +3,6 @@ from concurrent.futures import as_completed
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from tools.api_compinche import obtener_metricas_compinche_api
 from tools.api_multiadmin import obtener_metricas_multiadmin
 from utils.estado_temporal import cargar_json_temporal
 from utils.estado_temporal import guardar_json_temporal
@@ -80,49 +79,32 @@ def _proceso_actualizacion_unica(estado):
     ahora = obtener_timestamp_eastern()
 
     tareas = {}
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        tareas[executor.submit(obtener_metricas_compinche_api)] = "Compinche"
+    with ThreadPoolExecutor(max_workers=1) as executor:
         tareas[executor.submit(obtener_metricas_multiadmin)] = "Multiadmin"
 
         for future in as_completed(tareas):
             nombre = tareas[future]
             try:
-                if nombre == "Compinche":
-                    _aplicar_metricas_compinche(estado, future.result(), ahora)
-                else:
+                if nombre == "Multiadmin":
                     _aplicar_metricas_multiadmin(estado, future.result(), ahora)
             except Exception as e:
-                if nombre == "Compinche":
-                    _marcar_error_compinche(estado, ahora, str(e))
-                else:
+                if nombre == "Multiadmin":
                     _marcar_error_multiadmin(estado, ahora, str(e))
 
 
-def _aplicar_metricas_compinche(estado, metricas_compinche, ahora):
+def _aplicar_metricas_multiadmin(estado, metricas, ahora):
     _actualizar_estado(
         estado,
         "Compinche",
-        active_users=metricas_compinche.get("active_users", 0),
-        running_users=metricas_compinche.get("running_users", 0),
-        active_by_promo_users=metricas_compinche.get("active_by_promo_users", 0),
-        bonus_stats=metricas_compinche.get("bonus_stats"),
+        active_users=metricas.get("Compinche", {}).get("active_users", 0),
+        running_users=metricas.get("Compinche", {}).get("running_users", 0),
+        active_by_promo_users=None,
+        bonus_stats=None,
         updated_at=ahora,
         progress="Completado",
         error=None,
     )
 
-
-def _marcar_error_compinche(estado, ahora, error):
-    _actualizar_estado(
-        estado,
-        "Compinche",
-        updated_at=ahora,
-        progress="Error",
-        error=error,
-    )
-
-
-def _aplicar_metricas_multiadmin(estado, metricas, ahora):
     _actualizar_estado(
         estado,
         "Paripe",
@@ -175,6 +157,7 @@ def _aplicar_metricas_multiadmin(estado, metricas, ahora):
 
 
 def _marcar_error_multiadmin(estado, ahora, error):
+    _actualizar_estado(estado, "Compinche", updated_at=ahora, progress="Error", error=error)
     _actualizar_estado(estado, "Paripe", updated_at=ahora, progress="Error", error=error)
     _actualizar_estado(estado, "camarada", updated_at=ahora, progress="Error", error=error)
     _actualizar_estado(estado, "complice", updated_at=ahora, progress="Error", error=error)
