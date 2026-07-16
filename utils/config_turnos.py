@@ -13,7 +13,6 @@ TURNOS_FIJOS = {
         "Simeon",
         "Diego",
         "Eva",
-        "Genessis Marin",
         "Homero",
         "Jolmarys",
         "Oscar Chirino",
@@ -23,6 +22,7 @@ TURNOS_FIJOS = {
         "Caridad",
         "Maria",
         "Camila Paez",
+        "Genessis Marin",
         "Nathali",
     ],
     "Media noche": [
