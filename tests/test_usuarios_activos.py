@@ -61,11 +61,32 @@ class UsuariosActivosTests(unittest.TestCase):
         self.assertEqual(5709, api_multiadmin._restar_admins_compinche(5753))
         self.assertEqual(0, api_multiadmin._restar_admins_compinche(12))
 
+    def test_multiadmin_preserva_sistemas_nuevos_con_active_running(self):
+        payload = {
+            "compinche": {"active": 5753, "running": 717},
+            "riderx": {"active": 42, "running": 9},
+            "nuevo": {"active": 0, "running": 0},
+        }
+
+        with patch("tools.api_multiadmin.requests.get") as request_get:
+            response = Mock()
+            response.json.return_value = payload
+            request_get.return_value = response
+
+            metricas = api_multiadmin.obtener_metricas_multiadmin()
+
+        self.assertEqual(42, metricas["riderx"]["active_users"])
+        self.assertEqual(9, metricas["riderx"]["running_users"])
+        self.assertEqual("Riderx", metricas["riderx"]["display_name"])
+        self.assertEqual(0, metricas["nuevo"]["active_users"])
+        self.assertEqual(0, metricas["nuevo"]["running_users"])
+
     def test_multiadmin_actualiza_compinche_con_activos_ajustados(self):
         estado = _estado_base()
         metricas = {
             "Compinche": {"active_users": 5709, "running_users": 717},
             "Paripe": {"good_standing_users": 2873, "photo_pool": 59448},
+            "riderx": {"display_name": "Rider X", "active_users": 42, "running_users": 9},
         }
 
         _aplicar_metricas_multiadmin(estado, metricas, "2026-07-11 10:00:00")
@@ -75,6 +96,10 @@ class UsuariosActivosTests(unittest.TestCase):
         self.assertIsNone(estado["Compinche"]["active_by_promo_users"])
         self.assertEqual("Completado", estado["Compinche"]["progress"])
         self.assertIsNone(estado["Compinche"]["error"])
+        self.assertEqual("Rider X", estado["riderx"]["display_name"])
+        self.assertEqual(42, estado["riderx"]["active_users"])
+        self.assertEqual(9, estado["riderx"]["running_users"])
+        self.assertEqual("Completado", estado["riderx"]["progress"])
 
     def test_compinche_calcula_usuarios_activos_con_promo(self):
         usuarios = [

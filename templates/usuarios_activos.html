@@ -375,16 +375,37 @@ function numberOrZero(value) {
   return Number.isFinite(number) ? number : 0;
 }
 
-function renderPlatformSummary({ compinche, paripe, camarada, complice, secuaz, ready4drive }) {
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function systemDomId(system) {
+  return String(system || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function getKnownSystemIds() {
+  return new Set(["compinche", "paripe", "camarada", "complice", "secuaz", "ready4drive"]);
+}
+
+function renderPlatformSummary(items) {
+  const compinche = items.find(item => item.system === "Compinche");
+  const paripe = items.find(item => item.system === "Paripe");
   const compincheTotal = numberOrZero(compinche?.active_users);
   const compinchePromo = numberOrZero(compinche?.active_by_promo_users);
   const compincheReal = Math.max(compincheTotal - compinchePromo, 0);
   const otherSystemsTotal =
     numberOrZero(paripe?.good_standing_users) +
-    numberOrZero(camarada?.active_users) +
-    numberOrZero(complice?.active_users) +
-    numberOrZero(secuaz?.active_users) +
-    numberOrZero(ready4drive?.active_users);
+    items
+      .filter(item => item.system !== "Compinche" && item.system !== "Paripe")
+      .reduce((total, item) => total + numberOrZero(item.active_users), 0);
 
   document.getElementById("total-real-users").textContent = (compincheReal + otherSystemsTotal).toLocaleString("en-US");
   document.getElementById("total-platform-users").textContent = (compincheTotal + otherSystemsTotal).toLocaleString("en-US");
@@ -460,6 +481,69 @@ function renderSystemState(prefix, item) {
   }
 }
 
+function ensureDynamicSystemCard(item) {
+  const id = systemDomId(item.system);
+  if (!id || getKnownSystemIds().has(id)) return null;
+
+  const existing = document.getElementById(`card-${id}`);
+  if (existing) return existing;
+
+  const label = item.display_name || item.system;
+  const initials = String(label)
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(part => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase() || "SY";
+  const card = document.createElement("article");
+  card.className = "system-card system-card--dynamic";
+  card.id = `card-${id}`;
+  card.innerHTML = `
+    <div class="system-card__header">
+      <div class="system-card__brand">
+        <div class="system-card__logo-wrap">
+          <div class="system-card__logo" aria-hidden="true">${escapeHtml(initials)}</div>
+        </div>
+        <div>
+          <h3 class="system-card__title">${escapeHtml(label)}</h3>
+        </div>
+      </div>
+    </div>
+    <div class="stat-list">
+      <div class="stat-line"><span>Usuarios</span><strong id="${id}-active">-</strong></div>
+      <div class="stat-line"><span>Running</span><strong id="${id}-running">-</strong></div>
+    </div>
+    <div class="system-card__footer">
+      <span class="system-card__status" id="${id}-status">Pendiente</span>
+      <span class="system-card__updated" id="${id}-updated">Sin actualizacion</span>
+    </div>
+    <div class="error" id="${id}-error"></div>
+  `;
+  document.getElementById("resultado").appendChild(card);
+  return card;
+}
+
+function renderDynamicSystems(items) {
+  const knownIds = getKnownSystemIds();
+  const activeDynamicIds = new Set();
+
+  items.forEach((item) => {
+    const id = systemDomId(item.system);
+    if (!id || knownIds.has(id)) return;
+    activeDynamicIds.add(id);
+    ensureDynamicSystemCard(item);
+    document.getElementById(`${id}-active`).textContent = item.active_users ?? "-";
+    document.getElementById(`${id}-running`).textContent = item.running_users ?? "-";
+    renderSystemState(id, item);
+  });
+
+  document.querySelectorAll(".system-card--dynamic").forEach((card) => {
+    const id = card.id.replace(/^card-/, "");
+    card.hidden = !activeDynamicIds.has(id);
+  });
+}
+
 function renderData(items, updatedAt) {
   const compinche = items.find(item => item.system === "Compinche");
   const paripe = items.find(item => item.system === "Paripe");
@@ -469,7 +553,7 @@ function renderData(items, updatedAt) {
   const ready4drive = items.find(item => item.system === "ready4drive");
 
   document.getElementById("general-updated").textContent = `Última actualización general (ET): ${formatUpdatedAt(updatedAt)}`;
-  renderPlatformSummary({ compinche, paripe, camarada, complice, secuaz, ready4drive });
+  renderPlatformSummary(items);
   renderBonusStats(compinche?.bonus_stats);
 
   if (compinche) {
@@ -512,6 +596,8 @@ function renderData(items, updatedAt) {
     document.getElementById("ready4drive-running").textContent = ready4drive.running_users ?? "-";
     renderSystemState("ready4drive", ready4drive);
   }
+
+  renderDynamicSystems(items);
 }
 
 async function consultarEstado() {
@@ -528,14 +614,12 @@ async function consultarEstado() {
 }
 
 async function actualizarDatos() {
-  const sistemas = ["compinche", "paripe", "camarada", "complice", "secuaz", "ready4drive"];
   const button = document.getElementById("actualizar-btn");
 
-  sistemas.forEach(nombre => {
-    const error = document.getElementById(`${nombre}-error`);
-    const card = document.getElementById(`card-${nombre}`);
-    const status = document.getElementById(`${nombre}-status`);
-
+  document.querySelectorAll(".system-card").forEach(card => {
+    const id = card.id.replace(/^card-/, "");
+    const error = document.getElementById(`${id}-error`);
+    const status = document.getElementById(`${id}-status`);
     if (error) error.textContent = "";
     if (card) card.classList.remove("system-card--error");
     if (status) status.textContent = "Actualizando";

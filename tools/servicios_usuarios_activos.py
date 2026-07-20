@@ -10,6 +10,14 @@ from utils.estado_temporal import guardar_json_temporal
 EASTERN_TIMEZONE = ZoneInfo("America/New_York")
 SNAPSHOT_NAMESPACE = "usuarios_activos"
 SNAPSHOT_ID = "latest"
+SISTEMAS_MULTIADMIN_FIJOS = {
+    "Compinche",
+    "Paripe",
+    "camarada",
+    "complice",
+    "secuaz",
+    "ready4drive",
+}
 
 
 def obtener_timestamp_eastern(formato="%Y-%m-%d %H:%M:%S"):
@@ -72,6 +80,16 @@ def _estado_base():
 
 
 def _actualizar_estado(estado, system, **kwargs):
+    if system not in estado:
+        estado[system] = {
+            "system": system,
+            "display_name": kwargs.pop("display_name", system),
+            "active_users": 0,
+            "running_users": 0,
+            "updated_at": "-",
+            "progress": "Pendiente",
+            "error": None,
+        }
     estado[system].update(kwargs)
 
 
@@ -154,6 +172,22 @@ def _aplicar_metricas_multiadmin(estado, metricas, ahora):
         progress="Completado",
         error=None,
     )
+
+    for system, valores in metricas.items():
+        if system in SISTEMAS_MULTIADMIN_FIJOS:
+            continue
+        if not isinstance(valores, dict):
+            continue
+        _actualizar_estado(
+            estado,
+            system,
+            display_name=valores.get("display_name", system),
+            active_users=valores.get("active_users", 0),
+            running_users=valores.get("running_users", 0),
+            updated_at=ahora,
+            progress="Completado",
+            error=None,
+        )
 
 
 def _marcar_error_multiadmin(estado, ahora, error):
