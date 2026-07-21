@@ -1,7 +1,36 @@
+import base64
+from concurrent.futures import ThreadPoolExecutor
+import hashlib
+import hmac
+import json
+import os
+import time
+
+import boto3
+from botocore import UNSIGNED
+from botocore.config import Config
 import requests
 
+
 ENDPOINT_MULTIADMIN = "https://pti24ew7fbrhm55ftbbbc5hk6i0meyek.lambda-url.us-east-1.on.aws/"
+MULTIADMIN_API_BASE_URL = (
+    os.getenv("MULTIADMIN_API_BASE_URL")
+    or "https://7b9q0ttttb.execute-api.us-east-1.amazonaws.com"
+)
+MULTIADMIN_ID_TOKEN = os.getenv("MULTIADMIN_ID_TOKEN", "")
+MULTIADMIN_REFRESH_TOKEN = os.getenv("MULTIADMIN_REFRESH_TOKEN", "")
+MULTIADMIN_PROVISIONED_TOKEN = os.getenv("MULTIADMIN_PROVISIONED_TOKEN", "")
+MULTIADMIN_CLIENT_ID = os.getenv("MULTIADMIN_CLIENT_ID") or "24nnt1psojm5aqotu1ckj9jk9g"
+MULTIADMIN_CLIENT_SECRET = os.getenv("MULTIADMIN_CLIENT_SECRET", "")
+MULTIADMIN_USERNAME = os.getenv("MULTIADMIN_USERNAME", "") or os.getenv("MULTIADMIN_PHONE", "")
+MULTIADMIN_PASSWORD = os.getenv("MULTIADMIN_PASSWORD", "")
+MULTIADMIN_USER_POOL_ID = os.getenv("MULTIADMIN_USER_POOL_ID") or "us-east-1_ViIazRdoA"
+MULTIADMIN_AWS_REGION = os.getenv("AWS_DEFAULT_REGION") or "us-east-1"
+MULTIADMIN_USERS_SINCE_EXPIRATION = int(
+    os.getenv("MULTIADMIN_USERS_SINCE_EXPIRATION") or "1746057600000"
+)
 COMPINCHE_ADMIN_OFFSET = 44
+
 KNOWN_SYSTEM_KEYS = {
     "compinche",
     "paripe",
@@ -9,6 +38,52 @@ KNOWN_SYSTEM_KEYS = {
     "complice",
     "secuaz",
     "ready4drive",
+    "chispita",
+}
+
+DIRECT_SYSTEMS = {
+    "Compinche": {
+        "api_key": "compinche",
+        "endpoint_key": "compinche",
+        "items_key": "Items",
+        "exclude_admins": True,
+    },
+    "Paripe": {
+        "api_key": "paripe",
+        "endpoint_key": "paripe",
+        "items_key": "Items",
+    },
+    "ready4drive": {
+        "api_key": "ready4drive",
+        "endpoint_key": "ready4drive",
+        "items_key": "Items",
+    },
+    "complice": {
+        "api_key": "veho",
+        "endpoint_key": "complice",
+        "items_key": "items",
+    },
+    "camarada": {
+        "api_key": "shipt",
+        "endpoint_key": "camarada",
+        "items_key": "Items",
+    },
+    "secuaz": {
+        "api_key": "zifty",
+        "endpoint_key": "secuaz",
+        "items_key": "Items",
+    },
+    "chispita": {
+        "api_key": "chispita",
+        "endpoint_key": "chispita",
+        "items_key": "Items",
+    },
+}
+
+_TOKEN_CACHE = {
+    "id_token": None,
+    "access_token": None,
+    "refresh_token": None,
 }
 
 
@@ -23,8 +98,324 @@ def _to_int(value):
         return 0
 
 
+def _to_number(value):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _restar_admins_compinche(active_users):
     return max(_to_int(active_users) - COMPINCHE_ADMIN_OFFSET, 0)
+
+
+def _valor_bool(value):
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "si", "sí", "active", "activo"}
+    return bool(value)
+
+
+def _normalizar_timestamp(value):
+    if isinstance(value, (int, float)):
+        return value if value > 1000000000000 else value * 1000
+    if isinstance(value, str):
+        texto = value.strip()
+        if not texto:
+            return None
+        if texto.isdigit():
+            numero = int(texto)
+            return numero if numero > 1000000000000 else numero * 1000
+    return None
+
+
+def _es_hoy(timestamp_ms):
+    timestamp_ms = _normalizar_timestamp(timestamp_ms)
+    if timestamp_ms is None:
+        return False
+
+    fecha = time.localtime(timestamp_ms / 1000)
+    hoy = time.localtime()
+    return (
+        fecha.tm_year == hoy.tm_year
+        and fecha.tm_mon == hoy.tm_mon
+        and fecha.tm_mday == hoy.tm_mday
+    )
+
+
+def _usuario_good_standing(user):
+    return _valor_bool(user.get("goodStanding"))
+
+
+def _usuario_running(user):
+    status = user.get("status")
+    return isinstance(status, str) and status.strip().lower() == "start"
+
+
+def _usuario_admin(user):
+    return _valor_bool(user.get("isAdmin"))
+
+
+def _usuario_tiene_promo(user):
+    standing_type = user.get("standingType")
+    return isinstance(standing_type, str) and standing_type.strip().lower().startswith("promo")
+
+
+def _usuario_creado_hoy(user):
+    return _es_hoy(
+        user.get("createdAt")
+        or user.get("createDateTimestamp")
+        or user.get("timestamp")
+    )
+
+
+def _cliente_cognito():
+    return boto3.client(
+        "cognito-idp",
+        region_name=MULTIADMIN_AWS_REGION,
+        config=Config(signature_version=UNSIGNED),
+    )
+
+
+def _secret_hash(username):
+    if not MULTIADMIN_CLIENT_SECRET:
+        return None
+
+    digest = hmac.new(
+        MULTIADMIN_CLIENT_SECRET.encode("utf-8"),
+        f"{username}{MULTIADMIN_CLIENT_ID}".encode("utf-8"),
+        hashlib.sha256,
+    ).digest()
+    return base64.b64encode(digest).decode("utf-8")
+
+
+def _auth_parameters(params):
+    username = params.get("USERNAME")
+    secret_hash = _secret_hash(username) if username else None
+    if secret_hash:
+        params["SECRET_HASH"] = secret_hash
+    return params
+
+
+def _guardar_tokens(auth):
+    tokens = {
+        "id_token": auth.get("IdToken"),
+        "access_token": auth.get("AccessToken"),
+        "refresh_token": auth.get("RefreshToken"),
+    }
+    for key, value in tokens.items():
+        if value:
+            _TOKEN_CACHE[key] = value
+    return tokens
+
+
+def _decodificar_jwt_payload(token):
+    try:
+        payload = token.split(".")[1]
+        payload += "=" * (-len(payload) % 4)
+        return json.loads(base64.urlsafe_b64decode(payload.encode("utf-8")).decode("utf-8"))
+    except Exception:
+        return {}
+
+
+def _token_expirado_o_por_expirar(token, margen_segundos=300):
+    payload = _decodificar_jwt_payload(token)
+    expira_en = payload.get("exp")
+    if not isinstance(expira_en, (int, float)):
+        return False
+    return expira_en <= time.time() + margen_segundos
+
+
+def _hay_config_directa_multiadmin():
+    return bool(
+        MULTIADMIN_PROVISIONED_TOKEN
+        or MULTIADMIN_ID_TOKEN
+        or MULTIADMIN_REFRESH_TOKEN
+        or (MULTIADMIN_USERNAME and MULTIADMIN_PASSWORD)
+    )
+
+
+def refrescar_multiadmin_token():
+    refresh_token = _TOKEN_CACHE.get("refresh_token") or MULTIADMIN_REFRESH_TOKEN
+    if not refresh_token:
+        raise RuntimeError("Configura MULTIADMIN_REFRESH_TOKEN para renovar el token.")
+
+    auth_parameters = {"REFRESH_TOKEN": refresh_token}
+    if MULTIADMIN_USERNAME:
+        auth_parameters["USERNAME"] = MULTIADMIN_USERNAME
+
+    response = _cliente_cognito().initiate_auth(
+        ClientId=MULTIADMIN_CLIENT_ID,
+        AuthFlow="REFRESH_TOKEN_AUTH",
+        AuthParameters=_auth_parameters(auth_parameters),
+    )
+    return _guardar_tokens(response["AuthenticationResult"])
+
+
+def iniciar_sesion_multiadmin():
+    if not MULTIADMIN_USERNAME or not MULTIADMIN_PASSWORD:
+        raise RuntimeError(
+            "Configura MULTIADMIN_USERNAME y MULTIADMIN_PASSWORD para iniciar sesión."
+        )
+
+    response = _cliente_cognito().initiate_auth(
+        ClientId=MULTIADMIN_CLIENT_ID,
+        AuthFlow="USER_PASSWORD_AUTH",
+        AuthParameters=_auth_parameters({
+            "USERNAME": MULTIADMIN_USERNAME,
+            "PASSWORD": MULTIADMIN_PASSWORD,
+        }),
+    )
+    return _guardar_tokens(response["AuthenticationResult"])
+
+
+def _renovar_token_multiadmin():
+    try:
+        return refrescar_multiadmin_token()["id_token"]
+    except Exception:
+        return iniciar_sesion_multiadmin()["id_token"]
+
+
+def _obtener_token_multiadmin():
+    if MULTIADMIN_PROVISIONED_TOKEN:
+        return MULTIADMIN_PROVISIONED_TOKEN
+
+    token = _TOKEN_CACHE.get("id_token") or MULTIADMIN_ID_TOKEN
+    if token and _token_expirado_o_por_expirar(token):
+        try:
+            return _renovar_token_multiadmin()
+        except Exception:
+            return token
+    if token:
+        return token
+    return _renovar_token_multiadmin()
+
+
+def _headers_multiadmin(token):
+    return {
+        "accept": "application/json",
+        "authorization": f"Bearer {token}",
+        "origin": "https://admin.camarada.io",
+        "referer": "https://admin.camarada.io/",
+        "user-agent": "Mozilla/5.0",
+    }
+
+
+def _request_json_multiadmin(path, token):
+    url = f"{MULTIADMIN_API_BASE_URL.rstrip('/')}/{path.lstrip('/')}"
+    response = requests.get(url, headers=_headers_multiadmin(token), timeout=30)
+    response.raise_for_status()
+    return response.json()
+
+
+def _extraer_items(data, items_key):
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict):
+        items = data.get(items_key)
+        if isinstance(items, list):
+            return items
+        for fallback_key in ("Items", "items"):
+            items = data.get(fallback_key)
+            if isinstance(items, list):
+                return items
+    return []
+
+
+def _obtener_usuarios_directo(system_config, token):
+    path = (
+        f"/projects/{system_config['api_key']}/users"
+        f"?sinceExpiration={MULTIADMIN_USERS_SINCE_EXPIRATION}"
+    )
+    data = _request_json_multiadmin(path, token)
+    return _extraer_items(data, system_config["items_key"])
+
+
+def _obtener_bonus_directo(token):
+    data = _request_json_multiadmin("/projects/compinche/bonus", token)
+    return _normalizar_bonus_multiadmin(data)
+
+
+def _normalizar_bonus_multiadmin(data):
+    if not isinstance(data, dict):
+        return None
+    return {
+        "total_gross_revenue": _to_number(data.get("totalGrossRevenue")),
+        "goal_for_bonus": _to_number(data.get("goalForBonus")),
+        "percentage_completed": _to_number(data.get("percentageCompleted")),
+        "generated_at": data.get("generatedAtTimestamp"),
+        "next_refresh_at": data.get("nextRefreshTimestamp"),
+        "bonus_end_at": data.get("bonusEndTimestamp"),
+        "compinche_gross_revenue": _to_number(data.get("compincheGrossRevenue")),
+        "paripe_gross_revenue": _to_number(data.get("paripeGrossRevenue")),
+        "other_gross_revenue": _to_number(data.get("otherGrossRevenue")),
+    }
+
+
+def _metricas_desde_usuarios(system, usuarios, exclude_admins=False):
+    usuarios_validos = [user for user in usuarios if isinstance(user, dict)]
+    if exclude_admins:
+        usuarios_validos = [user for user in usuarios_validos if not _usuario_admin(user)]
+
+    active_users = sum(1 for user in usuarios_validos if _usuario_good_standing(user))
+    running_users = sum(
+        1 for user in usuarios_validos
+        if _usuario_good_standing(user) and _usuario_running(user)
+    )
+    disconnected_users = sum(1 for user in usuarios_validos if not _usuario_good_standing(user))
+    new_users = sum(1 for user in usuarios_validos if _usuario_creado_hoy(user))
+
+    metricas = {
+        "system": system,
+        "active_users": active_users,
+        "running_users": running_users,
+        "total_users": len(usuarios_validos),
+        "new_users": new_users,
+        "disconnected_users": disconnected_users,
+    }
+
+    if system == "Compinche":
+        metricas["active_by_promo_users"] = sum(
+            1 for user in usuarios_validos
+            if _usuario_good_standing(user) and _usuario_tiene_promo(user)
+        )
+
+    return metricas
+
+
+def _obtener_metricas_multiadmin_directo():
+    token = _obtener_token_multiadmin()
+
+    metricas = {}
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        future_to_system = {
+            executor.submit(_obtener_usuarios_directo, config, token): (system, config)
+            for system, config in DIRECT_SYSTEMS.items()
+        }
+        bonus_future = executor.submit(_obtener_bonus_directo, token)
+
+        for future, (system, config) in future_to_system.items():
+            usuarios = future.result()
+            metricas[system] = _metricas_desde_usuarios(
+                system,
+                usuarios,
+                exclude_admins=config.get("exclude_admins", False),
+            )
+
+        bonus_stats = bonus_future.result()
+
+    try:
+        paripe_legacy = _obtener_metricas_multiadmin_legacy().get("Paripe", {})
+    except Exception:
+        paripe_legacy = {}
+    metricas["Paripe"]["good_standing_users"] = metricas["Paripe"]["active_users"]
+    metricas["Paripe"]["photo_pool"] = paripe_legacy.get("photo_pool", 0)
+    metricas["Compinche"]["bonus_stats"] = bonus_stats
+
+    return metricas
 
 
 def _normalizar_sistema_generico(key, value):
@@ -37,12 +428,11 @@ def _normalizar_sistema_generico(key, value):
     }
 
 
-def obtener_metricas_multiadmin():
+def _obtener_metricas_multiadmin_legacy():
     response = requests.get(ENDPOINT_MULTIADMIN, timeout=30)
     response.raise_for_status()
 
-    data = response.json()
-    data = _safe_dict(data)
+    data = _safe_dict(response.json())
 
     compinche = _safe_dict(data.get("compinche"))
     paripe = _safe_dict(data.get("paripe"))
@@ -50,44 +440,64 @@ def obtener_metricas_multiadmin():
     complice = _safe_dict(data.get("complice"))
     secuaz = _safe_dict(data.get("secuaz"))
     ready4drive = _safe_dict(data.get("ready4drive"))
+    chispita = _safe_dict(data.get("chispita"))
     paripe_images_bank = _safe_dict(paripe.get("images-bank"))
 
     metricas = {
         "Compinche": {
             "active_users": _restar_admins_compinche(compinche.get("active")),
             "running_users": _to_int(compinche.get("running")),
+            "active_by_promo_users": None,
+            "bonus_stats": None,
         },
         "Paripe": {
-            "good_standing_users": paripe.get("active", 0) or 0,
-            "photo_pool": paripe_images_bank.get("items", 0) or 0,
+            "active_users": _to_int(paripe.get("active")),
+            "good_standing_users": _to_int(paripe.get("active")),
+            "photo_pool": _to_int(paripe_images_bank.get("items")),
         },
         "camarada": {
-            "active_users": camarada.get("active", 0) or 0,
-            "running_users": camarada.get("running", 0) or 0,
+            "active_users": _to_int(camarada.get("active")),
+            "running_users": _to_int(camarada.get("running")),
         },
         "complice": {
-            "active_users": complice.get("active", 0) or 0,
-            "running_users": complice.get("running", 0) or 0,
+            "active_users": _to_int(complice.get("active")),
+            "running_users": _to_int(complice.get("running")),
         },
         "secuaz": {
-            "active_users": secuaz.get("active", 0) or 0,
-            "running_users": secuaz.get("running", 0) or 0,
+            "active_users": _to_int(secuaz.get("active")),
+            "running_users": _to_int(secuaz.get("running")),
         },
         "ready4drive": {
-            "active_users": ready4drive.get("active", 0) or 0,
-            "running_users": ready4drive.get("running", 0) or 0,
+            "active_users": _to_int(ready4drive.get("active")),
+            "running_users": _to_int(ready4drive.get("running")),
         },
     }
+
+    if chispita:
+        metricas["chispita"] = {
+            "system": "chispita",
+            "display_name": "Chispita",
+            "active_users": _to_int(chispita.get("active")),
+            "running_users": _to_int(chispita.get("running")),
+        }
 
     for key, value in data.items():
         if key in KNOWN_SYSTEM_KEYS:
             continue
         if not isinstance(value, dict) or ("active" not in value and "running" not in value):
             continue
-        sistema = _normalizar_sistema_generico(key, value)
-        metricas[key] = sistema
+        metricas[key] = _normalizar_sistema_generico(key, value)
 
     return metricas
+
+
+def obtener_metricas_multiadmin():
+    if _hay_config_directa_multiadmin():
+        try:
+            return _obtener_metricas_multiadmin_directo()
+        except Exception:
+            return _obtener_metricas_multiadmin_legacy()
+    return _obtener_metricas_multiadmin_legacy()
 
 
 if __name__ == "__main__":

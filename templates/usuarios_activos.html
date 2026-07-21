@@ -50,6 +50,11 @@
         <div class="stat-line"><span>Promo</span><strong id="compinche-promo">-</strong></div>
         <div class="stat-line"><span>Run</span><strong id="compinche-running">-</strong></div>
       </div>
+      <div class="stat-list stat-list--compact">
+        <div class="stat-line"><span>Total</span><strong id="compinche-users-total">-</strong></div>
+        <div class="stat-line"><span>Nuevos</span><strong id="compinche-new">-</strong></div>
+        <div class="stat-line"><span>Desconectados</span><strong id="compinche-disconnected">-</strong></div>
+      </div>
       <div class="system-card__footer">
         <span class="system-card__status" id="compinche-status">Pendiente</span>
         <span class="system-card__updated" id="compinche-updated">Sin actualización</span>
@@ -72,6 +77,11 @@
       <div class="stat-list">
         <div class="stat-line"><span>Usuarios</span><strong id="paripe-good-standing">-</strong></div>
         <div class="stat-line"><span>Fotos</span><strong id="paripe-photo-pool">-</strong></div>
+      </div>
+      <div class="stat-list stat-list--compact">
+        <div class="stat-line"><span>Total</span><strong id="paripe-users-total">-</strong></div>
+        <div class="stat-line"><span>Nuevos</span><strong id="paripe-new">-</strong></div>
+        <div class="stat-line"><span>Desconectados</span><strong id="paripe-disconnected">-</strong></div>
       </div>
       <div class="system-card__footer">
         <span class="system-card__status" id="paripe-status">Pendiente</span>
@@ -96,6 +106,11 @@
         <div class="stat-line"><span>Usuarios</span><strong id="camarada-active">-</strong></div>
         <div class="stat-line"><span>Running</span><strong id="camarada-running">-</strong></div>
       </div>
+      <div class="stat-list stat-list--compact">
+        <div class="stat-line"><span>Total</span><strong id="camarada-users-total">-</strong></div>
+        <div class="stat-line"><span>Nuevos</span><strong id="camarada-new">-</strong></div>
+        <div class="stat-line"><span>Desconectados</span><strong id="camarada-disconnected">-</strong></div>
+      </div>
       <div class="system-card__footer">
         <span class="system-card__status" id="camarada-status">Pendiente</span>
         <span class="system-card__updated" id="camarada-updated">Sin actualización</span>
@@ -119,6 +134,11 @@
         <div class="stat-line"><span>Usuarios</span><strong id="complice-active">-</strong></div>
         <div class="stat-line"><span>Running</span><strong id="complice-running">-</strong></div>
       </div>
+      <div class="stat-list stat-list--compact">
+        <div class="stat-line"><span>Total</span><strong id="complice-users-total">-</strong></div>
+        <div class="stat-line"><span>Nuevos</span><strong id="complice-new">-</strong></div>
+        <div class="stat-line"><span>Desconectados</span><strong id="complice-disconnected">-</strong></div>
+      </div>
       <div class="system-card__footer">
         <span class="system-card__status" id="complice-status">Pendiente</span>
         <span class="system-card__updated" id="complice-updated">Sin actualización</span>
@@ -140,6 +160,11 @@
       <div class="stat-list">
         <div class="stat-line"><span>Usuarios</span><strong id="secuaz-active">-</strong></div>
         <div class="stat-line"><span>Running</span><strong id="secuaz-running">-</strong></div>
+      </div>
+      <div class="stat-list stat-list--compact">
+        <div class="stat-line"><span>Total</span><strong id="secuaz-users-total">-</strong></div>
+        <div class="stat-line"><span>Nuevos</span><strong id="secuaz-new">-</strong></div>
+        <div class="stat-line"><span>Desconectados</span><strong id="secuaz-disconnected">-</strong></div>
       </div>
       <div class="system-card__footer">
         <span class="system-card__status" id="secuaz-status">Pendiente</span>
@@ -164,6 +189,11 @@
         <div class="stat-line"><span>Usuarios</span><strong id="ready4drive-active">-</strong></div>
         <div class="stat-line"><span>Running</span><strong id="ready4drive-running">-</strong></div>
       </div>
+      <div class="stat-list stat-list--compact">
+        <div class="stat-line"><span>Total</span><strong id="ready4drive-users-total">-</strong></div>
+        <div class="stat-line"><span>Nuevos</span><strong id="ready4drive-new">-</strong></div>
+        <div class="stat-line"><span>Desconectados</span><strong id="ready4drive-disconnected">-</strong></div>
+      </div>
       <div class="system-card__footer">
         <span class="system-card__status" id="ready4drive-status">Pendiente</span>
         <span class="system-card__updated" id="ready4drive-updated">Sin actualización</span>
@@ -179,7 +209,7 @@
     </div>
     <div class="platform-summary-panel__stats">
       <div>
-        <span>Usuarios reales</span>
+        <span>Usuarios sin promo</span>
         <strong id="total-real-users">-</strong>
       </div>
       <div>
@@ -375,6 +405,12 @@ function numberOrZero(value) {
   return Number.isFinite(number) ? number : 0;
 }
 
+function setMetricText(id, value) {
+  const element = document.getElementById(id);
+  if (!element) return;
+  element.textContent = value ?? "-";
+}
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -514,6 +550,11 @@ function ensureDynamicSystemCard(item) {
       <div class="stat-line"><span>Usuarios</span><strong id="${id}-active">-</strong></div>
       <div class="stat-line"><span>Running</span><strong id="${id}-running">-</strong></div>
     </div>
+    <div class="stat-list stat-list--compact">
+      <div class="stat-line"><span>Total</span><strong id="${id}-users-total">-</strong></div>
+      <div class="stat-line"><span>Nuevos</span><strong id="${id}-new">-</strong></div>
+      <div class="stat-line"><span>Desconectados</span><strong id="${id}-disconnected">-</strong></div>
+    </div>
     <div class="system-card__footer">
       <span class="system-card__status" id="${id}-status">Pendiente</span>
       <span class="system-card__updated" id="${id}-updated">Sin actualizacion</span>
@@ -533,8 +574,11 @@ function renderDynamicSystems(items) {
     if (!id || knownIds.has(id)) return;
     activeDynamicIds.add(id);
     ensureDynamicSystemCard(item);
-    document.getElementById(`${id}-active`).textContent = item.active_users ?? "-";
-    document.getElementById(`${id}-running`).textContent = item.running_users ?? "-";
+    setMetricText(`${id}-active`, item.active_users);
+    setMetricText(`${id}-running`, item.running_users);
+    setMetricText(`${id}-users-total`, item.total_users);
+    setMetricText(`${id}-new`, item.new_users);
+    setMetricText(`${id}-disconnected`, item.disconnected_users);
     renderSystemState(id, item);
   });
 
@@ -557,43 +601,61 @@ function renderData(items, updatedAt) {
   renderBonusStats(compinche?.bonus_stats);
 
   if (compinche) {
-    document.getElementById("compinche-active").textContent = compinche.active_users ?? "-";
-    document.getElementById("compinche-total").textContent = calcularUsuariosReales(
+    setMetricText("compinche-active", compinche.active_users);
+    setMetricText("compinche-total", calcularUsuariosReales(
       compinche.active_users,
       compinche.active_by_promo_users,
-    );
-    document.getElementById("compinche-running").textContent = compinche.running_users ?? "-";
-    document.getElementById("compinche-promo").textContent = compinche.active_by_promo_users ?? "-";
+    ));
+    setMetricText("compinche-running", compinche.running_users);
+    setMetricText("compinche-promo", compinche.active_by_promo_users);
+    setMetricText("compinche-users-total", compinche.total_users);
+    setMetricText("compinche-new", compinche.new_users);
+    setMetricText("compinche-disconnected", compinche.disconnected_users);
     renderSystemState("compinche", compinche);
   }
 
   if (paripe) {
-    document.getElementById("paripe-good-standing").textContent = paripe.good_standing_users ?? "-";
-    document.getElementById("paripe-photo-pool").textContent = paripe.photo_pool ?? "-";
+    setMetricText("paripe-good-standing", paripe.good_standing_users);
+    setMetricText("paripe-photo-pool", paripe.photo_pool);
+    setMetricText("paripe-users-total", paripe.total_users);
+    setMetricText("paripe-new", paripe.new_users);
+    setMetricText("paripe-disconnected", paripe.disconnected_users);
     renderSystemState("paripe", paripe);
   }
 
   if (camarada) {
-    document.getElementById("camarada-active").textContent = camarada.active_users ?? "-";
-    document.getElementById("camarada-running").textContent = camarada.running_users ?? "-";
+    setMetricText("camarada-active", camarada.active_users);
+    setMetricText("camarada-running", camarada.running_users);
+    setMetricText("camarada-users-total", camarada.total_users);
+    setMetricText("camarada-new", camarada.new_users);
+    setMetricText("camarada-disconnected", camarada.disconnected_users);
     renderSystemState("camarada", camarada);
   }
 
   if (complice) {
-    document.getElementById("complice-active").textContent = complice.active_users ?? "-";
-    document.getElementById("complice-running").textContent = complice.running_users ?? "-";
+    setMetricText("complice-active", complice.active_users);
+    setMetricText("complice-running", complice.running_users);
+    setMetricText("complice-users-total", complice.total_users);
+    setMetricText("complice-new", complice.new_users);
+    setMetricText("complice-disconnected", complice.disconnected_users);
     renderSystemState("complice", complice);
   }
 
   if (secuaz) {
-    document.getElementById("secuaz-active").textContent = secuaz.active_users ?? "-";
-    document.getElementById("secuaz-running").textContent = secuaz.running_users ?? "-";
+    setMetricText("secuaz-active", secuaz.active_users);
+    setMetricText("secuaz-running", secuaz.running_users);
+    setMetricText("secuaz-users-total", secuaz.total_users);
+    setMetricText("secuaz-new", secuaz.new_users);
+    setMetricText("secuaz-disconnected", secuaz.disconnected_users);
     renderSystemState("secuaz", secuaz);
   }
 
   if (ready4drive) {
-    document.getElementById("ready4drive-active").textContent = ready4drive.active_users ?? "-";
-    document.getElementById("ready4drive-running").textContent = ready4drive.running_users ?? "-";
+    setMetricText("ready4drive-active", ready4drive.active_users);
+    setMetricText("ready4drive-running", ready4drive.running_users);
+    setMetricText("ready4drive-users-total", ready4drive.total_users);
+    setMetricText("ready4drive-new", ready4drive.new_users);
+    setMetricText("ready4drive-disconnected", ready4drive.disconnected_users);
     renderSystemState("ready4drive", ready4drive);
   }
 

@@ -81,6 +81,51 @@ class UsuariosActivosTests(unittest.TestCase):
         self.assertEqual(0, metricas["nuevo"]["active_users"])
         self.assertEqual(0, metricas["nuevo"]["running_users"])
 
+    def test_multiadmin_directo_calcula_metricas_desde_usuarios(self):
+        payloads = {
+            "/projects/compinche/users": {
+                "Items": [
+                    {"goodStanding": True, "status": "start", "standingType": "paid"},
+                    {"goodStanding": True, "status": "stop", "standingType": "promo_trial"},
+                    {"goodStanding": True, "status": "start", "isAdmin": True},
+                    {"goodStanding": False, "status": "start"},
+                ]
+            },
+            "/projects/paripe/users": {"Items": [{"goodStanding": True}, {"goodStanding": False}]},
+            "/projects/ready4drive/users": {"Items": [{"goodStanding": True, "status": "start"}]},
+            "/projects/shipt/users": {"Items": [{"goodStanding": "true", "status": "START"}]},
+            "/projects/veho/users": {"items": [{"goodStanding": True, "status": "stop"}]},
+            "/projects/zifty/users": {"Items": [{"goodStanding": 1, "status": "start"}]},
+            "/projects/chispita/users": {"Items": [{"goodStanding": True, "status": "start"}]},
+            "/projects/compinche/bonus": {
+                "totalGrossRevenue": 100,
+                "goalForBonus": 200,
+                "percentageCompleted": 50,
+            },
+        }
+
+        def request_json(path, _token):
+            for key, value in payloads.items():
+                if path.startswith(key):
+                    return value
+            return {}
+
+        with patch("tools.api_multiadmin._obtener_token_multiadmin", return_value="token"), patch(
+            "tools.api_multiadmin._request_json_multiadmin",
+            side_effect=request_json,
+        ), patch(
+            "tools.api_multiadmin._obtener_metricas_multiadmin_legacy",
+            return_value={"Paripe": {"photo_pool": 12}},
+        ):
+            metricas = api_multiadmin._obtener_metricas_multiadmin_directo()
+
+        self.assertEqual(2, metricas["Compinche"]["active_users"])
+        self.assertEqual(1, metricas["Compinche"]["running_users"])
+        self.assertEqual(1, metricas["Compinche"]["active_by_promo_users"])
+        self.assertEqual(12, metricas["Paripe"]["photo_pool"])
+        self.assertEqual(1, metricas["chispita"]["active_users"])
+        self.assertEqual(50.0, metricas["Compinche"]["bonus_stats"]["percentage_completed"])
+
     def test_multiadmin_actualiza_compinche_con_activos_ajustados(self):
         estado = _estado_base()
         metricas = {

@@ -2162,6 +2162,30 @@ th.desc::after {
   font-size: 18px;
 }
 
+.users-active-page .stat-list--compact {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.users-active-page .stat-list--compact .stat-line {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 4px;
+  min-height: 54px;
+  padding: 9px 10px;
+}
+
+.users-active-page .stat-list--compact .stat-line span {
+  white-space: normal;
+  line-height: 1.1;
+}
+
+.users-active-page .stat-list--compact .stat-line strong {
+  font-size: 17px;
+  line-height: 1;
+}
+
 .users-active-page .stat-list--compinche {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;

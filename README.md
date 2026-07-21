@@ -44,6 +44,16 @@ Opcionales según funcionalidad:
 - `COMPINCHE_USERNAME`
 - `COMPINCHE_PASSWORD`
 - `COMPINCHE_USER_POOL_ID`
+- `MULTIADMIN_API_BASE_URL`
+- `MULTIADMIN_ID_TOKEN`
+- `MULTIADMIN_REFRESH_TOKEN`
+- `MULTIADMIN_PROVISIONED_TOKEN`
+- `MULTIADMIN_CLIENT_ID`
+- `MULTIADMIN_CLIENT_SECRET`
+- `MULTIADMIN_USERNAME`
+- `MULTIADMIN_PASSWORD`
+- `MULTIADMIN_USER_POOL_ID`
+- `MULTIADMIN_USERS_SINCE_EXPIRATION`
 - `AWS_ACCESS_KEY_ID`
 - `AWS_SECRET_ACCESS_KEY`
 - `AWS_DEFAULT_REGION`
@@ -86,6 +96,11 @@ Antes de desplegar:
    - `COMPINCHE_PASSWORD`
    - `COMPINCHE_USER_POOL_ID=us-east-1_KRph7TcMm` si el login necesita `ADMIN_USER_PASSWORD_AUTH`.
    - `COMPINCHE_CLIENT_SECRET` solo si el App Client de Cognito usa client secret.
+6. Si usaras `usuarios_activos` con datos completos del Multiadmin nuevo, configura al menos una forma de autenticacion:
+   - `MULTIADMIN_PROVISIONED_TOKEN`, o
+   - `MULTIADMIN_ID_TOKEN` junto con `MULTIADMIN_REFRESH_TOKEN`, o
+   - `MULTIADMIN_USERNAME` y `MULTIADMIN_PASSWORD`.
+   Si no configuras estas variables, la app usa el endpoint Lambda legado, que solo trae agregados basicos.
 
 ## Conectar IA para Informe Semanal CS
 
@@ -124,7 +139,7 @@ OLLAMA_WEEKLY_REPORT_MODEL=qwen2.5:7b
 - `auditoria_csat` puede auditar negativas pendientes con IA si `OPENAI_API_KEY` está configurada o si `CSAT_AI_PROVIDER=ollama` apunta a un Ollama local. La IA usa transcripción del CSV cuando existe; si el CSV solo trae un link privado, audita con el comentario disponible hasta conectar una API backend que entregue el transcript completo.
 - `informe_semanal_cs` genera informes con Gemini si `GEMINI_API_KEY` está configurada y `WEEKLY_REPORT_AI_PROVIDER=gemini`. También puede usar OpenAI u Ollama. Si no hay proveedor de IA, devuelve una base editable con las secciones obligatorias. En esta V1 extrae texto de PDF, TXT, Markdown, CSV, JSON y logs; imágenes y hojas de cálculo quedan marcadas como recibidas sin extracción.
 - Ollama local no corre dentro de Vercel ni puede usar el `127.0.0.1` de una computadora personal desde producción. Para Vercel, usa OpenAI u otro proveedor cloud, o expón un servidor Ollama propio con URL segura y accesible desde Vercel.
-- `usuarios_activos` depende del endpoint externo de Multiadmin y puede fallar por timeouts. El diagnóstico de promo de Compinche sí depende de credenciales/tokens de Compinche.
+- `usuarios_activos` puede consultar la API nueva de Multiadmin si hay token o credenciales configuradas; sin esas variables cae al endpoint Lambda legado. El diagnóstico de promo de Compinche y los datos completos de Multiadmin dependen de credenciales/tokens.
 - El repo contiene una carpeta `tools/trash/` con scripts archivados que no forman parte del runtime activo.
 - Las variables y dependencias asociadas a `Paripe` quedaron fuera de la documentación del runtime activo; hoy solo viven en scripts archivados dentro de `tools/trash/`.
 
