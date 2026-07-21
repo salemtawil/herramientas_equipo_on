@@ -31,6 +31,32 @@
     </div>
   </section>
 
+  <section class="platform-summary-panel">
+    <div class="platform-summary-panel__main">
+      <span class="platform-summary-panel__eyebrow">Resumen general</span>
+      <h2>Usuarios en plataformas</h2>
+    </div>
+    <div class="platform-summary-panel__stats">
+      <div>
+        <span>Usuarios sin promo</span>
+        <strong id="total-real-users">-</strong>
+      </div>
+      <div>
+        <span>Usuarios totales</span>
+        <strong id="total-platform-users">-</strong>
+      </div>
+    </div>
+  </section>
+
+  <section class="systems-section">
+    <div class="systems-section__header">
+      <div>
+        <span class="systems-section__eyebrow">Multiadmin</span>
+        <h2>Estado por plataforma</h2>
+      </div>
+    </div>
+  </section>
+
   <section id="resultado" class="system-grid">
     <article class="system-card system-card--compinche" id="card-compinche">
       <div class="system-card__header">
@@ -44,13 +70,13 @@
           </div>
         </div>
       </div>
-      <div class="stat-list stat-list--compinche">
-        <div class="stat-line"><span>Activos</span><strong id="compinche-active">-</strong></div>
-        <div class="stat-line"><span>Sin promo</span><strong id="compinche-total">-</strong></div>
-        <div class="stat-line"><span>Promo</span><strong id="compinche-promo">-</strong></div>
-        <div class="stat-line"><span>Run</span><strong id="compinche-running">-</strong></div>
+      <div class="stat-list stat-list--primary stat-list--compinche">
+        <div class="stat-line stat-line--featured"><span>Activos</span><strong id="compinche-active">-</strong></div>
+        <div class="stat-line stat-line--featured"><span>Sin promo</span><strong id="compinche-total">-</strong></div>
       </div>
-      <div class="stat-list stat-list--compact">
+      <div class="stat-list stat-list--details">
+        <div class="stat-line"><span>Promo</span><strong id="compinche-promo">-</strong></div>
+        <div class="stat-line"><span>En ejecución</span><strong id="compinche-running">-</strong></div>
         <div class="stat-line"><span>Total</span><strong id="compinche-users-total">-</strong></div>
         <div class="stat-line"><span>Nuevos</span><strong id="compinche-new">-</strong></div>
         <div class="stat-line"><span>Desconectados</span><strong id="compinche-disconnected">-</strong></div>
@@ -74,11 +100,11 @@
           </div>
         </div>
       </div>
-      <div class="stat-list">
-        <div class="stat-line"><span>Usuarios</span><strong id="paripe-good-standing">-</strong></div>
-        <div class="stat-line"><span>Fotos</span><strong id="paripe-photo-pool">-</strong></div>
+      <div class="stat-list stat-list--primary">
+        <div class="stat-line stat-line--featured"><span>Activos</span><strong id="paripe-good-standing">-</strong></div>
+        <div class="stat-line stat-line--featured"><span>Fotos</span><strong id="paripe-photo-pool">-</strong></div>
       </div>
-      <div class="stat-list stat-list--compact">
+      <div class="stat-list stat-list--details">
         <div class="stat-line"><span>Total</span><strong id="paripe-users-total">-</strong></div>
         <div class="stat-line"><span>Nuevos</span><strong id="paripe-new">-</strong></div>
         <div class="stat-line"><span>Desconectados</span><strong id="paripe-disconnected">-</strong></div>
@@ -102,11 +128,11 @@
           </div>
         </div>
       </div>
-      <div class="stat-list">
-        <div class="stat-line"><span>Usuarios</span><strong id="camarada-active">-</strong></div>
-        <div class="stat-line"><span>Running</span><strong id="camarada-running">-</strong></div>
+      <div class="stat-list stat-list--primary">
+        <div class="stat-line stat-line--featured"><span>Activos</span><strong id="camarada-active">-</strong></div>
+        <div class="stat-line stat-line--featured"><span>En ejecución</span><strong id="camarada-running">-</strong></div>
       </div>
-      <div class="stat-list stat-list--compact">
+      <div class="stat-list stat-list--details">
         <div class="stat-line"><span>Total</span><strong id="camarada-users-total">-</strong></div>
         <div class="stat-line"><span>Nuevos</span><strong id="camarada-new">-</strong></div>
         <div class="stat-line"><span>Desconectados</span><strong id="camarada-disconnected">-</strong></div>
@@ -130,11 +156,11 @@
           </div>
         </div>
       </div>
-      <div class="stat-list">
-        <div class="stat-line"><span>Usuarios</span><strong id="complice-active">-</strong></div>
-        <div class="stat-line"><span>Running</span><strong id="complice-running">-</strong></div>
+      <div class="stat-list stat-list--primary">
+        <div class="stat-line stat-line--featured"><span>Activos</span><strong id="complice-active">-</strong></div>
+        <div class="stat-line stat-line--featured"><span>En ejecución</span><strong id="complice-running">-</strong></div>
       </div>
-      <div class="stat-list stat-list--compact">
+      <div class="stat-list stat-list--details">
         <div class="stat-line"><span>Total</span><strong id="complice-users-total">-</strong></div>
         <div class="stat-line"><span>Nuevos</span><strong id="complice-new">-</strong></div>
         <div class="stat-line"><span>Desconectados</span><strong id="complice-disconnected">-</strong></div>
@@ -157,11 +183,11 @@
           </div>
         </div>
       </div>
-      <div class="stat-list">
-        <div class="stat-line"><span>Usuarios</span><strong id="secuaz-active">-</strong></div>
-        <div class="stat-line"><span>Running</span><strong id="secuaz-running">-</strong></div>
+      <div class="stat-list stat-list--primary">
+        <div class="stat-line stat-line--featured"><span>Activos</span><strong id="secuaz-active">-</strong></div>
+        <div class="stat-line stat-line--featured"><span>En ejecución</span><strong id="secuaz-running">-</strong></div>
       </div>
-      <div class="stat-list stat-list--compact">
+      <div class="stat-list stat-list--details">
         <div class="stat-line"><span>Total</span><strong id="secuaz-users-total">-</strong></div>
         <div class="stat-line"><span>Nuevos</span><strong id="secuaz-new">-</strong></div>
         <div class="stat-line"><span>Desconectados</span><strong id="secuaz-disconnected">-</strong></div>
@@ -185,11 +211,11 @@
           </div>
         </div>
       </div>
-      <div class="stat-list">
-        <div class="stat-line"><span>Usuarios</span><strong id="ready4drive-active">-</strong></div>
-        <div class="stat-line"><span>Running</span><strong id="ready4drive-running">-</strong></div>
+      <div class="stat-list stat-list--primary">
+        <div class="stat-line stat-line--featured"><span>Activos</span><strong id="ready4drive-active">-</strong></div>
+        <div class="stat-line stat-line--featured"><span>En ejecución</span><strong id="ready4drive-running">-</strong></div>
       </div>
-      <div class="stat-list stat-list--compact">
+      <div class="stat-list stat-list--details">
         <div class="stat-line"><span>Total</span><strong id="ready4drive-users-total">-</strong></div>
         <div class="stat-line"><span>Nuevos</span><strong id="ready4drive-new">-</strong></div>
         <div class="stat-line"><span>Desconectados</span><strong id="ready4drive-disconnected">-</strong></div>
@@ -200,23 +226,6 @@
       </div>
       <div class="error" id="ready4drive-error"></div>
     </article>
-  </section>
-
-  <section class="platform-summary-panel">
-    <div class="platform-summary-panel__main">
-      <span class="platform-summary-panel__eyebrow">Resumen general</span>
-      <h2>Usuarios en plataformas</h2>
-    </div>
-    <div class="platform-summary-panel__stats">
-      <div>
-        <span>Usuarios sin promo</span>
-        <strong id="total-real-users">-</strong>
-      </div>
-      <div>
-        <span>Usuarios totales</span>
-        <strong id="total-platform-users">-</strong>
-      </div>
-    </div>
   </section>
 
   <section class="compinche-bonus-panel" id="compinche-bonus-panel" hidden>
@@ -303,6 +312,12 @@ function formatPercent(value) {
   const number = Number(value);
   if (!Number.isFinite(number)) return "-";
   return `${Math.round(number * 10) / 10}%`;
+}
+
+function formatCount(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return value ?? "-";
+  return number.toLocaleString("en-US");
 }
 
 function parseBonusDate(value) {
@@ -408,7 +423,7 @@ function numberOrZero(value) {
 function setMetricText(id, value) {
   const element = document.getElementById(id);
   if (!element) return;
-  element.textContent = value ?? "-";
+  element.textContent = formatCount(value);
 }
 
 function escapeHtml(value) {
@@ -546,11 +561,11 @@ function ensureDynamicSystemCard(item) {
         </div>
       </div>
     </div>
-    <div class="stat-list">
-      <div class="stat-line"><span>Usuarios</span><strong id="${id}-active">-</strong></div>
-      <div class="stat-line"><span>Running</span><strong id="${id}-running">-</strong></div>
+    <div class="stat-list stat-list--primary">
+      <div class="stat-line stat-line--featured"><span>Activos</span><strong id="${id}-active">-</strong></div>
+      <div class="stat-line stat-line--featured"><span>En ejecución</span><strong id="${id}-running">-</strong></div>
     </div>
-    <div class="stat-list stat-list--compact">
+    <div class="stat-list stat-list--details">
       <div class="stat-line"><span>Total</span><strong id="${id}-users-total">-</strong></div>
       <div class="stat-line"><span>Nuevos</span><strong id="${id}-new">-</strong></div>
       <div class="stat-line"><span>Desconectados</span><strong id="${id}-disconnected">-</strong></div>
