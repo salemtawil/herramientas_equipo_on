@@ -2061,6 +2061,29 @@ th.desc::after {
 
 .users-active-page .page-hero .page-section-title {
   align-items: flex-start;
+  gap: 10px;
+}
+
+.users-active-page.page-stack {
+  gap: 10px;
+}
+
+.users-active-page .page-hero {
+  padding: 14px 16px;
+}
+
+.users-active-page .page-hero h1 {
+  font-size: 24px;
+  line-height: 1.1;
+}
+
+.users-active-page .page-hero p {
+  margin-top: 4px;
+}
+
+.users-active-page .page-hero p:not(#general-updated),
+.users-active-page .dashboard-highlight-grid {
+  display: none;
 }
 
 .users-active-page .page-hero .page-actions {
@@ -2072,8 +2095,8 @@ th.desc::after {
   align-items: center;
   gap: 8px;
   width: fit-content;
-  margin-top: 8px;
-  padding: 8px 12px;
+  margin-top: 6px;
+  padding: 5px 9px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--primary-soft) 68%, transparent);
   border: 1px solid color-mix(in srgb, var(--primary) 18%, var(--border));
@@ -2084,15 +2107,14 @@ th.desc::after {
 
 .users-active-page .system-grid {
   align-items: stretch;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 16px;
-  padding-bottom: 6px;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px;
 }
 
 .users-active-page .system-card {
   display: grid;
   grid-template-rows: auto auto 1fr auto auto;
-  padding: 18px;
+  padding: 12px;
   min-width: 0;
 }
 
@@ -2101,57 +2123,57 @@ th.desc::after {
 }
 
 .users-active-page .system-card::after {
-  inset-inline: 18px;
+  inset-inline: 12px;
 }
 
 .users-active-page .system-card__header {
-  gap: 12px;
-  margin-bottom: 14px;
+  gap: 8px;
+  margin-bottom: 10px;
 }
 
 .users-active-page .system-card__brand {
-  gap: 12px;
+  gap: 8px;
 }
 
 .users-active-page .system-card__logo-wrap,
 .users-active-page .system-card__logo,
 .users-active-page .system-card__logo-image {
-  width: 46px;
-  height: 46px;
+  width: 32px;
+  height: 32px;
 }
 
 .users-active-page .system-card__logo-wrap {
-  flex-basis: 46px;
+  flex-basis: 32px;
 }
 
 .users-active-page .system-card__logo,
 .users-active-page .system-card__logo-image {
-  border-radius: 14px;
+  border-radius: 9px;
 }
 
 .users-active-page .system-card__logo {
-  font-size: 14px;
+  font-size: 11px;
 }
 
 .users-active-page .system-card__logo-image {
-  padding: 7px;
+  padding: 5px;
 }
 
 .users-active-page .system-card__title {
-  font-size: 18px;
+  font-size: 15px;
   line-height: 1.15;
 }
 
 .users-active-page .stat-list {
   display: grid;
-  gap: 10px;
+  gap: 6px;
 }
 
 .users-active-page .stat-line {
-  gap: 10px;
-  padding: 10px 12px;
+  gap: 6px;
+  padding: 7px 8px;
   align-items: center;
-  font-size: 13px;
+  font-size: 11px;
 }
 
 .users-active-page .stat-line span {
@@ -2161,23 +2183,23 @@ th.desc::after {
 }
 
 .users-active-page .stat-line strong {
-  font-size: 18px;
+  font-size: 15px;
 }
 
 .users-active-page .stat-list--primary {
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 6px;
 }
 
 .users-active-page .stat-line--featured {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 7px;
+  gap: 4px;
   align-items: start;
-  min-height: 84px;
-  padding: 14px;
+  min-height: 46px;
+  padding: 8px;
   border-color: color-mix(in srgb, var(--primary) 18%, var(--border));
-  background: color-mix(in srgb, var(--surface-muted) 84%, transparent);
+  background: color-mix(in srgb, var(--surface-muted) 76%, transparent);
 }
 
 .users-active-page .stat-line--featured span {
@@ -2186,24 +2208,24 @@ th.desc::after {
 }
 
 .users-active-page .stat-line--featured strong {
-  font-size: 28px;
-  line-height: 0.95;
+  font-size: 18px;
+  line-height: 1;
 }
 
 .users-active-page .stat-list--details {
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+  gap: 5px;
   align-self: start;
-  margin-top: 12px;
-  padding-top: 12px;
+  margin-top: 8px;
+  padding-top: 8px;
   border-top: 1px solid var(--border);
 }
 
 .users-active-page .stat-list--details .stat-line {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 5px;
-  min-height: 52px;
+  gap: 3px;
+  min-height: 34px;
   padding: 0;
   border: 0;
   background: transparent;
@@ -2215,7 +2237,7 @@ th.desc::after {
 }
 
 .users-active-page .stat-list--details .stat-line strong {
-  font-size: 17px;
+  font-size: 11px;
   line-height: 1;
 }
 
@@ -2226,33 +2248,33 @@ th.desc::after {
 
 .users-active-page .system-card__footer {
   align-self: end;
-  margin-top: 14px;
-  padding-top: 12px;
-  gap: 10px;
+  margin-top: 8px;
+  padding-top: 8px;
+  gap: 6px;
 }
 
 .users-active-page .system-card__status {
   min-width: 0;
-  padding: 6px 9px;
-  font-size: 11px;
+  padding: 4px 7px;
+  font-size: 10px;
 }
 
 .users-active-page .system-card__updated {
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .users-active-page .error {
-  min-height: 16px;
-  margin-top: 6px;
-  font-size: 12px;
+  min-height: 12px;
+  margin-top: 4px;
+  font-size: 11px;
 }
 
 .users-active-page .platform-summary-panel {
   display: grid;
   grid-template-columns: minmax(180px, 0.9fr) minmax(320px, 1.5fr);
-  gap: 16px;
+  gap: 10px;
   align-items: center;
-  padding: 18px;
+  padding: 12px;
   border: 1px solid color-mix(in srgb, var(--primary) 26%, var(--border));
   border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--surface-strong) 94%, transparent);
@@ -2275,21 +2297,21 @@ th.desc::after {
 
 .users-active-page .platform-summary-panel h2 {
   margin: 0;
-  font-size: 20px;
+  font-size: 16px;
   line-height: 1.15;
 }
 
 .users-active-page .platform-summary-panel__stats {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 8px;
 }
 
 .users-active-page .platform-summary-panel__stats div {
   display: grid;
-  gap: 4px;
+  gap: 3px;
   min-width: 0;
-  padding: 12px 14px;
+  padding: 8px 10px;
   border: 1px solid color-mix(in srgb, var(--primary) 16%, var(--border));
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--surface-muted) 88%, transparent);
@@ -2297,12 +2319,12 @@ th.desc::after {
 
 .users-active-page .platform-summary-panel__stats strong {
   color: var(--title);
-  font-size: 28px;
+  font-size: 22px;
   line-height: 1;
 }
 
 .users-active-page .systems-section {
-  margin-bottom: -4px;
+  display: none;
 }
 
 .users-active-page .systems-section__header {
@@ -2315,7 +2337,7 @@ th.desc::after {
 
 .users-active-page .systems-section__eyebrow {
   display: inline-flex;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
   color: var(--muted);
   font-size: 11px;
   font-weight: 800;
@@ -2326,16 +2348,16 @@ th.desc::after {
 .users-active-page .systems-section h2 {
   margin: 0;
   color: var(--title);
-  font-size: 20px;
+  font-size: 16px;
   line-height: 1.15;
 }
 
 .users-active-page .compinche-bonus-panel {
   display: grid;
-  grid-template-columns: minmax(180px, 0.85fr) minmax(240px, 1fr) minmax(360px, 1.55fr);
-  gap: 14px;
+  grid-template-columns: minmax(160px, 0.75fr) minmax(220px, 1fr) minmax(320px, 1.55fr);
+  gap: 10px;
   align-items: center;
-  padding: 14px 16px;
+  padding: 10px 12px;
   border: 1px solid color-mix(in srgb, #f59f0a 28%, var(--border));
   border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--surface-strong) 94%, transparent);
@@ -2362,14 +2384,14 @@ th.desc::after {
 
 .users-active-page .compinche-bonus-panel h2 {
   margin: 0;
-  font-size: 20px;
+  font-size: 16px;
   line-height: 1.15;
 }
 
 .users-active-page .compinche-bonus-panel p {
   margin: 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .users-active-page .compinche-bonus-panel__status {
@@ -2377,10 +2399,10 @@ th.desc::after {
   display: inline-flex;
   align-items: center;
   border-radius: 999px;
-  padding: 5px 9px;
+  padding: 4px 7px;
   border: 1px solid var(--border);
   color: var(--title);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 900;
   letter-spacing: 0.06em;
   line-height: 1;
@@ -2402,12 +2424,12 @@ th.desc::after {
 
 .users-active-page .compinche-bonus-panel__pace {
   display: grid;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
 }
 
 .users-active-page .compinche-bonus-panel__progress {
-  height: 12px;
+  height: 8px;
   overflow: hidden;
   border-radius: 999px;
   background: color-mix(in srgb, var(--border) 72%, var(--surface-muted));
@@ -2424,7 +2446,7 @@ th.desc::after {
 .users-active-page .compinche-bonus-panel__stats {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+  gap: 6px;
 }
 
 .users-active-page .compinche-bonus-panel__stats div {
@@ -2435,7 +2457,7 @@ th.desc::after {
 
 .users-active-page .compinche-bonus-panel__stats strong {
   color: var(--title);
-  font-size: 18px;
+  font-size: 14px;
   line-height: 1.15;
   white-space: nowrap;
 }
