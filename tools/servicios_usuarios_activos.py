@@ -95,7 +95,17 @@ def _actualizar_estado(estado, system, **kwargs):
 
 def _extraer_metricas_extra(valores):
     extras = {}
-    for key in ("breakdown", "spark_users", "instacart_users", "offers_won_today_users"):
+    for key in (
+        "breakdown",
+        "spark_users",
+        "instacart_users",
+        "offers_won_today",
+        "offers_won_today_users",
+        "spark_offers_won_today",
+        "spark_offers_won_today_users",
+        "instacart_offers_won_today",
+        "instacart_offers_won_today_users",
+    ):
         if key in valores:
             extras[key] = valores.get(key)
     return extras

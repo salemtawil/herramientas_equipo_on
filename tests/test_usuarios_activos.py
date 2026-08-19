@@ -99,16 +99,46 @@ class UsuariosActivosTests(unittest.TestCase):
             "/projects/zifty/users": {"Items": [{"goodStanding": 1, "status": "start"}]},
             "/projects/chispita/users": {
                 "Items": [
-                    {"goodStanding": True, "status": "start", "spark": True, "offersWonToday": 2},
-                    {"goodStanding": True, "status": "stop", "platform": "instacart", "ordersCapturedToday": 1},
                     {
                         "goodStanding": True,
                         "status": "start",
-                        "apps": ["spark", "instacart"],
-                        "orders": [{"capturedAt": ahora_ms}],
+                        "statusLastTimestampUpdate": ahora_ms,
+                        "dexVersion": "1.0",
+                        "icEnrolled": True,
+                        "services": {"instacart": {"billing": {"goodStanding": True}}},
                     },
-                    {"goodStanding": False, "status": "start", "app": "spark", "offersWonToday": 4},
+                    {
+                        "goodStanding": True,
+                        "status": "stop",
+                        "icEnrolled": True,
+                        "services": {"instacart": {"billing": {"goodStanding": False}}},
+                    },
+                    {
+                        "goodStanding": True,
+                        "status": "stop",
+                        "icEnrolled": True,
+                        "services": {"instacart": {"billing": {"goodStanding": True}}},
+                    },
+                    {
+                        "goodStanding": False,
+                        "status": "start",
+                        "icEnrolled": True,
+                        "services": {"instacart": {"billing": {"goodStanding": False}}},
+                    },
                 ]
+            },
+            "/projects/chispita/offers/won?period=today": {
+                "items": [
+                    {"status": "got", "phoneNumber": "1"},
+                    {"status": "got", "phoneNumber": "2"},
+                    {"status": "lost", "phoneNumber": "3"},
+                ]
+            },
+            "/projects/chispita/offers/won?period=today&app=spark": {
+                "items": [{"status": "got", "phoneNumber": "1"}]
+            },
+            "/projects/chispita/offers/won?period=today&app=instacart": {
+                "items": [{"status": "got", "phoneNumber": "2"}]
             },
             "/projects/compinche/bonus": {
                 "totalGrossRevenue": 100,
@@ -118,6 +148,8 @@ class UsuariosActivosTests(unittest.TestCase):
         }
 
         def request_json(path, _token):
+            if path in payloads:
+                return payloads[path]
             for key, value in payloads.items():
                 if path.startswith(key):
                     return value
@@ -137,15 +169,21 @@ class UsuariosActivosTests(unittest.TestCase):
         self.assertEqual(1, metricas["Compinche"]["active_by_promo_users"])
         self.assertEqual(12, metricas["Paripe"]["photo_pool"])
         self.assertEqual(3, metricas["chispita"]["active_users"])
-        self.assertEqual(2, metricas["chispita"]["running_users"])
-        self.assertEqual(2, metricas["chispita"]["spark_users"])
+        self.assertEqual(1, metricas["chispita"]["running_users"])
+        self.assertEqual(3, metricas["chispita"]["spark_users"])
         self.assertEqual(2, metricas["chispita"]["instacart_users"])
-        self.assertEqual(3, metricas["chispita"]["offers_won_today_users"])
+        self.assertEqual(2, metricas["chispita"]["offers_won_today"])
+        self.assertEqual(2, metricas["chispita"]["offers_won_today_users"])
+        self.assertEqual(1, metricas["chispita"]["spark_offers_won_today"])
+        self.assertEqual(1, metricas["chispita"]["instacart_offers_won_today"])
         self.assertEqual(
             [
-                {"label": "Spark", "value": 2},
-                {"label": "Instacart", "value": 2},
-                {"label": "Ofertas ganadas hoy", "value": 3},
+                {"label": "Spark activos", "value": 3},
+                {"label": "Instacart activos", "value": 2},
+                {"label": "Ofertas ganadas hoy", "value": 2},
+                {"label": "Usuarios con ofertas hoy", "value": 2},
+                {"label": "Spark ofertas hoy", "value": 1},
+                {"label": "Instacart ofertas hoy", "value": 1},
             ],
             metricas["chispita"]["breakdown"],
         )
@@ -161,10 +199,11 @@ class UsuariosActivosTests(unittest.TestCase):
                 "display_name": "Chispita",
                 "active_users": 10,
                 "running_users": 4,
+                "offers_won_today": 8,
                 "offers_won_today_users": 3,
                 "breakdown": [
-                    {"label": "Spark", "value": 6},
-                    {"label": "Instacart", "value": 4},
+                    {"label": "Spark activos", "value": 6},
+                    {"label": "Instacart activos", "value": 4},
                     {"label": "Ofertas ganadas hoy", "value": 3},
                 ],
             },
@@ -183,12 +222,13 @@ class UsuariosActivosTests(unittest.TestCase):
         self.assertEqual("Completado", estado["riderx"]["progress"])
         self.assertEqual(
             [
-                {"label": "Spark", "value": 6},
-                {"label": "Instacart", "value": 4},
+                {"label": "Spark activos", "value": 6},
+                {"label": "Instacart activos", "value": 4},
                 {"label": "Ofertas ganadas hoy", "value": 3},
             ],
             estado["chispita"]["breakdown"],
         )
+        self.assertEqual(8, estado["chispita"]["offers_won_today"])
         self.assertEqual(3, estado["chispita"]["offers_won_today_users"])
 
     def test_compinche_calcula_usuarios_activos_con_promo(self):

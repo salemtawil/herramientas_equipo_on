@@ -214,60 +214,70 @@ def _usuario_chispita_plataforma(user, plataforma):
     )
 
 
-def _path_tiene_oferta(path):
-    path_lower = str(path).lower()
-    return any(
-        keyword in path_lower
-        for keyword in ("offer", "oferta", "order", "orden", "ordenes", "órdenes")
+def _chispita_service_billing(user, service):
+    services = user.get("services")
+    if not isinstance(services, dict):
+        return {}
+    service_data = services.get(service)
+    if not isinstance(service_data, dict):
+        return {}
+    billing = service_data.get("billing")
+    return billing if isinstance(billing, dict) else {}
+
+
+def _usuario_chispita_instacart_activo(user):
+    if not _valor_bool(user.get("icEnrolled")):
+        return False
+    billing = _chispita_service_billing(user, "instacart")
+    return _valor_bool(billing.get("goodStanding"))
+
+
+def _chispita_status_fresco(timestamp_ms, ahora_ms=None):
+    timestamp_ms = _normalizar_timestamp(timestamp_ms)
+    if timestamp_ms is None:
+        return False
+    ahora_ms = ahora_ms or int(time.time() * 1000)
+    return timestamp_ms <= ahora_ms + 60000 and ahora_ms - timestamp_ms <= 180000
+
+
+def _usuario_chispita_reportado(user):
+    return bool(
+        user.get("statusLastTimestampUpdate")
+        or user.get("dexVersion")
+        or user.get("searchState")
+        or user.get("lastSuccessfulPollAt")
     )
 
 
-def _path_tiene_ganada(path):
-    path_lower = str(path).lower()
-    return any(keyword in path_lower for keyword in ("won", "captur", "ganad"))
-
-
-def _path_tiene_hoy(path):
-    path_lower = str(path).lower()
-    return "today" in path_lower or "hoy" in path_lower
-
-
-def _valor_timestamp_hoy(value):
-    if isinstance(value, bool):
-        return False
-    if isinstance(value, (int, float)) and value < 1000000000:
-        return False
-    return _es_hoy(value)
-
-
-def _campo_indica_oferta_ganada_hoy(path, value):
-    tiene_oferta = _path_tiene_oferta(path)
-    tiene_ganada = _path_tiene_ganada(path)
-    tiene_hoy = _path_tiene_hoy(path)
-
-    if not (tiene_oferta or tiene_ganada):
+def _usuario_chispita_running(user, ahora_ms=None):
+    if not _usuario_good_standing(user) or not _usuario_chispita_reportado(user):
         return False
 
-    if tiene_hoy:
-        if isinstance(value, bool):
-            return value
-        numero = _to_number(value)
-        if numero is not None:
-            return numero > 0
-        if isinstance(value, str):
-            return _valor_bool(value)
+    status = str(user.get("status") or "").strip().lower()
+    search_state = str(user.get("searchState") or "").strip().upper()
+    status_fresco = _chispita_status_fresco(user.get("statusLastTimestampUpdate"), ahora_ms)
+    poll_fresco = _chispita_status_fresco(user.get("lastSuccessfulPollAt"), ahora_ms)
 
-    if (tiene_oferta or tiene_ganada) and _valor_timestamp_hoy(value):
+    if not status_fresco:
+        return False
+    if status in {"start", "active", "running"} and _valor_bool(user.get("isActive", True)):
+        return search_state not in {
+            "PAUSED_CAPTCHA",
+            "PAUSED_BACKOFF",
+            "PAUSED_FILTERS",
+            "PAUSED_ACCOUNT",
+            "PAUSED_SPARK_NOW",
+            "PAUSED_ACTIVE_TRIP",
+        }
+    if status == "stop" and search_state == "PAUSED_ACTIVE_TRIP":
         return True
-
+    if status == "stop" and (
+        search_state in {"SEARCHING", "POLLING"}
+        or _valor_bool(user.get("pollingEnabled"))
+        or poll_fresco
+    ):
+        return False
     return False
-
-
-def _usuario_chispita_oferta_ganada_hoy(user):
-    return any(
-        _campo_indica_oferta_ganada_hoy(path, value)
-        for path, value in _flatten_campos(user)
-    )
 
 
 def _metricas_chispita_por_plataforma(usuarios):
@@ -275,26 +285,17 @@ def _metricas_chispita_por_plataforma(usuarios):
         user for user in usuarios
         if isinstance(user, dict) and _usuario_good_standing(user)
     ]
-    spark_users = sum(
-        1 for user in usuarios_activos
-        if _usuario_chispita_plataforma(user, "spark")
-    )
+    spark_users = len(usuarios_activos)
     instacart_users = sum(
-        1 for user in usuarios_activos
-        if _usuario_chispita_plataforma(user, "instacart")
-    )
-    offers_won_today_users = sum(
-        1 for user in usuarios_activos
-        if _usuario_chispita_oferta_ganada_hoy(user)
+        1 for user in usuarios
+        if isinstance(user, dict) and _usuario_chispita_instacart_activo(user)
     )
     return {
         "spark_users": spark_users,
         "instacart_users": instacart_users,
-        "offers_won_today_users": offers_won_today_users,
         "breakdown": [
-            {"label": "Spark", "value": spark_users},
-            {"label": "Instacart", "value": instacart_users},
-            {"label": "Ofertas ganadas hoy", "value": offers_won_today_users},
+            {"label": "Spark activos", "value": spark_users},
+            {"label": "Instacart activos", "value": instacart_users},
         ],
     }
 
@@ -466,6 +467,58 @@ def _obtener_bonus_directo(token):
     return _normalizar_bonus_multiadmin(data)
 
 
+def _normalizar_lista_multiadmin(data):
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict):
+        for key in ("data", "items", "Items", "result"):
+            value = data.get(key)
+            if isinstance(value, list):
+                return value
+    return []
+
+
+def _oferta_chispita_ganada(offer):
+    status = str(offer.get("status") or "").strip().lower()
+    return status in {"", "got"}
+
+
+def _metricas_ofertas_chispita(data):
+    ofertas = [
+        offer for offer in _normalizar_lista_multiadmin(data)
+        if isinstance(offer, dict) and _oferta_chispita_ganada(offer)
+    ]
+    usuarios = {
+        offer.get("phoneNumber")
+        for offer in ofertas
+        if isinstance(offer.get("phoneNumber"), str) and offer.get("phoneNumber")
+    }
+    return {
+        "offers": len(ofertas),
+        "users": len(usuarios),
+    }
+
+
+def _obtener_ofertas_chispita_directo(token, app=None):
+    suffix = f"&app={app}" if app else ""
+    data = _request_json_multiadmin(f"/projects/chispita/offers/won?period=today{suffix}", token)
+    return _metricas_ofertas_chispita(data)
+
+
+def _obtener_metricas_ofertas_chispita(token):
+    total = _obtener_ofertas_chispita_directo(token)
+    spark = _obtener_ofertas_chispita_directo(token, "spark")
+    instacart = _obtener_ofertas_chispita_directo(token, "instacart")
+    return {
+        "offers_won_today": total["offers"],
+        "offers_won_today_users": total["users"],
+        "spark_offers_won_today": spark["offers"],
+        "spark_offers_won_today_users": spark["users"],
+        "instacart_offers_won_today": instacart["offers"],
+        "instacart_offers_won_today_users": instacart["users"],
+    }
+
+
 def _normalizar_bonus_multiadmin(data):
     if not isinstance(data, dict):
         return None
@@ -488,10 +541,13 @@ def _metricas_desde_usuarios(system, usuarios, exclude_admins=False):
         usuarios_validos = [user for user in usuarios_validos if not _usuario_admin(user)]
 
     active_users = sum(1 for user in usuarios_validos if _usuario_good_standing(user))
-    running_users = sum(
-        1 for user in usuarios_validos
-        if _usuario_good_standing(user) and _usuario_running(user)
-    )
+    if system == "chispita":
+        running_users = sum(1 for user in usuarios_validos if _usuario_chispita_running(user))
+    else:
+        running_users = sum(
+            1 for user in usuarios_validos
+            if _usuario_good_standing(user) and _usuario_running(user)
+        )
     disconnected_users = sum(1 for user in usuarios_validos if not _usuario_good_standing(user))
     new_users = sum(1 for user in usuarios_validos if _usuario_creado_hoy(user))
 
@@ -544,6 +600,19 @@ def _obtener_metricas_multiadmin_directo():
     metricas["Paripe"]["good_standing_users"] = metricas["Paripe"]["active_users"]
     metricas["Paripe"]["photo_pool"] = paripe_legacy.get("photo_pool", 0)
     metricas["Compinche"]["bonus_stats"] = bonus_stats
+    if "chispita" in metricas:
+        try:
+            ofertas_chispita = _obtener_metricas_ofertas_chispita(token)
+        except Exception:
+            ofertas_chispita = None
+        if ofertas_chispita:
+            metricas["chispita"].update(ofertas_chispita)
+            metricas["chispita"].setdefault("breakdown", []).extend([
+                {"label": "Ofertas ganadas hoy", "value": ofertas_chispita["offers_won_today"]},
+                {"label": "Usuarios con ofertas hoy", "value": ofertas_chispita["offers_won_today_users"]},
+                {"label": "Spark ofertas hoy", "value": ofertas_chispita["spark_offers_won_today"]},
+                {"label": "Instacart ofertas hoy", "value": ofertas_chispita["instacart_offers_won_today"]},
+            ])
 
     return metricas
 
