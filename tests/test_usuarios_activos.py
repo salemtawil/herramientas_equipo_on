@@ -185,19 +185,9 @@ class UsuariosActivosTests(unittest.TestCase):
         self.assertEqual(
             [
                 {"label": "Spark activos", "value": 3},
-                {"label": "Spark run", "value": 1},
-                {"label": "Spark nuevos", "value": 0},
-                {"label": "Spark desconectados", "value": 1},
                 {"label": "Instacart activos", "value": 2},
-                {"label": "Instacart run", "value": 0},
-                {"label": "Instacart nuevos", "value": 0},
-                {"label": "Instacart desconectados", "value": 2},
-                {"label": "Ofertas ganadas hoy", "value": 2},
-                {"label": "Usuarios con ofertas hoy", "value": 2},
-                {"label": "Spark ofertas hoy", "value": 1},
-                {"label": "Spark usuarios con ofertas", "value": 1},
-                {"label": "Instacart ofertas hoy", "value": 1},
-                {"label": "Instacart usuarios con ofertas", "value": 1},
+                {"label": "Spark ofertas ganadas hoy", "value": 1},
+                {"label": "Instacart ofertas ganadas hoy", "value": 1},
             ],
             metricas["chispita"]["breakdown"],
         )
@@ -219,10 +209,9 @@ class UsuariosActivosTests(unittest.TestCase):
                 "offers_won_today_users": 3,
                 "breakdown": [
                     {"label": "Spark activos", "value": 6},
-                    {"label": "Spark run", "value": 2},
                     {"label": "Instacart activos", "value": 4},
-                    {"label": "Instacart run", "value": 1},
-                    {"label": "Ofertas ganadas hoy", "value": 3},
+                    {"label": "Spark ofertas ganadas hoy", "value": 7},
+                    {"label": "Instacart ofertas ganadas hoy", "value": 1},
                 ],
             },
         }
@@ -241,10 +230,9 @@ class UsuariosActivosTests(unittest.TestCase):
         self.assertEqual(
             [
                 {"label": "Spark activos", "value": 6},
-                {"label": "Spark run", "value": 2},
                 {"label": "Instacart activos", "value": 4},
-                {"label": "Instacart run", "value": 1},
-                {"label": "Ofertas ganadas hoy", "value": 3},
+                {"label": "Spark ofertas ganadas hoy", "value": 7},
+                {"label": "Instacart ofertas ganadas hoy", "value": 1},
             ],
             estado["chispita"]["breakdown"],
         )

@@ -359,13 +359,7 @@ def _metricas_chispita_por_plataforma(usuarios):
         "instacart_disconnected_users": instacart_stats["disconnected_users"],
         "breakdown": [
             {"label": "Spark activos", "value": spark_stats["active_users"]},
-            {"label": "Spark run", "value": spark_stats["running_users"]},
-            {"label": "Spark nuevos", "value": spark_stats["new_users"]},
-            {"label": "Spark desconectados", "value": spark_stats["disconnected_users"]},
             {"label": "Instacart activos", "value": instacart_stats["active_users"]},
-            {"label": "Instacart run", "value": instacart_stats["running_users"]},
-            {"label": "Instacart nuevos", "value": instacart_stats["new_users"]},
-            {"label": "Instacart desconectados", "value": instacart_stats["disconnected_users"]},
         ],
     }
 
@@ -678,12 +672,8 @@ def _obtener_metricas_multiadmin_directo():
         if ofertas_chispita:
             metricas["chispita"].update(ofertas_chispita)
             metricas["chispita"].setdefault("breakdown", []).extend([
-                {"label": "Ofertas ganadas hoy", "value": ofertas_chispita["offers_won_today"]},
-                {"label": "Usuarios con ofertas hoy", "value": ofertas_chispita["offers_won_today_users"]},
-                {"label": "Spark ofertas hoy", "value": ofertas_chispita["spark_offers_won_today"]},
-                {"label": "Spark usuarios con ofertas", "value": ofertas_chispita["spark_offers_won_today_users"]},
-                {"label": "Instacart ofertas hoy", "value": ofertas_chispita["instacart_offers_won_today"]},
-                {"label": "Instacart usuarios con ofertas", "value": ofertas_chispita["instacart_offers_won_today_users"]},
+                {"label": "Spark ofertas ganadas hoy", "value": ofertas_chispita["spark_offers_won_today"]},
+                {"label": "Instacart ofertas ganadas hoy", "value": ofertas_chispita["instacart_offers_won_today"]},
             ])
 
     return metricas
