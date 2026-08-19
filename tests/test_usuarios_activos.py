@@ -96,7 +96,14 @@ class UsuariosActivosTests(unittest.TestCase):
             "/projects/shipt/users": {"Items": [{"goodStanding": "true", "status": "START"}]},
             "/projects/veho/users": {"items": [{"goodStanding": True, "status": "stop"}]},
             "/projects/zifty/users": {"Items": [{"goodStanding": 1, "status": "start"}]},
-            "/projects/chispita/users": {"Items": [{"goodStanding": True, "status": "start"}]},
+            "/projects/chispita/users": {
+                "Items": [
+                    {"goodStanding": True, "status": "start", "spark": True},
+                    {"goodStanding": True, "status": "stop", "platform": "instacart"},
+                    {"goodStanding": True, "status": "start", "apps": ["spark", "instacart"]},
+                    {"goodStanding": False, "status": "start", "app": "spark"},
+                ]
+            },
             "/projects/compinche/bonus": {
                 "totalGrossRevenue": 100,
                 "goalForBonus": 200,
@@ -123,7 +130,14 @@ class UsuariosActivosTests(unittest.TestCase):
         self.assertEqual(1, metricas["Compinche"]["running_users"])
         self.assertEqual(1, metricas["Compinche"]["active_by_promo_users"])
         self.assertEqual(12, metricas["Paripe"]["photo_pool"])
-        self.assertEqual(1, metricas["chispita"]["active_users"])
+        self.assertEqual(3, metricas["chispita"]["active_users"])
+        self.assertEqual(2, metricas["chispita"]["running_users"])
+        self.assertEqual(2, metricas["chispita"]["spark_users"])
+        self.assertEqual(2, metricas["chispita"]["instacart_users"])
+        self.assertEqual(
+            [{"label": "Spark", "value": 2}, {"label": "Instacart", "value": 2}],
+            metricas["chispita"]["breakdown"],
+        )
         self.assertEqual(50.0, metricas["Compinche"]["bonus_stats"]["percentage_completed"])
 
     def test_multiadmin_actualiza_compinche_con_activos_ajustados(self):
@@ -132,6 +146,12 @@ class UsuariosActivosTests(unittest.TestCase):
             "Compinche": {"active_users": 5709, "running_users": 717},
             "Paripe": {"good_standing_users": 2873, "photo_pool": 59448},
             "riderx": {"display_name": "Rider X", "active_users": 42, "running_users": 9},
+            "chispita": {
+                "display_name": "Chispita",
+                "active_users": 10,
+                "running_users": 4,
+                "breakdown": [{"label": "Spark", "value": 6}, {"label": "Instacart", "value": 4}],
+            },
         }
 
         _aplicar_metricas_multiadmin(estado, metricas, "2026-07-11 10:00:00")
@@ -145,6 +165,10 @@ class UsuariosActivosTests(unittest.TestCase):
         self.assertEqual(42, estado["riderx"]["active_users"])
         self.assertEqual(9, estado["riderx"]["running_users"])
         self.assertEqual("Completado", estado["riderx"]["progress"])
+        self.assertEqual(
+            [{"label": "Spark", "value": 6}, {"label": "Instacart", "value": 4}],
+            estado["chispita"]["breakdown"],
+        )
 
     def test_compinche_calcula_usuarios_activos_con_promo(self):
         usuarios = [

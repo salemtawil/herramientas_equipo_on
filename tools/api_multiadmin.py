@@ -172,6 +172,65 @@ def _usuario_creado_hoy(user):
     )
 
 
+def _flatten_campos(data, prefix=""):
+    if isinstance(data, dict):
+        for key, value in data.items():
+            path = f"{prefix}.{key}" if prefix else str(key)
+            yield path, value
+            if isinstance(value, (dict, list)):
+                yield from _flatten_campos(value, path)
+    elif isinstance(data, list):
+        for index, value in enumerate(data):
+            path = f"{prefix}[{index}]"
+            yield path, value
+            if isinstance(value, (dict, list)):
+                yield from _flatten_campos(value, path)
+
+
+def _campo_indica_plataforma(path, value, plataforma):
+    plataforma = plataforma.lower()
+    path_lower = str(path).lower()
+
+    if plataforma in path_lower:
+        if isinstance(value, (dict, list)):
+            return bool(value)
+        return _valor_bool(value)
+
+    if isinstance(value, str):
+        return plataforma in value.strip().lower()
+    return False
+
+
+def _usuario_chispita_plataforma(user, plataforma):
+    return any(
+        _campo_indica_plataforma(path, value, plataforma)
+        for path, value in _flatten_campos(user)
+    )
+
+
+def _metricas_chispita_por_plataforma(usuarios):
+    usuarios_activos = [
+        user for user in usuarios
+        if isinstance(user, dict) and _usuario_good_standing(user)
+    ]
+    spark_users = sum(
+        1 for user in usuarios_activos
+        if _usuario_chispita_plataforma(user, "spark")
+    )
+    instacart_users = sum(
+        1 for user in usuarios_activos
+        if _usuario_chispita_plataforma(user, "instacart")
+    )
+    return {
+        "spark_users": spark_users,
+        "instacart_users": instacart_users,
+        "breakdown": [
+            {"label": "Spark", "value": spark_users},
+            {"label": "Instacart", "value": instacart_users},
+        ],
+    }
+
+
 def _cliente_cognito():
     return boto3.client(
         "cognito-idp",
@@ -370,6 +429,7 @@ def _metricas_desde_usuarios(system, usuarios, exclude_admins=False):
 
     metricas = {
         "system": system,
+        "display_name": str(system).replace("_", " ").replace("-", " ").title(),
         "active_users": active_users,
         "running_users": running_users,
         "total_users": len(usuarios_validos),
@@ -382,6 +442,8 @@ def _metricas_desde_usuarios(system, usuarios, exclude_admins=False):
             1 for user in usuarios_validos
             if _usuario_good_standing(user) and _usuario_tiene_promo(user)
         )
+    elif system == "chispita":
+        metricas.update(_metricas_chispita_por_plataforma(usuarios_validos))
 
     return metricas
 
@@ -480,6 +542,15 @@ def _obtener_metricas_multiadmin_legacy():
             "active_users": _to_int(chispita.get("active")),
             "running_users": _to_int(chispita.get("running")),
         }
+        if any(key in chispita for key in ("spark", "sparkUsers", "instacart", "instacartUsers")):
+            metricas["chispita"]["spark_users"] = _to_int(chispita.get("spark") or chispita.get("sparkUsers"))
+            metricas["chispita"]["instacart_users"] = _to_int(
+                chispita.get("instacart") or chispita.get("instacartUsers")
+            )
+            metricas["chispita"]["breakdown"] = [
+                {"label": "Spark", "value": metricas["chispita"]["spark_users"]},
+                {"label": "Instacart", "value": metricas["chispita"]["instacart_users"]},
+            ]
 
     for key, value in data.items():
         if key in KNOWN_SYSTEM_KEYS:

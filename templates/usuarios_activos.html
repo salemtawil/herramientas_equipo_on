@@ -570,6 +570,7 @@ function ensureDynamicSystemCard(item) {
       <div class="stat-line"><span>Nuevos</span><strong id="${id}-new">-</strong></div>
       <div class="stat-line"><span>Desconectados</span><strong id="${id}-disconnected">-</strong></div>
     </div>
+    <div class="stat-list stat-list--details" id="${id}-breakdown" hidden></div>
     <div class="system-card__footer">
       <span class="system-card__status" id="${id}-status">Pendiente</span>
       <span class="system-card__updated" id="${id}-updated">Sin actualizacion</span>
@@ -578,6 +579,20 @@ function ensureDynamicSystemCard(item) {
   `;
   document.getElementById("resultado").appendChild(card);
   return card;
+}
+
+function renderBreakdown(id, breakdown) {
+  const container = document.getElementById(`${id}-breakdown`);
+  if (!container) return;
+
+  const items = Array.isArray(breakdown) ? breakdown : [];
+  container.hidden = items.length === 0;
+  container.innerHTML = items.map((item) => `
+    <div class="stat-line">
+      <span>${escapeHtml(item.label)}</span>
+      <strong>${escapeHtml(formatCount(item.value))}</strong>
+    </div>
+  `).join("");
 }
 
 function renderDynamicSystems(items) {
@@ -594,6 +609,7 @@ function renderDynamicSystems(items) {
     setMetricText(`${id}-users-total`, item.total_users);
     setMetricText(`${id}-new`, item.new_users);
     setMetricText(`${id}-disconnected`, item.disconnected_users);
+    renderBreakdown(id, item.breakdown);
     renderSystemState(id, item);
   });
 

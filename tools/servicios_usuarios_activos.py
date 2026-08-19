@@ -93,6 +93,14 @@ def _actualizar_estado(estado, system, **kwargs):
     estado[system].update(kwargs)
 
 
+def _extraer_metricas_extra(valores):
+    extras = {}
+    for key in ("breakdown", "spark_users", "instacart_users"):
+        if key in valores:
+            extras[key] = valores.get(key)
+    return extras
+
+
 def _proceso_actualizacion_unica(estado):
     ahora = obtener_timestamp_eastern()
 
@@ -208,6 +216,7 @@ def _aplicar_metricas_multiadmin(estado, metricas, ahora):
             updated_at=ahora,
             progress="Completado",
             error=None,
+            **_extraer_metricas_extra(valores),
         )
 
 
