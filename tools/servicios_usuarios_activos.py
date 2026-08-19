@@ -98,7 +98,13 @@ def _extraer_metricas_extra(valores):
     for key in (
         "breakdown",
         "spark_users",
+        "spark_running_users",
+        "spark_new_users",
+        "spark_disconnected_users",
         "instacart_users",
+        "instacart_running_users",
+        "instacart_new_users",
+        "instacart_disconnected_users",
         "offers_won_today",
         "offers_won_today_users",
         "spark_offers_won_today",

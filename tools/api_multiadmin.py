@@ -280,22 +280,92 @@ def _usuario_chispita_running(user, ahora_ms=None):
     return False
 
 
-def _metricas_chispita_por_plataforma(usuarios):
-    usuarios_activos = [
-        user for user in usuarios
-        if isinstance(user, dict) and _usuario_good_standing(user)
-    ]
-    spark_users = len(usuarios_activos)
-    instacart_users = sum(
-        1 for user in usuarios
-        if isinstance(user, dict) and _usuario_chispita_instacart_activo(user)
-    )
+def _estado_chispita_spark(user):
     return {
-        "spark_users": spark_users,
-        "instacart_users": instacart_users,
+        "entitled": _usuario_good_standing(user),
+        "running": _usuario_chispita_running(user),
+    }
+
+
+def _estado_chispita_instacart(user):
+    if not _valor_bool(user.get("icEnrolled")):
+        return None
+    billing = _chispita_service_billing(user, "instacart")
+    return {
+        "entitled": _valor_bool(billing.get("goodStanding")),
+        "running": str(user.get("icStatus") or "").strip().lower() == "start",
+    }
+
+
+def _estados_chispita_usuario(user, app):
+    if app == "spark":
+        return [_estado_chispita_spark(user)]
+    if app == "instacart":
+        estado = _estado_chispita_instacart(user)
+        return [estado] if estado else []
+    estados = [_estado_chispita_spark(user)]
+    estado_instacart = _estado_chispita_instacart(user)
+    if estado_instacart:
+        estados.append(estado_instacart)
+    return estados
+
+
+def _metricas_chispita_app(usuarios, app):
+    active_users = 0
+    running_users = 0
+    disconnected_users = 0
+    new_users = 0
+
+    for user in usuarios:
+        if not isinstance(user, dict):
+            continue
+        estados = _estados_chispita_usuario(user, app)
+        if not estados:
+            continue
+        activos = [estado for estado in estados if estado["entitled"]]
+        if activos:
+            active_users += 1
+            if any(estado["running"] for estado in activos):
+                running_users += 1
+        else:
+            disconnected_users += 1
+        if _usuario_creado_hoy(user):
+            new_users += 1
+
+    return {
+        "active_users": active_users,
+        "running_users": running_users,
+        "new_users": new_users,
+        "disconnected_users": disconnected_users,
+    }
+
+
+def _metricas_chispita_por_plataforma(usuarios):
+    all_stats = _metricas_chispita_app(usuarios, "all")
+    spark_stats = _metricas_chispita_app(usuarios, "spark")
+    instacart_stats = _metricas_chispita_app(usuarios, "instacart")
+    return {
+        "active_users": all_stats["active_users"],
+        "running_users": all_stats["running_users"],
+        "new_users": all_stats["new_users"],
+        "disconnected_users": all_stats["disconnected_users"],
+        "spark_users": spark_stats["active_users"],
+        "spark_running_users": spark_stats["running_users"],
+        "spark_new_users": spark_stats["new_users"],
+        "spark_disconnected_users": spark_stats["disconnected_users"],
+        "instacart_users": instacart_stats["active_users"],
+        "instacart_running_users": instacart_stats["running_users"],
+        "instacart_new_users": instacart_stats["new_users"],
+        "instacart_disconnected_users": instacart_stats["disconnected_users"],
         "breakdown": [
-            {"label": "Spark activos", "value": spark_users},
-            {"label": "Instacart activos", "value": instacart_users},
+            {"label": "Spark activos", "value": spark_stats["active_users"]},
+            {"label": "Spark run", "value": spark_stats["running_users"]},
+            {"label": "Spark nuevos", "value": spark_stats["new_users"]},
+            {"label": "Spark desconectados", "value": spark_stats["disconnected_users"]},
+            {"label": "Instacart activos", "value": instacart_stats["active_users"]},
+            {"label": "Instacart run", "value": instacart_stats["running_users"]},
+            {"label": "Instacart nuevos", "value": instacart_stats["new_users"]},
+            {"label": "Instacart desconectados", "value": instacart_stats["disconnected_users"]},
         ],
     }
 
@@ -611,7 +681,9 @@ def _obtener_metricas_multiadmin_directo():
                 {"label": "Ofertas ganadas hoy", "value": ofertas_chispita["offers_won_today"]},
                 {"label": "Usuarios con ofertas hoy", "value": ofertas_chispita["offers_won_today_users"]},
                 {"label": "Spark ofertas hoy", "value": ofertas_chispita["spark_offers_won_today"]},
+                {"label": "Spark usuarios con ofertas", "value": ofertas_chispita["spark_offers_won_today_users"]},
                 {"label": "Instacart ofertas hoy", "value": ofertas_chispita["instacart_offers_won_today"]},
+                {"label": "Instacart usuarios con ofertas", "value": ofertas_chispita["instacart_offers_won_today_users"]},
             ])
 
     return metricas

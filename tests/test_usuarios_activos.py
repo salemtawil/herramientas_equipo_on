@@ -171,19 +171,33 @@ class UsuariosActivosTests(unittest.TestCase):
         self.assertEqual(3, metricas["chispita"]["active_users"])
         self.assertEqual(1, metricas["chispita"]["running_users"])
         self.assertEqual(3, metricas["chispita"]["spark_users"])
+        self.assertEqual(1, metricas["chispita"]["spark_running_users"])
+        self.assertEqual(1, metricas["chispita"]["spark_disconnected_users"])
         self.assertEqual(2, metricas["chispita"]["instacart_users"])
+        self.assertEqual(0, metricas["chispita"]["instacart_running_users"])
+        self.assertEqual(2, metricas["chispita"]["instacart_disconnected_users"])
         self.assertEqual(2, metricas["chispita"]["offers_won_today"])
         self.assertEqual(2, metricas["chispita"]["offers_won_today_users"])
         self.assertEqual(1, metricas["chispita"]["spark_offers_won_today"])
+        self.assertEqual(1, metricas["chispita"]["spark_offers_won_today_users"])
         self.assertEqual(1, metricas["chispita"]["instacart_offers_won_today"])
+        self.assertEqual(1, metricas["chispita"]["instacart_offers_won_today_users"])
         self.assertEqual(
             [
                 {"label": "Spark activos", "value": 3},
+                {"label": "Spark run", "value": 1},
+                {"label": "Spark nuevos", "value": 0},
+                {"label": "Spark desconectados", "value": 1},
                 {"label": "Instacart activos", "value": 2},
+                {"label": "Instacart run", "value": 0},
+                {"label": "Instacart nuevos", "value": 0},
+                {"label": "Instacart desconectados", "value": 2},
                 {"label": "Ofertas ganadas hoy", "value": 2},
                 {"label": "Usuarios con ofertas hoy", "value": 2},
                 {"label": "Spark ofertas hoy", "value": 1},
+                {"label": "Spark usuarios con ofertas", "value": 1},
                 {"label": "Instacart ofertas hoy", "value": 1},
+                {"label": "Instacart usuarios con ofertas", "value": 1},
             ],
             metricas["chispita"]["breakdown"],
         )
@@ -199,11 +213,15 @@ class UsuariosActivosTests(unittest.TestCase):
                 "display_name": "Chispita",
                 "active_users": 10,
                 "running_users": 4,
+                "spark_running_users": 2,
+                "instacart_running_users": 1,
                 "offers_won_today": 8,
                 "offers_won_today_users": 3,
                 "breakdown": [
                     {"label": "Spark activos", "value": 6},
+                    {"label": "Spark run", "value": 2},
                     {"label": "Instacart activos", "value": 4},
+                    {"label": "Instacart run", "value": 1},
                     {"label": "Ofertas ganadas hoy", "value": 3},
                 ],
             },
@@ -223,11 +241,15 @@ class UsuariosActivosTests(unittest.TestCase):
         self.assertEqual(
             [
                 {"label": "Spark activos", "value": 6},
+                {"label": "Spark run", "value": 2},
                 {"label": "Instacart activos", "value": 4},
+                {"label": "Instacart run", "value": 1},
                 {"label": "Ofertas ganadas hoy", "value": 3},
             ],
             estado["chispita"]["breakdown"],
         )
+        self.assertEqual(2, estado["chispita"]["spark_running_users"])
+        self.assertEqual(1, estado["chispita"]["instacart_running_users"])
         self.assertEqual(8, estado["chispita"]["offers_won_today"])
         self.assertEqual(3, estado["chispita"]["offers_won_today_users"])
 
