@@ -82,6 +82,7 @@ class UsuariosActivosTests(unittest.TestCase):
         self.assertEqual(0, metricas["nuevo"]["running_users"])
 
     def test_multiadmin_directo_calcula_metricas_desde_usuarios(self):
+        ahora_ms = int(time.time() * 1000)
         payloads = {
             "/projects/compinche/users": {
                 "Items": [
@@ -98,10 +99,15 @@ class UsuariosActivosTests(unittest.TestCase):
             "/projects/zifty/users": {"Items": [{"goodStanding": 1, "status": "start"}]},
             "/projects/chispita/users": {
                 "Items": [
-                    {"goodStanding": True, "status": "start", "spark": True},
-                    {"goodStanding": True, "status": "stop", "platform": "instacart"},
-                    {"goodStanding": True, "status": "start", "apps": ["spark", "instacart"]},
-                    {"goodStanding": False, "status": "start", "app": "spark"},
+                    {"goodStanding": True, "status": "start", "spark": True, "offersWonToday": 2},
+                    {"goodStanding": True, "status": "stop", "platform": "instacart", "ordersCapturedToday": 1},
+                    {
+                        "goodStanding": True,
+                        "status": "start",
+                        "apps": ["spark", "instacart"],
+                        "orders": [{"capturedAt": ahora_ms}],
+                    },
+                    {"goodStanding": False, "status": "start", "app": "spark", "offersWonToday": 4},
                 ]
             },
             "/projects/compinche/bonus": {
@@ -134,8 +140,13 @@ class UsuariosActivosTests(unittest.TestCase):
         self.assertEqual(2, metricas["chispita"]["running_users"])
         self.assertEqual(2, metricas["chispita"]["spark_users"])
         self.assertEqual(2, metricas["chispita"]["instacart_users"])
+        self.assertEqual(3, metricas["chispita"]["offers_won_today_users"])
         self.assertEqual(
-            [{"label": "Spark", "value": 2}, {"label": "Instacart", "value": 2}],
+            [
+                {"label": "Spark", "value": 2},
+                {"label": "Instacart", "value": 2},
+                {"label": "Ofertas ganadas hoy", "value": 3},
+            ],
             metricas["chispita"]["breakdown"],
         )
         self.assertEqual(50.0, metricas["Compinche"]["bonus_stats"]["percentage_completed"])
@@ -150,7 +161,12 @@ class UsuariosActivosTests(unittest.TestCase):
                 "display_name": "Chispita",
                 "active_users": 10,
                 "running_users": 4,
-                "breakdown": [{"label": "Spark", "value": 6}, {"label": "Instacart", "value": 4}],
+                "offers_won_today_users": 3,
+                "breakdown": [
+                    {"label": "Spark", "value": 6},
+                    {"label": "Instacart", "value": 4},
+                    {"label": "Ofertas ganadas hoy", "value": 3},
+                ],
             },
         }
 
@@ -166,9 +182,14 @@ class UsuariosActivosTests(unittest.TestCase):
         self.assertEqual(9, estado["riderx"]["running_users"])
         self.assertEqual("Completado", estado["riderx"]["progress"])
         self.assertEqual(
-            [{"label": "Spark", "value": 6}, {"label": "Instacart", "value": 4}],
+            [
+                {"label": "Spark", "value": 6},
+                {"label": "Instacart", "value": 4},
+                {"label": "Ofertas ganadas hoy", "value": 3},
+            ],
             estado["chispita"]["breakdown"],
         )
+        self.assertEqual(3, estado["chispita"]["offers_won_today_users"])
 
     def test_compinche_calcula_usuarios_activos_con_promo(self):
         usuarios = [

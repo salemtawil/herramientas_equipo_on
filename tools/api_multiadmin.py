@@ -1,5 +1,6 @@
 import base64
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 import hashlib
 import hmac
 import json
@@ -129,6 +130,11 @@ def _normalizar_timestamp(value):
         if texto.isdigit():
             numero = int(texto)
             return numero if numero > 1000000000000 else numero * 1000
+        try:
+            fecha = datetime.fromisoformat(texto.replace("Z", "+00:00"))
+            return fecha.timestamp() * 1000
+        except ValueError:
+            return None
     return None
 
 
@@ -208,6 +214,62 @@ def _usuario_chispita_plataforma(user, plataforma):
     )
 
 
+def _path_tiene_oferta(path):
+    path_lower = str(path).lower()
+    return any(
+        keyword in path_lower
+        for keyword in ("offer", "oferta", "order", "orden", "ordenes", "órdenes")
+    )
+
+
+def _path_tiene_ganada(path):
+    path_lower = str(path).lower()
+    return any(keyword in path_lower for keyword in ("won", "captur", "ganad"))
+
+
+def _path_tiene_hoy(path):
+    path_lower = str(path).lower()
+    return "today" in path_lower or "hoy" in path_lower
+
+
+def _valor_timestamp_hoy(value):
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, (int, float)) and value < 1000000000:
+        return False
+    return _es_hoy(value)
+
+
+def _campo_indica_oferta_ganada_hoy(path, value):
+    tiene_oferta = _path_tiene_oferta(path)
+    tiene_ganada = _path_tiene_ganada(path)
+    tiene_hoy = _path_tiene_hoy(path)
+
+    if not (tiene_oferta or tiene_ganada):
+        return False
+
+    if tiene_hoy:
+        if isinstance(value, bool):
+            return value
+        numero = _to_number(value)
+        if numero is not None:
+            return numero > 0
+        if isinstance(value, str):
+            return _valor_bool(value)
+
+    if (tiene_oferta or tiene_ganada) and _valor_timestamp_hoy(value):
+        return True
+
+    return False
+
+
+def _usuario_chispita_oferta_ganada_hoy(user):
+    return any(
+        _campo_indica_oferta_ganada_hoy(path, value)
+        for path, value in _flatten_campos(user)
+    )
+
+
 def _metricas_chispita_por_plataforma(usuarios):
     usuarios_activos = [
         user for user in usuarios
@@ -221,12 +283,18 @@ def _metricas_chispita_por_plataforma(usuarios):
         1 for user in usuarios_activos
         if _usuario_chispita_plataforma(user, "instacart")
     )
+    offers_won_today_users = sum(
+        1 for user in usuarios_activos
+        if _usuario_chispita_oferta_ganada_hoy(user)
+    )
     return {
         "spark_users": spark_users,
         "instacart_users": instacart_users,
+        "offers_won_today_users": offers_won_today_users,
         "breakdown": [
             {"label": "Spark", "value": spark_users},
             {"label": "Instacart", "value": instacart_users},
+            {"label": "Ofertas ganadas hoy", "value": offers_won_today_users},
         ],
     }
 
@@ -490,6 +558,21 @@ def _normalizar_sistema_generico(key, value):
     }
 
 
+def _extraer_ofertas_chispita_legacy(chispita):
+    for key in (
+        "offersWonToday",
+        "usersWithOffersWonToday",
+        "capturedOrdersToday",
+        "ordersCapturedToday",
+        "ordersWonToday",
+        "ofertasGanadasHoy",
+        "ordenesCapturadasHoy",
+    ):
+        if key in chispita:
+            return _to_int(chispita.get(key))
+    return None
+
+
 def _obtener_metricas_multiadmin_legacy():
     response = requests.get(ENDPOINT_MULTIADMIN, timeout=30)
     response.raise_for_status()
@@ -542,6 +625,7 @@ def _obtener_metricas_multiadmin_legacy():
             "active_users": _to_int(chispita.get("active")),
             "running_users": _to_int(chispita.get("running")),
         }
+        ofertas_ganadas = _extraer_ofertas_chispita_legacy(chispita)
         if any(key in chispita for key in ("spark", "sparkUsers", "instacart", "instacartUsers")):
             metricas["chispita"]["spark_users"] = _to_int(chispita.get("spark") or chispita.get("sparkUsers"))
             metricas["chispita"]["instacart_users"] = _to_int(
@@ -551,6 +635,11 @@ def _obtener_metricas_multiadmin_legacy():
                 {"label": "Spark", "value": metricas["chispita"]["spark_users"]},
                 {"label": "Instacart", "value": metricas["chispita"]["instacart_users"]},
             ]
+        if ofertas_ganadas is not None:
+            metricas["chispita"]["offers_won_today_users"] = ofertas_ganadas
+            metricas["chispita"].setdefault("breakdown", []).append(
+                {"label": "Ofertas ganadas hoy", "value": ofertas_ganadas}
+            )
 
     for key, value in data.items():
         if key in KNOWN_SYSTEM_KEYS:
