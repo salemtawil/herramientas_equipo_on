@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+
+{% block title %}Turnos de trabajo{% endblock %}
+{% block page_name %}Turnos de trabajo{% endblock %}
+
+{% block content %}
+<div class="page-stack work-shifts-page">
+  <section class="card page-hero">
+    <div class="page-section-title">
+      <div>
+        <h1>Turnos de trabajo</h1>
+        <p>Administra integrantes por turno desde la interfaz. Esta herramienta no está conectada con breaks.</p>
+      </div>
+      <span class="hero-badge">Administrable</span>
+    </div>
+
+    <div class="dashboard-highlight-grid top-space">
+      <article class="dashboard-highlight-card dashboard-highlight-card--primary">
+        <span class="dashboard-highlight-card__eyebrow">Integrantes</span>
+        <strong>{{ total_agentes }} agentes</strong>
+        <p>{{ activos }} activos y {{ inactivos }} desactivados en la configuración actual.</p>
+      </article>
+      <article class="dashboard-highlight-card">
+        <span class="dashboard-highlight-card__eyebrow">Última actualización</span>
+        <strong>{{ updated_at or "Sin fecha" }}</strong>
+        <p>Los cambios quedan registrados en el historial de esta herramienta.</p>
+      </article>
+    </div>
+
+    {% with mensajes = get_flashed_messages(with_categories=true) %}
+      {% if mensajes %}
+        {% for categoria, texto in mensajes %}
+          <div class="{% if categoria == 'success' %}success{% else %}warning{% endif %} top-space">{{ texto }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+  </section>
+
+  <section class="card">
+    <div class="page-section-title">
+      <div>
+        <h2>Importar agentes</h2>
+        <p class="small">Carga el CSV de agentes para agregar nuevos integrantes usando User ID como identificador estable.</p>
+      </div>
+      <span class="hero-badge hero-badge-soft">agents.csv</span>
+    </div>
+
+    <form method="post" action="{{ url_for('turnos_trabajo.importar_agentes') }}" enctype="multipart/form-data" data-processing-message="Importando agentes y actualizando la lista...">
+      <div class="row-2">
+        <div>
+          <label class="small">Archivo CSV</label>
+          <input type="file" name="archivo" accept=".csv">
+        </div>
+        <div class="acciones-columna">
+          <label class="small">&nbsp;</label>
+          <button type="submit">Importar CSV</button>
+        </div>
+      </div>
+    </form>
+  </section>
+
+  <section class="card">
+    <div class="page-section-title">
+      <div>
+        <h2>Tablero de turnos</h2>
+        <p class="small">Usa el selector de cada agente para moverlo. La columna Sin turno sirve para nuevos ingresos o pendientes.</p>
+      </div>
+      <span class="hero-badge hero-badge-soft">{{ tablero|length }} turnos</span>
+    </div>
+
+    <div class="search-panel top-space">
+      <label for="buscador-turnos" class="small">Buscar integrante</label>
+      <input type="text" id="buscador-turnos" placeholder="Nombre, email o User ID" data-work-shift-search>
+    </div>
+
+    <div class="work-shift-board top-space">
+      {% for turno in tablero %}
+        <article class="work-shift-column">
+          <div class="work-shift-column__head">
+            <div>
+              <h3>{{ turno.name }}</h3>
+              <p class="small">{{ turno.agents|length }} integrantes</p>
+            </div>
+          </div>
+
+          <div class="work-agent-list">
+            {% if turno.agents %}
+              {% for agente in turno.agents %}
+                <article
+                  class="work-agent-card {% if not agente.active %}is-inactive{% endif %}"
+                  data-work-agent-card
+                  data-search="{{ (agente.display_name ~ ' ' ~ agente.email ~ ' ' ~ agente.user_id)|lower }}"
+                >
+                  <div class="work-agent-card__main">
+                    <strong>{{ agente.display_name }}</strong>
+                    <span class="small">{{ agente.email or "Sin email" }}</span>
+                    <span class="small">ID: {{ agente.user_id }}</span>
+                  </div>
+
+                  <form method="post" action="{{ url_for('turnos_trabajo.mover') }}" class="work-agent-actions">
+                    <input type="hidden" name="agent_id" value="{{ agente.user_id }}">
+                    <label class="small" for="shift-{{ agente.user_id }}">Mover a</label>
+                    <select id="shift-{{ agente.user_id }}" name="shift_id">
+                      {% for destino in turnos %}
+                        <option value="{{ destino.id }}" {% if destino.id == turno.id %}selected{% endif %}>{{ destino.name }}</option>
+                      {% endfor %}
+                    </select>
+                    <button type="submit" class="btn secondary btn-mini">Mover</button>
+                  </form>
+
+                  <form method="post" action="{{ url_for('turnos_trabajo.cambiar_estado_agente', agent_id=agente.user_id) }}">
+                    <input type="hidden" name="active" value="{% if agente.active %}0{% else %}1{% endif %}">
+                    <button type="submit" class="btn secondary btn-mini">
+                      {% if agente.active %}Desactivar{% else %}Reactivar{% endif %}
+                    </button>
+                  </form>
+                </article>
+              {% endfor %}
+            {% else %}
+              <div class="work-agent-empty">No hay integrantes en este turno.</div>
+            {% endif %}
+          </div>
+        </article>
+      {% endfor %}
+    </div>
+  </section>
+
+  <details class="card seccion-desplegable">
+    <summary class="titulo-desplegable">
+      <span>Historial reciente</span>
+      <span class="small">{{ history|length }} cambios</span>
+    </summary>
+
+    <div class="work-history-list top-space">
+      {% for item in history %}
+        <article class="work-history-item">
+          <strong>{{ item.detail }}</strong>
+          <span class="small">{{ item.at }} · {{ item.action }}</span>
+        </article>
+      {% else %}
+        <p class="small">Todavía no hay historial.</p>
+      {% endfor %}
+    </div>
+  </details>
+</div>
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      const input = document.querySelector("[data-work-shift-search]");
+      const cards = Array.from(document.querySelectorAll("[data-work-agent-card]"));
+      if (!input || !cards.length) return;
+
+      input.addEventListener("input", function () {
+        const query = input.value.trim().toLowerCase();
+        cards.forEach((card) => {
+          const hayMatch = !query || (card.dataset.search || "").includes(query);
+          card.style.display = hayMatch ? "" : "none";
+        });
+      });
+    });
+  </script>
+{% endblock %}

@@ -50,6 +50,10 @@
           <span class="sidebar-link__eyebrow">Reporte</span>
           <strong>Reporte de agentes</strong>
         </a>
+        <a class="sidebar-link {% if endpoint.startswith('turnos_trabajo.') %}is-active{% endif %}" href="{{ url_for('turnos_trabajo.turnos_trabajo') }}">
+          <span class="sidebar-link__eyebrow">Equipo</span>
+          <strong>Turnos de trabajo</strong>
+        </a>
         <a class="sidebar-link {% if endpoint == 'comparar_csv.comparar_csv' %}is-active{% endif %}" href="{{ url_for('comparar_csv.comparar_csv') }}">
           <span class="sidebar-link__eyebrow">Análisis</span>
           <strong>Comparar CSV</strong>

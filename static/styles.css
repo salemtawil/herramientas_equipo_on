@@ -3343,3 +3343,95 @@ th.desc::after {
     grid-template-columns: 1fr;
   }
 }
+
+.work-shifts-page .work-shift-board {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.work-shifts-page .work-shift-column {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--surface-muted);
+  padding: 1rem;
+}
+
+.work-shifts-page .work-shift-column__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.work-shifts-page .work-shift-column__head h3 {
+  margin: 0;
+}
+
+.work-shifts-page .work-agent-list,
+.work-shifts-page .work-history-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.work-shifts-page .work-agent-list {
+  margin-top: 0.85rem;
+}
+
+.work-shifts-page .work-agent-card,
+.work-shifts-page .work-agent-empty,
+.work-shifts-page .work-history-item {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  padding: 0.85rem;
+}
+
+.work-shifts-page .work-agent-card {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.work-shifts-page .work-agent-card.is-inactive {
+  opacity: 0.62;
+}
+
+.work-shifts-page .work-agent-card__main {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.work-shifts-page .work-agent-card__main strong,
+.work-shifts-page .work-agent-card__main span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.work-shifts-page .work-agent-actions {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.work-shifts-page .work-agent-actions select {
+  width: 100%;
+}
+
+.work-shifts-page .work-agent-empty {
+  color: var(--muted);
+}
+
+.work-shifts-page .work-history-item {
+  display: grid;
+  gap: 0.25rem;
+}
+
+@media (max-width: 640px) {
+  .work-shifts-page .work-shift-board {
+    grid-template-columns: 1fr;
+  }
+}

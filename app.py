@@ -10,6 +10,7 @@ from tools.auditoria_salientes import auditoria_salientes_bp
 from tools.break_admin import break_admin_bp
 from tools.informe_semanal_cs import informe_semanal_cs_bp
 from tools.reporte_agentes import reporte_agentes_bp
+from tools.turnos_trabajo import turnos_trabajo_bp
 from tools.usuarios_activos import usuarios_activos_bp
 from tools.comparar_csv import comparar_csv_bp
 from tools.usuarios_a_sheets import usuarios_a_sheets_bp
@@ -32,6 +33,7 @@ if is_production and not flask_secret_key:
 app.secret_key = flask_secret_key or "dev-local-key"
 
 app.register_blueprint(reporte_agentes_bp)
+app.register_blueprint(turnos_trabajo_bp)
 app.register_blueprint(usuarios_activos_bp)
 app.register_blueprint(comparar_csv_bp)
 app.register_blueprint(usuarios_a_sheets_bp)
