@@ -561,7 +561,7 @@ function renderSystemState(prefix, item) {
   }
 
   if (updated) {
-    updated.textContent = item?.updated_at && item.updated_at !== "-" ? `Actualizado: ${formatUpdatedAt(item.updated_at)}` : "Sin actualización";
+    updated.textContent = item?.updated_at && item.updated_at !== "-" ? `↻ ${formatUpdatedAt(item.updated_at)}` : "Sin actualización";
   }
 }
 
