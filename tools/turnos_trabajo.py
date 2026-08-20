@@ -11,6 +11,7 @@ from utils.turnos_trabajo_store import (
     obtener_estado_almacenamiento,
     obtener_turnos_ordenados,
     set_agente_activo,
+    vaciar_agentes,
 )
 
 
@@ -81,6 +82,23 @@ def limpiar_asignaciones():
     except Exception as exc:
         logger.exception("Error limpiando asignaciones de turnos")
         flash(f"No se pudieron limpiar las asignaciones: {exc}", "warning")
+
+    return redirect(url_for("turnos_trabajo.turnos_trabajo"))
+
+
+@turnos_trabajo_bp.route("/turnos-trabajo/vaciar-agentes", methods=["POST"])
+def vaciar_lista_agentes():
+    confirmacion = limpiar_texto(request.form.get("confirmacion")).upper()
+    if confirmacion != "BORRAR":
+        flash("Escribe BORRAR para confirmar que quieres vaciar la lista de agentes.", "warning")
+        return redirect(url_for("turnos_trabajo.turnos_trabajo"))
+
+    try:
+        eliminados = vaciar_agentes()
+        flash(f"Lista limpiada: {eliminados} agentes eliminados. Ahora puedes importar el CSV limpio.", "success")
+    except Exception as exc:
+        logger.exception("Error vaciando agentes de turnos")
+        flash(f"No se pudo vaciar la lista de agentes: {exc}", "warning")
 
     return redirect(url_for("turnos_trabajo.turnos_trabajo"))
 

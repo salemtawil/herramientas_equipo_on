@@ -83,6 +83,20 @@
         </div>
       </div>
     </form>
+
+    <form method="post" action="{{ url_for('turnos_trabajo.vaciar_lista_agentes') }}" class="top-space" data-processing-message="Vaciando lista de agentes...">
+      <div class="row-2">
+        <div>
+          <label class="small" for="confirmar-vaciado">Vaciar lista de agentes</label>
+          <input type="text" id="confirmar-vaciado" name="confirmacion" placeholder="Escribe BORRAR para confirmar">
+          <p class="small">Elimina los agentes actuales del tablero. Los turnos quedan disponibles y el próximo CSV reconstruye la lista.</p>
+        </div>
+        <div class="acciones-columna">
+          <label class="small">&nbsp;</label>
+          <button type="submit" class="btn secondary">Vaciar agentes</button>
+        </div>
+      </div>
+    </form>
   </details>
 
   <section class="card">

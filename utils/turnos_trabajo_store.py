@@ -416,6 +416,26 @@ def limpiar_asignaciones_turnos():
     return cambios
 
 
+def vaciar_agentes():
+    estado = cargar_estado()
+    total_agentes = len(estado.get("agents", {}))
+    total_asignaciones = len(estado.get("assignments", {}))
+
+    estado["agents"] = {}
+    estado["assignments"] = {}
+
+    agregar_historial(
+        estado,
+        "clear_agents",
+        f"Lista limpiada: {total_agentes} agentes eliminados de turnos.",
+        before={"agents": total_agentes, "assignments": total_asignaciones},
+        after={"agents": 0, "assignments": 0},
+    )
+    guardar_estado(estado)
+
+    return total_agentes
+
+
 def registrar_agentes_desde_dataframe(df):
     estado = cargar_estado()
     agents = estado.setdefault("agents", {})
