@@ -388,6 +388,50 @@ def mover_agente(agent_id, shift_id):
     guardar_estado(estado)
 
 
+def mover_agentes_masivo(movimientos):
+    estado = cargar_estado()
+    agents = estado.get("agents", {})
+    shifts = {shift["id"]: shift for shift in estado.get("shifts", [])}
+    assignments = estado.setdefault("assignments", {})
+    cambios = []
+
+    for agent_id, shift_id in movimientos:
+        agent_id = str(agent_id or "").strip()
+        shift_id = str(shift_id or "").strip()
+
+        if not agent_id or not shift_id:
+            continue
+        if agent_id not in agents or shift_id not in shifts:
+            continue
+
+        antes = assignments.get(agent_id, SIN_TURNO_ID)
+        if antes == shift_id:
+            continue
+
+        assignments[agent_id] = shift_id
+        agents[agent_id]["active"] = True
+        agents[agent_id]["updated_at"] = _ahora_iso()
+        cambios.append(
+            {
+                "agent_id": agent_id,
+                "before": antes,
+                "after": shift_id,
+            }
+        )
+
+    if cambios:
+        agregar_historial(
+            estado,
+            "bulk_move_agents",
+            f"{len(cambios)} agentes movidos en lote.",
+            before=[item["before"] for item in cambios],
+            after=[item["after"] for item in cambios],
+        )
+        guardar_estado(estado)
+
+    return len(cambios)
+
+
 def limpiar_asignaciones_turnos():
     estado = cargar_estado()
     agents = estado.get("agents", {})

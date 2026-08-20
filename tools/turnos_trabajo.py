@@ -8,6 +8,7 @@ from utils.turnos_trabajo_store import (
     importar_agents_csv,
     limpiar_asignaciones_turnos,
     mover_agente,
+    mover_agentes_masivo,
     obtener_estado_almacenamiento,
     obtener_turnos_ordenados,
     set_agente_activo,
@@ -65,6 +66,21 @@ def importar_agentes():
     except Exception as exc:
         logger.exception("Error importando agents.csv")
         flash(f"No se pudo importar el CSV: {exc}", "warning")
+
+    return redirect(url_for("turnos_trabajo.turnos_trabajo"))
+
+
+@turnos_trabajo_bp.route("/turnos-trabajo/mover-masivo", methods=["POST"])
+def mover_masivo():
+    agent_ids = request.form.getlist("agent_id")
+    shift_ids = request.form.getlist("shift_id")
+
+    try:
+        cambios = mover_agentes_masivo(zip(agent_ids, shift_ids))
+        flash(f"{cambios} cambios de turno guardados.", "success")
+    except Exception as exc:
+        logger.exception("Error moviendo agentes en lote")
+        flash(f"No se pudieron guardar los cambios masivos: {exc}", "warning")
 
     return redirect(url_for("turnos_trabajo.turnos_trabajo"))
 

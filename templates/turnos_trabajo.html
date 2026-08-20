@@ -97,6 +97,20 @@
         </div>
       </div>
     </form>
+
+    <form method="post" action="{{ url_for('turnos_trabajo.mover_masivo') }}" class="top-space" data-work-bulk-move-form data-processing-message="Guardando cambios de turnos...">
+      <div data-work-bulk-move-fields></div>
+      <div class="row-2">
+        <div>
+          <label class="small">Guardar todos los cambios</label>
+          <p class="small">Cambia los selectores de varios agentes y guarda todos los movimientos en una sola acción.</p>
+        </div>
+        <div class="acciones-columna">
+          <label class="small">&nbsp;</label>
+          <button type="submit" class="btn secondary">Guardar cambios de turnos</button>
+        </div>
+      </div>
+    </form>
   </details>
 
   <section class="card">
@@ -140,7 +154,12 @@
                   <form method="post" action="{{ url_for('turnos_trabajo.mover') }}" class="work-agent-actions">
                     <input type="hidden" name="agent_id" value="{{ agente.user_id }}">
                     <label class="small" for="shift-{{ agente.user_id }}">Mover a</label>
-                    <select id="shift-{{ agente.user_id }}" name="shift_id">
+                    <select
+                      id="shift-{{ agente.user_id }}"
+                      name="shift_id"
+                      data-work-shift-select
+                      data-agent-id="{{ agente.user_id }}"
+                    >
                       {% for destino in turnos %}
                         <option value="{{ destino.id }}" {% if destino.id == turno.id %}selected{% endif %}>{{ destino.name }}</option>
                       {% endfor %}
@@ -198,6 +217,28 @@
         cards.forEach((card) => {
           const hayMatch = !query || (card.dataset.search || "").includes(query);
           card.style.display = hayMatch ? "" : "none";
+        });
+      });
+
+      const bulkForm = document.querySelector("[data-work-bulk-move-form]");
+      const bulkFields = document.querySelector("[data-work-bulk-move-fields]");
+      const shiftSelects = Array.from(document.querySelectorAll("[data-work-shift-select]"));
+      if (!bulkForm || !bulkFields || !shiftSelects.length) return;
+
+      bulkForm.addEventListener("submit", function () {
+        bulkFields.innerHTML = "";
+        shiftSelects.forEach((select) => {
+          const agentInput = document.createElement("input");
+          agentInput.type = "hidden";
+          agentInput.name = "agent_id";
+          agentInput.value = select.dataset.agentId || "";
+          bulkFields.appendChild(agentInput);
+
+          const shiftInput = document.createElement("input");
+          shiftInput.type = "hidden";
+          shiftInput.name = "shift_id";
+          shiftInput.value = select.value || "";
+          bulkFields.appendChild(shiftInput);
         });
       });
     });
