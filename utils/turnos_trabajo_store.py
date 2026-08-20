@@ -7,10 +7,21 @@ from datetime import datetime
 from utils.config_turnos import obtener_turnos_fijos
 
 
-DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
-STORE_PATH = os.path.join(DATA_DIR, "turnos_trabajo.json")
+LOCAL_DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
+STORE_FILENAME = "turnos_trabajo.json"
 SIN_TURNO_ID = "sin-turno"
 SIN_TURNO_LABEL = "Sin turno"
+
+
+def obtener_store_path():
+    configured_path = str(os.getenv("TURNOS_TRABAJO_STORE_PATH") or "").strip()
+    if configured_path:
+        return configured_path
+
+    if os.getenv("VERCEL") or os.getenv("VERCEL_ENV"):
+        return os.path.join("/tmp", STORE_FILENAME)
+
+    return os.path.join(LOCAL_DATA_DIR, STORE_FILENAME)
 
 
 def _ahora_iso():
@@ -103,19 +114,21 @@ def _nuevo_estado_desde_config():
 
 
 def cargar_estado():
-    if not os.path.exists(STORE_PATH):
+    store_path = obtener_store_path()
+    if not os.path.exists(store_path):
         estado = _nuevo_estado_desde_config()
         guardar_estado(estado)
         return estado
 
-    with open(STORE_PATH, "r", encoding="utf-8") as fh:
+    with open(store_path, "r", encoding="utf-8") as fh:
         return json.load(fh)
 
 
 def guardar_estado(estado):
-    os.makedirs(DATA_DIR, exist_ok=True)
+    store_path = obtener_store_path()
+    os.makedirs(os.path.dirname(store_path), exist_ok=True)
     estado["updated_at"] = _ahora_iso()
-    with open(STORE_PATH, "w", encoding="utf-8") as fh:
+    with open(store_path, "w", encoding="utf-8") as fh:
         json.dump(estado, fh, ensure_ascii=False, indent=2)
 
 
