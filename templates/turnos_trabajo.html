@@ -64,6 +64,27 @@
     </form>
   </section>
 
+  <details class="card seccion-desplegable">
+    <summary class="titulo-desplegable">
+      <span>Acciones masivas</span>
+      <span class="small">Reorganización</span>
+    </summary>
+
+    <form method="post" action="{{ url_for('turnos_trabajo.limpiar_asignaciones') }}" class="top-space" data-processing-message="Moviendo agentes a Sin turno...">
+      <div class="row-2">
+        <div>
+          <label class="small" for="confirmar-limpieza">Mover todos a Sin turno</label>
+          <input type="text" id="confirmar-limpieza" name="confirmacion" placeholder="Escribe SI para confirmar">
+          <p class="small">Los agentes no se eliminan. Solo quedan sin turno para que puedas reasignarlos.</p>
+        </div>
+        <div class="acciones-columna">
+          <label class="small">&nbsp;</label>
+          <button type="submit" class="btn secondary">Limpiar turnos</button>
+        </div>
+      </div>
+    </form>
+  </details>
+
   <section class="card">
     <div class="page-section-title">
       <div>

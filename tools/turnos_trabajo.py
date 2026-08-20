@@ -6,6 +6,7 @@ from utils.turnos_trabajo_store import (
     cargar_estado,
     construir_tablero,
     importar_agents_csv,
+    limpiar_asignaciones_turnos,
     mover_agente,
     obtener_estado_almacenamiento,
     obtener_turnos_ordenados,
@@ -63,6 +64,23 @@ def importar_agentes():
     except Exception as exc:
         logger.exception("Error importando agents.csv")
         flash(f"No se pudo importar el CSV: {exc}", "warning")
+
+    return redirect(url_for("turnos_trabajo.turnos_trabajo"))
+
+
+@turnos_trabajo_bp.route("/turnos-trabajo/limpiar-asignaciones", methods=["POST"])
+def limpiar_asignaciones():
+    confirmacion = limpiar_texto(request.form.get("confirmacion")).upper()
+    if confirmacion != "SI":
+        flash("Escribe SI para confirmar que quieres mover todos los agentes a Sin turno.", "warning")
+        return redirect(url_for("turnos_trabajo.turnos_trabajo"))
+
+    try:
+        cambios = limpiar_asignaciones_turnos()
+        flash(f"{cambios} agentes fueron movidos a Sin turno.", "success")
+    except Exception as exc:
+        logger.exception("Error limpiando asignaciones de turnos")
+        flash(f"No se pudieron limpiar las asignaciones: {exc}", "warning")
 
     return redirect(url_for("turnos_trabajo.turnos_trabajo"))
 

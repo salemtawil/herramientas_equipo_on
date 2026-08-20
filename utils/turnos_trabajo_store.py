@@ -388,6 +388,34 @@ def mover_agente(agent_id, shift_id):
     guardar_estado(estado)
 
 
+def limpiar_asignaciones_turnos():
+    estado = cargar_estado()
+    agents = estado.get("agents", {})
+    assignments = estado.setdefault("assignments", {})
+    cambios = 0
+    antes = {}
+
+    for agent_id in agents.keys():
+        turno_actual = assignments.get(agent_id, SIN_TURNO_ID)
+        if turno_actual != SIN_TURNO_ID:
+            antes[agent_id] = turno_actual
+            assignments[agent_id] = SIN_TURNO_ID
+            agents[agent_id]["updated_at"] = _ahora_iso()
+            cambios += 1
+
+    if cambios:
+        agregar_historial(
+            estado,
+            "clear_assignments",
+            f"{cambios} agentes movidos a {SIN_TURNO_LABEL}.",
+            before=antes,
+            after=SIN_TURNO_ID,
+        )
+        guardar_estado(estado)
+
+    return cambios
+
+
 def registrar_agentes_desde_dataframe(df):
     estado = cargar_estado()
     agents = estado.setdefault("agents", {})
