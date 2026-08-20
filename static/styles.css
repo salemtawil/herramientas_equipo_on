@@ -2753,6 +2753,10 @@ th.desc::after {
   gap: 0;
 }
 
+.users-active-page .stat-list[hidden] {
+  display: none;
+}
+
 .users-active-page .stat-line {
   min-width: 0;
   padding: 0;
