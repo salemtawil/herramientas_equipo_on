@@ -612,7 +612,7 @@ function ensureDynamicSystemCard(item) {
       <div class="stat-line stat-line--featured"><span>Activos</span><strong id="${id}-active">-</strong></div>
       <div class="stat-line stat-line--featured"><span>En ejecución</span><strong id="${id}-running">-</strong></div>
     </div>
-    <div class="stat-list stat-list--details">
+    <div class="stat-list stat-list--details dynamic-secondary-metrics" id="${id}-secondary-metrics">
       <div class="stat-line"><span>Total</span><strong id="${id}-users-total">-</strong></div>
       <div class="stat-line"><span>Nuevos</span><strong id="${id}-new">-</strong></div>
       <div class="stat-line"><span>Desconectados</span><strong id="${id}-disconnected">-</strong></div>
@@ -674,6 +674,10 @@ function renderDynamicSystems(items) {
     if (!id || knownIds.has(id)) return;
     activeDynamicIds.add(id);
     ensureDynamicSystemCard(item);
+    const secondaryMetrics = document.getElementById(`${id}-secondary-metrics`);
+    if (secondaryMetrics) {
+      secondaryMetrics.hidden = id === "chispita";
+    }
     setMetricText(`${id}-active`, item.active_users);
     setMetricText(`${id}-running`, item.running_users);
     setMetricText(`${id}-users-total`, item.total_users);
