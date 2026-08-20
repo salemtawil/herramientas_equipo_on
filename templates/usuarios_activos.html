@@ -34,16 +34,24 @@
   <section class="platform-summary-panel">
     <div class="platform-summary-panel__main">
       <span class="platform-summary-panel__eyebrow">Resumen general</span>
-      <h2>Usuarios en plataformas</h2>
+      <h2>Monitoreo operativo</h2>
     </div>
     <div class="platform-summary-panel__stats">
       <div>
-        <span>Usuarios sin promo</span>
-        <strong id="total-real-users">-</strong>
+        <span>Bots activos</span>
+        <strong id="summary-bots-active">-</strong>
       </div>
       <div>
-        <span>Usuarios totales</span>
-        <strong id="total-platform-users">-</strong>
+        <span>Activos totales</span>
+        <strong id="summary-total-active">-</strong>
+      </div>
+      <div>
+        <span>En ejecución</span>
+        <strong id="summary-total-running">-</strong>
+      </div>
+      <div>
+        <span>Alertas</span>
+        <strong id="summary-alerts">-</strong>
       </div>
     </div>
   </section>
@@ -457,9 +465,15 @@ function renderPlatformSummary(items) {
     items
       .filter(item => item.system !== "Compinche" && item.system !== "Paripe")
       .reduce((total, item) => total + numberOrZero(item.active_users), 0);
+  const totalActive = compincheReal + otherSystemsTotal;
+  const totalRunning = items.reduce((total, item) => total + numberOrZero(item.running_users), 0);
+  const activeBots = items.filter(item => numberOrZero(item.active_users ?? item.good_standing_users) > 0).length;
+  const alerts = items.filter(item => item?.error || String(item?.progress || "").toLowerCase() === "error").length;
 
-  document.getElementById("total-real-users").textContent = (compincheReal + otherSystemsTotal).toLocaleString("en-US");
-  document.getElementById("total-platform-users").textContent = (compincheTotal + otherSystemsTotal).toLocaleString("en-US");
+  document.getElementById("summary-bots-active").textContent = activeBots.toLocaleString("en-US");
+  document.getElementById("summary-total-active").textContent = totalActive.toLocaleString("en-US");
+  document.getElementById("summary-total-running").textContent = totalRunning.toLocaleString("en-US");
+  document.getElementById("summary-alerts").textContent = alerts.toLocaleString("en-US");
 }
 
 function renderBonusStats(bonus) {
@@ -524,12 +538,41 @@ function renderSystemState(prefix, item) {
   }
 
   if (status) {
-    status.textContent = item?.progress || "Pendiente";
+    const progress = String(item?.progress || "Pendiente");
+    const normalizedProgress = progress.toLowerCase();
+    const statusLabel = hasError
+      ? "Error"
+      : normalizedProgress === "completado"
+        ? "Operativo"
+        : normalizedProgress === "actualizando"
+          ? "Atención"
+          : "Sin datos";
+    status.textContent = statusLabel;
+    status.className = "system-card__status";
+    if (hasError) {
+      status.classList.add("is-error");
+    } else if (normalizedProgress === "completado") {
+      status.classList.add("is-operational");
+    } else if (normalizedProgress === "actualizando") {
+      status.classList.add("is-attention");
+    } else {
+      status.classList.add("is-empty");
+    }
   }
 
   if (updated) {
     updated.textContent = item?.updated_at && item.updated_at !== "-" ? `Actualizado: ${formatUpdatedAt(item.updated_at)}` : "Sin actualización";
   }
+}
+
+function promoteSystemMeta() {
+  document.querySelectorAll(".system-card").forEach((card) => {
+    const header = card.querySelector(".system-card__header");
+    const footer = card.querySelector(".system-card__footer");
+    if (!header || !footer || footer.dataset.promoted === "true") return;
+    footer.dataset.promoted = "true";
+    header.appendChild(footer);
+  });
 }
 
 function ensureDynamicSystemCard(item) {
@@ -548,7 +591,7 @@ function ensureDynamicSystemCard(item) {
     .slice(0, 2)
     .toUpperCase() || "SY";
   const card = document.createElement("article");
-  card.className = "system-card system-card--dynamic";
+  card.className = `system-card system-card--dynamic system-card--${id}`;
   card.id = `card-${id}`;
   card.innerHTML = `
     <div class="system-card__header">
@@ -560,6 +603,10 @@ function ensureDynamicSystemCard(item) {
           <h3 class="system-card__title">${escapeHtml(label)}</h3>
         </div>
       </div>
+      <div class="system-card__footer">
+        <span class="system-card__status" id="${id}-status">Pendiente</span>
+        <span class="system-card__updated" id="${id}-updated">Sin actualizacion</span>
+      </div>
     </div>
     <div class="stat-list stat-list--primary">
       <div class="stat-line stat-line--featured"><span>Activos</span><strong id="${id}-active">-</strong></div>
@@ -570,11 +617,7 @@ function ensureDynamicSystemCard(item) {
       <div class="stat-line"><span>Nuevos</span><strong id="${id}-new">-</strong></div>
       <div class="stat-line"><span>Desconectados</span><strong id="${id}-disconnected">-</strong></div>
     </div>
-    <div class="stat-list stat-list--details" id="${id}-breakdown" hidden></div>
-    <div class="system-card__footer">
-      <span class="system-card__status" id="${id}-status">Pendiente</span>
-      <span class="system-card__updated" id="${id}-updated">Sin actualizacion</span>
-    </div>
+    <div class="stat-list stat-list--details stat-list--activity" id="${id}-breakdown" hidden></div>
     <div class="error" id="${id}-error"></div>
   `;
   document.getElementById("resultado").appendChild(card);
@@ -620,6 +663,7 @@ function renderDynamicSystems(items) {
 }
 
 function renderData(items, updatedAt) {
+  promoteSystemMeta();
   const compinche = items.find(item => item.system === "Compinche");
   const paripe = items.find(item => item.system === "Paripe");
   const camarada = items.find(item => item.system === "camarada");
@@ -715,7 +759,10 @@ async function actualizarDatos() {
     const status = document.getElementById(`${id}-status`);
     if (error) error.textContent = "";
     if (card) card.classList.remove("system-card--error");
-    if (status) status.textContent = "Actualizando";
+    if (status) {
+      status.textContent = "Atención";
+      status.className = "system-card__status is-attention";
+    }
   });
 
   try {
