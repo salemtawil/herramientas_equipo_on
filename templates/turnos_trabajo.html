@@ -25,6 +25,11 @@
         <strong>{{ updated_at or "Sin fecha" }}</strong>
         <p>Los cambios quedan registrados en el historial de esta herramienta.</p>
       </article>
+      <article class="dashboard-highlight-card">
+        <span class="dashboard-highlight-card__eyebrow">Almacenamiento</span>
+        <strong>{{ storage_status.label }}</strong>
+        <p>{{ storage_status.detail }}</p>
+      </article>
     </div>
 
     {% with mensajes = get_flashed_messages(with_categories=true) %}

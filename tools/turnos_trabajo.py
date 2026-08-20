@@ -7,6 +7,7 @@ from utils.turnos_trabajo_store import (
     construir_tablero,
     importar_agents_csv,
     mover_agente,
+    obtener_estado_almacenamiento,
     obtener_turnos_ordenados,
     set_agente_activo,
 )
@@ -38,6 +39,7 @@ def turnos_trabajo():
         total_agentes=len(agentes),
         activos=activos,
         inactivos=inactivos,
+        storage_status=obtener_estado_almacenamiento(),
     )
 
 

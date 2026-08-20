@@ -88,7 +88,11 @@ Antes de desplegar:
 4. Si usarás el módulo `break_admin`, configura:
    - `SUPABASE_URL`
    - `SUPABASE_SERVICE_ROLE_KEY`
-5. Si esperas refresco automático del token de Compinche vía Cognito, configura también:
+5. Para que `turnos_trabajo` guarde cambios compartidos entre admins, ejecuta en Supabase el SQL de `supabase_work_shift_state.sql`.
+   Usa las mismas variables:
+   - `SUPABASE_URL`
+   - `SUPABASE_SERVICE_ROLE_KEY`
+6. Si esperas refresco automático del token de Compinche vía Cognito, configura también:
    - `AWS_ACCESS_KEY_ID`
    - `AWS_SECRET_ACCESS_KEY`
    - `AWS_DEFAULT_REGION=us-east-1`
@@ -96,7 +100,7 @@ Antes de desplegar:
    - `COMPINCHE_PASSWORD`
    - `COMPINCHE_USER_POOL_ID=us-east-1_KRph7TcMm` si el login necesita `ADMIN_USER_PASSWORD_AUTH`.
    - `COMPINCHE_CLIENT_SECRET` solo si el App Client de Cognito usa client secret.
-6. Si usaras `usuarios_activos` con datos completos del Multiadmin nuevo, configura al menos una forma de autenticacion:
+7. Si usaras `usuarios_activos` con datos completos del Multiadmin nuevo, configura al menos una forma de autenticacion:
    - `MULTIADMIN_PROVISIONED_TOKEN`, o
    - `MULTIADMIN_ID_TOKEN` junto con `MULTIADMIN_REFRESH_TOKEN`, o
    - `MULTIADMIN_USERNAME` y `MULTIADMIN_PASSWORD`.

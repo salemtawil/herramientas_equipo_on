@@ -9,8 +9,15 @@ from utils.config_turnos import obtener_turnos_fijos
 
 LOCAL_DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
 STORE_FILENAME = "turnos_trabajo.json"
+SUPABASE_TABLE = "work_shift_state"
+SUPABASE_STATE_ID = "main"
 SIN_TURNO_ID = "sin-turno"
 SIN_TURNO_LABEL = "Sin turno"
+_STORAGE_WARNING = ""
+
+
+class TurnosTrabajoStorageError(Exception):
+    pass
 
 
 def obtener_store_path():
@@ -22,6 +29,74 @@ def obtener_store_path():
         return os.path.join("/tmp", STORE_FILENAME)
 
     return os.path.join(LOCAL_DATA_DIR, STORE_FILENAME)
+
+
+def usar_supabase():
+    storage_mode = str(os.getenv("TURNOS_TRABAJO_STORAGE") or "").strip().lower()
+    if storage_mode == "local":
+        return False
+    if storage_mode == "supabase":
+        return True
+    return bool(os.getenv("SUPABASE_URL") and os.getenv("SUPABASE_SERVICE_ROLE_KEY"))
+
+
+def obtener_estado_almacenamiento():
+    global _STORAGE_WARNING
+    if usar_supabase():
+        if _STORAGE_WARNING:
+            return {
+                "mode": "fallback",
+                "label": "Temporal",
+                "detail": _STORAGE_WARNING,
+            }
+        return {
+            "mode": "supabase",
+            "label": "Compartido",
+            "detail": "Los cambios se guardan en Supabase y son visibles para otros admins.",
+        }
+
+    return {
+        "mode": "local",
+        "label": "Local",
+        "detail": "Los cambios se guardan solo en este entorno.",
+    }
+
+
+def _crear_supabase_client():
+    try:
+        from supabase import create_client
+    except ImportError as exc:
+        raise TurnosTrabajoStorageError(
+            "La dependencia 'supabase' no está instalada en el entorno."
+        ) from exc
+
+    url = str(os.getenv("SUPABASE_URL") or "").strip()
+    service_role_key = str(os.getenv("SUPABASE_SERVICE_ROLE_KEY") or "").strip()
+    if not url:
+        raise TurnosTrabajoStorageError("No está configurada la variable SUPABASE_URL.")
+    if not service_role_key:
+        raise TurnosTrabajoStorageError("No está configurada la variable SUPABASE_SERVICE_ROLE_KEY.")
+
+    return create_client(url, service_role_key)
+
+
+def _normalizar_estado_supabase(registro):
+    estado = registro.get("state") if registro else None
+    if isinstance(estado, str):
+        return json.loads(estado)
+    if isinstance(estado, dict):
+        return estado
+    return None
+
+
+def _ejecutar_supabase(query):
+    try:
+        return query.execute()
+    except Exception as exc:
+        raise TurnosTrabajoStorageError(
+            "No se pudo leer o guardar turnos en Supabase. "
+            f"Verifica que exista la tabla {SUPABASE_TABLE}."
+        ) from exc
 
 
 def _ahora_iso():
@@ -125,10 +200,24 @@ def _nuevo_estado_desde_config():
 
 
 def cargar_estado():
+    if usar_supabase():
+        try:
+            estado = cargar_estado_supabase()
+            global _STORAGE_WARNING
+            _STORAGE_WARNING = ""
+            return estado
+        except TurnosTrabajoStorageError as exc:
+            _STORAGE_WARNING = str(exc)
+
+    return cargar_estado_archivo()
+
+
+def cargar_estado_archivo():
+
     store_path = obtener_store_path()
     if not os.path.exists(store_path):
         estado = _nuevo_estado_desde_config()
-        guardar_estado(estado)
+        guardar_estado_archivo(estado)
         return estado
 
     with open(store_path, "r", encoding="utf-8") as fh:
@@ -136,11 +225,55 @@ def cargar_estado():
 
 
 def guardar_estado(estado):
+    if usar_supabase():
+        try:
+            guardar_estado_supabase(estado)
+            global _STORAGE_WARNING
+            _STORAGE_WARNING = ""
+            return
+        except TurnosTrabajoStorageError as exc:
+            _STORAGE_WARNING = str(exc)
+
+    guardar_estado_archivo(estado)
+
+
+def guardar_estado_archivo(estado):
     store_path = obtener_store_path()
     os.makedirs(os.path.dirname(store_path), exist_ok=True)
     estado["updated_at"] = _ahora_iso()
     with open(store_path, "w", encoding="utf-8") as fh:
         json.dump(estado, fh, ensure_ascii=False, indent=2)
+
+
+def cargar_estado_supabase():
+    client = _crear_supabase_client()
+    response = _ejecutar_supabase(
+        client.table(SUPABASE_TABLE)
+        .select("state")
+        .eq("id", SUPABASE_STATE_ID)
+        .limit(1)
+    )
+    data = getattr(response, "data", None) or []
+    estado = _normalizar_estado_supabase(data[0]) if data else None
+    if estado and estado.get("shifts"):
+        return estado
+
+    estado = cargar_estado_archivo()
+    guardar_estado_supabase(estado, client=client)
+    return estado
+
+
+def guardar_estado_supabase(estado, client=None):
+    if client is None:
+        client = _crear_supabase_client()
+
+    estado["updated_at"] = _ahora_iso()
+    payload = {
+        "id": SUPABASE_STATE_ID,
+        "state": estado,
+        "updated_at": estado["updated_at"],
+    }
+    _ejecutar_supabase(client.table(SUPABASE_TABLE).upsert(payload))
 
 
 def agregar_historial(estado, action, detail, agent_id=None, before=None, after=None):
