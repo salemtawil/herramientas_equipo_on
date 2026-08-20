@@ -36,15 +36,41 @@ def secret_hash(username):
     return base64.b64encode(digest).decode("utf-8")
 
 
-def auth_parameters(username, password):
-    params = {
-        "USERNAME": username,
-        "PASSWORD": password,
-    }
+def agregar_secret_hash(params, username):
     hash_value = secret_hash(username)
     if hash_value:
         params["SECRET_HASH"] = hash_value
     return params
+
+
+def auth_parameters(username, password):
+    return agregar_secret_hash(
+        {
+            "USERNAME": username,
+            "PASSWORD": password,
+        },
+        username,
+    )
+
+
+def challenge_parameters(username, response):
+    challenge_name = response.get("ChallengeName")
+    cognito_username = response.get("ChallengeParameters", {}).get(
+        "USER_ID_FOR_SRP",
+        username,
+    )
+
+    params = {"USERNAME": cognito_username}
+    if challenge_name == "SMS_MFA":
+        params["SMS_MFA_CODE"] = input("Codigo SMS Multiadmin: ").strip()
+    elif challenge_name == "SOFTWARE_TOKEN_MFA":
+        params["SOFTWARE_TOKEN_MFA_CODE"] = input("Codigo MFA Multiadmin: ").strip()
+    elif challenge_name == "CUSTOM_CHALLENGE":
+        params["ANSWER"] = input("Codigo de verificacion Multiadmin: ").strip()
+    else:
+        raise RuntimeError(f"Desafio de login no soportado: {challenge_name}")
+
+    return agregar_secret_hash(params, cognito_username)
 
 
 def decode_payload(token):
@@ -72,6 +98,15 @@ def login(username, password):
         AuthFlow="USER_PASSWORD_AUTH",
         AuthParameters=auth_parameters(username, password),
     )
+
+    while "ChallengeName" in response:
+        response = client.respond_to_auth_challenge(
+            ClientId=CLIENT_ID,
+            ChallengeName=response["ChallengeName"],
+            Session=response["Session"],
+            ChallengeResponses=challenge_parameters(username, response),
+        )
+
     return response["AuthenticationResult"]
 
 
@@ -110,6 +145,7 @@ def write_env(username, auth):
     content = f"""# Tokens frescos de Multiadmin para Vercel.
 # Archivo local sensible. No subir a Git.
 # ID token expira en UTC: {expires_at(id_token)}
+# El refresh token permite renovar sin iniciar sesion ni pedir SMS.
 
 MULTIADMIN_API_BASE_URL={API_BASE_URL}
 MULTIADMIN_CLIENT_ID={CLIENT_ID}
@@ -118,6 +154,7 @@ MULTIADMIN_USERS_SINCE_EXPIRATION={SINCE_EXPIRATION}
 AWS_DEFAULT_REGION={REGION}
 
 MULTIADMIN_USERNAME={username}
+MULTIADMIN_PASSWORD=
 MULTIADMIN_ID_TOKEN={id_token}
 MULTIADMIN_REFRESH_TOKEN={refresh_token}
 MULTIADMIN_PROVISIONED_TOKEN=
