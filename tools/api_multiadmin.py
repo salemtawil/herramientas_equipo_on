@@ -503,6 +503,11 @@ def _request_json_multiadmin(path, token):
     return response.json()
 
 
+def _error_autenticacion_multiadmin(error):
+    response = getattr(error, "response", None)
+    return getattr(response, "status_code", None) in (401, 403)
+
+
 def _extraer_items(data, items_key):
     if isinstance(data, list):
         return data
@@ -636,9 +641,7 @@ def _metricas_desde_usuarios(system, usuarios, exclude_admins=False):
     return metricas
 
 
-def _obtener_metricas_multiadmin_directo():
-    token = _obtener_token_multiadmin()
-
+def _obtener_metricas_multiadmin_directo_con_token(token):
     metricas = {}
     with ThreadPoolExecutor(max_workers=8) as executor:
         future_to_system = {
@@ -677,6 +680,22 @@ def _obtener_metricas_multiadmin_directo():
             ])
 
     return metricas
+
+
+def _obtener_metricas_multiadmin_directo():
+    token = _obtener_token_multiadmin()
+
+    try:
+        return _obtener_metricas_multiadmin_directo_con_token(token)
+    except requests.HTTPError as error:
+        if (
+            _error_autenticacion_multiadmin(error)
+            and MULTIADMIN_USERNAME
+            and MULTIADMIN_PASSWORD
+        ):
+            tokens = iniciar_sesion_multiadmin()
+            return _obtener_metricas_multiadmin_directo_con_token(tokens["id_token"])
+        raise
 
 
 def _normalizar_sistema_generico(key, value):
