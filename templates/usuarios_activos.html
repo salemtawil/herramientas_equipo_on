@@ -630,6 +630,33 @@ function renderBreakdown(id, breakdown) {
 
   const items = Array.isArray(breakdown) ? breakdown : [];
   container.hidden = items.length === 0;
+  if (id === "chispita") {
+    const valueByLabel = new Map(items.map((item) => [item.label, item.value]));
+    const sparkActive = valueByLabel.get("Spark activos");
+    const instacartActive = valueByLabel.get("Instacart activos");
+    const sparkOffers = valueByLabel.get("Spark ofertas ganadas hoy");
+    const instacartOffers = valueByLabel.get("Instacart ofertas ganadas hoy");
+
+    container.innerHTML = `
+      <div class="platform-activity">
+        <span class="platform-activity__title">Actividad por plataforma</span>
+        <div class="platform-activity__grid">
+          <div class="platform-activity__item">
+            <span>SPARK</span>
+            <strong>${escapeHtml(formatCount(sparkActive))} activos</strong>
+            <em>${escapeHtml(formatCount(sparkOffers))} ofertas hoy</em>
+          </div>
+          <div class="platform-activity__item">
+            <span>INSTACART</span>
+            <strong>${escapeHtml(formatCount(instacartActive))} activos</strong>
+            <em>${escapeHtml(formatCount(instacartOffers))} ofertas hoy</em>
+          </div>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
   container.innerHTML = items.map((item) => `
     <div class="stat-line">
       <span>${escapeHtml(item.label)}</span>
