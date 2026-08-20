@@ -15,6 +15,7 @@ from utils.transformaciones import (
     validar_columnas,
 )
 from utils.turnos import cargar_turnos_fijos, detectar_repetidos, obtener_turno
+from utils.turnos_trabajo_store import registrar_agentes_desde_dataframe
 
 reporte_agentes_bp = Blueprint("reporte_agentes", __name__)
 logger = logging.getLogger(__name__)
@@ -255,6 +256,8 @@ def reporte_agentes():
                 advertencia = "Selecciona un archivo CSV."
             else:
                 df = leer_csv_subido(archivo)
+                registrar_agentes_desde_dataframe(df)
+                turnos_config = cargar_turnos_fijos()
                 df_final = preparar_dataframe(df, turnos_config)
                 lista_agentes = sorted(df_final["Agente"].dropna().unique().tolist())
 

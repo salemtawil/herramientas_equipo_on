@@ -32,6 +32,17 @@ def normalizar_texto(valor):
     return " ".join(str(valor or "").strip().lower().split())
 
 
+def limpiar_campo(valor):
+    if valor is None:
+        return ""
+    try:
+        if valor != valor:
+            return ""
+    except Exception:
+        pass
+    return str(valor).strip()
+
+
 def nombre_completo(agent):
     nombre = str(agent.get("first_name") or "").strip()
     apellido = str(agent.get("last_name") or "").strip()
@@ -178,6 +189,46 @@ def construir_tablero(estado):
     return tablero
 
 
+def obtener_turnos_configurados(excluir_sin_turno=True):
+    estado = cargar_estado()
+    turnos = obtener_turnos_ordenados(estado)
+    agents = estado.get("agents", {})
+    assignments = estado.get("assignments", {})
+    config = {}
+
+    for turno in turnos:
+        shift_id = turno.get("id")
+        if excluir_sin_turno and shift_id == SIN_TURNO_ID:
+            continue
+        if not turno.get("active", True):
+            continue
+        config[turno["name"]] = []
+
+    nombres_turnos = {
+        turno.get("id"): turno.get("name")
+        for turno in turnos
+        if turno.get("name") in config
+    }
+
+    for agent_id, agent in agents.items():
+        if not agent.get("active", True):
+            continue
+
+        shift_id = assignments.get(agent_id, SIN_TURNO_ID)
+        turno_nombre = nombres_turnos.get(shift_id)
+        if not turno_nombre:
+            continue
+
+        nombre = nombre_completo(agent)
+        if nombre:
+            config[turno_nombre].append(nombre)
+
+    for turno, nombres in config.items():
+        config[turno] = sorted(set(nombres), key=normalizar_texto)
+
+    return config
+
+
 def mover_agente(agent_id, shift_id):
     estado = cargar_estado()
     agents = estado.get("agents", {})
@@ -202,6 +253,71 @@ def mover_agente(agent_id, shift_id):
         after=shift_id,
     )
     guardar_estado(estado)
+
+
+def registrar_agentes_desde_dataframe(df):
+    estado = cargar_estado()
+    agents = estado.setdefault("agents", {})
+    assignments = estado.setdefault("assignments", {})
+    nuevos = []
+    actualizados = []
+
+    for _, fila in df.iterrows():
+        first_name = limpiar_campo(fila.get("First Name"))
+        last_name = limpiar_campo(fila.get("Last Name"))
+        display_name = f"{first_name} {last_name}".strip()
+        if not display_name:
+            continue
+
+        user_id = limpiar_campo(fila.get("User ID"))
+        if not user_id:
+            user_id = f"report:{normalizar_texto(display_name)}"
+
+        payload = {
+            "user_id": user_id,
+            "email": limpiar_campo(fila.get("Email")),
+            "first_name": first_name,
+            "last_name": last_name,
+            "role_name": limpiar_campo(fila.get("Role Name")),
+            "system_name": limpiar_campo(fila.get("System Name")),
+            "department_ids": limpiar_campo(fila.get("Department IDs")),
+            "source": "report_csv",
+            "updated_at": _ahora_iso(),
+        }
+
+        if user_id in agents:
+            estaba_activo = agents[user_id].get("active", True)
+            agents[user_id].update(payload)
+            agents[user_id]["active"] = estaba_activo
+            actualizados.append(user_id)
+            continue
+
+        legacy_id = _agent_id_from_name(display_name)
+        if legacy_id in agents:
+            anterior = agents.pop(legacy_id)
+            payload["created_at"] = anterior.get("created_at") or _ahora_iso()
+            payload["active"] = anterior.get("active", True)
+            agents[user_id] = payload
+            assignments[user_id] = assignments.pop(legacy_id, SIN_TURNO_ID)
+            actualizados.append(user_id)
+            continue
+
+        payload["created_at"] = _ahora_iso()
+        payload["active"] = True
+        agents[user_id] = payload
+        assignments[user_id] = SIN_TURNO_ID
+        nuevos.append(user_id)
+
+    if nuevos or actualizados:
+        agregar_historial(
+            estado,
+            "sync_report_csv",
+            f"CSV de reporte sincronizado: {len(nuevos)} nuevos, {len(actualizados)} actualizados.",
+            after={"new": len(nuevos), "updated": len(actualizados)},
+        )
+        guardar_estado(estado)
+
+    return {"nuevos": len(nuevos), "actualizados": len(actualizados)}
 
 
 def set_agente_activo(agent_id, active):

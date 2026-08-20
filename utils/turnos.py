@@ -1,9 +1,9 @@
-from utils.config_turnos import obtener_turnos_fijos
 from utils.transformaciones import limpiar_texto
+from utils.turnos_trabajo_store import obtener_turnos_configurados
 
 
 def cargar_turnos_fijos():
-    return obtener_turnos_fijos()
+    return obtener_turnos_configurados()
 
 
 def normalizar_nombre(valor):

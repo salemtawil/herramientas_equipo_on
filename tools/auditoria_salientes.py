@@ -9,7 +9,7 @@ from flask import Blueprint, Response, current_app, render_template, request
 
 from utils.archivos import _leer_csv_desde_bytes
 from utils.archivos import leer_bytes_archivo_csv
-from utils.config_turnos import obtener_turnos_fijos
+from utils.turnos import cargar_turnos_fijos
 from utils.estado_temporal import cargar_estado_temporal
 from utils.estado_temporal import guardar_estado_temporal
 from utils.estado_temporal import limpiar_estados_temporales_expirados
@@ -526,13 +526,13 @@ def construir_resumen_por_agente(df_casos):
 
 
 def obtener_orden_turnos():
-    return list(obtener_turnos_fijos().keys()) + [TURNO_SIN_TURNO]
+    return list(cargar_turnos_fijos().keys()) + [TURNO_SIN_TURNO]
 
 
 def construir_mapa_agente_turno():
     mapa = {}
 
-    for turno, agentes in obtener_turnos_fijos().items():
+    for turno, agentes in cargar_turnos_fijos().items():
         for agente in agentes:
             clave = normalizar_texto(agente)
             if clave:

@@ -9,7 +9,7 @@
     <div class="page-section-title">
       <div>
         <h1>Reporte de agentes</h1>
-        <p>Los turnos están definidos manualmente en el código. El CSV se procesa temporalmente y no se guarda.</p>
+        <p>Los turnos se toman desde la herramienta Turnos de trabajo. El CSV del reporte solo se procesa temporalmente.</p>
       </div>
       <span class="hero-badge">CSV operativo</span>
     </div>
@@ -38,12 +38,12 @@
 
   <details class="card seccion-desplegable">
     <summary class="titulo-desplegable">
-      <span>Configuración fija de turnos</span>
+      <span>Configuración actual de turnos</span>
       <span class="small">{{ turnos_config|length }} turnos</span>
     </summary>
 
     <div class="top-space">
-      <p class="small">Para cambiar turnos, edita el archivo <strong>utils/config_turnos.py</strong>.</p>
+      <p class="small">Para cambiar turnos, usa la opción <strong>Turnos de trabajo</strong> del menú.</p>
 
       <div class="turno-grid">
         {% for turno, agentes in turnos_config.items() %}
