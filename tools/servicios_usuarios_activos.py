@@ -76,6 +76,21 @@ def _estado_base():
             "progress": "Pendiente",
             "error": None,
         },
+        "chispita": {
+            "system": "chispita",
+            "display_name": "Chispita",
+            "active_users": 0,
+            "running_users": 0,
+            "breakdown": [
+                {"label": "Spark activos", "value": None},
+                {"label": "Instacart activos", "value": None},
+                {"label": "Spark ofertas ganadas hoy", "value": None},
+                {"label": "Instacart ofertas ganadas hoy", "value": None},
+            ],
+            "updated_at": "-",
+            "progress": "Pendiente",
+            "error": None,
+        },
     }
 
 
@@ -230,9 +245,22 @@ def _aplicar_metricas_multiadmin(estado, metricas, ahora):
             new_users=valores.get("new_users"),
             disconnected_users=valores.get("disconnected_users"),
             updated_at=ahora,
-            progress="Completado",
-            error=None,
+            progress=valores.get("progress", "Completado"),
+            error=valores.get("error"),
             **_extraer_metricas_extra(valores),
+        )
+
+    if "chispita" not in metricas:
+        _actualizar_estado(
+            estado,
+            "chispita",
+            display_name="Chispita",
+            updated_at=ahora,
+            progress="Error",
+            error=(
+                "Multiadmin no devolvió Chispita. Revisa las variables "
+                "MULTIADMIN_USERNAME y MULTIADMIN_PASSWORD en Vercel."
+            ),
         )
 
 
@@ -243,6 +271,7 @@ def _marcar_error_multiadmin(estado, ahora, error):
     _actualizar_estado(estado, "complice", updated_at=ahora, progress="Error", error=error)
     _actualizar_estado(estado, "secuaz", updated_at=ahora, progress="Error", error=error)
     _actualizar_estado(estado, "ready4drive", updated_at=ahora, progress="Error", error=error)
+    _actualizar_estado(estado, "chispita", updated_at=ahora, progress="Error", error=error)
 
 
 def _ejecutar_actualizacion_total():

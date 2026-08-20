@@ -806,7 +806,20 @@ def obtener_metricas_multiadmin():
         try:
             return _obtener_metricas_multiadmin_directo()
         except Exception:
-            return _obtener_metricas_multiadmin_legacy()
+            metricas = _obtener_metricas_multiadmin_legacy()
+            if "chispita" not in metricas:
+                metricas["chispita"] = {
+                    "system": "chispita",
+                    "display_name": "Chispita",
+                    "active_users": 0,
+                    "running_users": 0,
+                    "progress": "Error",
+                    "error": (
+                        "No se pudo consultar Chispita desde Multiadmin directo. "
+                        "Revisa MULTIADMIN_USERNAME y MULTIADMIN_PASSWORD en Vercel."
+                    ),
+                }
+            return metricas
     return _obtener_metricas_multiadmin_legacy()
 
 
