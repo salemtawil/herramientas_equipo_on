@@ -255,12 +255,19 @@ def login(username, password):
         else:
             challenge_responses = challenge_parameters(username, response)
 
-        response = client.respond_to_auth_challenge(
-            ClientId=CLIENT_ID,
-            ChallengeName=challenge_name,
-            Session=response["Session"],
-            ChallengeResponses=challenge_responses,
-        )
+        challenge_request = {
+            "ClientId": CLIENT_ID,
+            "ChallengeName": challenge_name,
+            "ChallengeResponses": challenge_responses,
+        }
+        if response.get("Session"):
+            challenge_request["Session"] = response["Session"]
+
+        response = client.respond_to_auth_challenge(**challenge_request)
+
+    if "AuthenticationResult" not in response:
+        keys = ", ".join(response.keys())
+        raise RuntimeError(f"Cognito no devolvio tokens. Campos recibidos: {keys}")
 
     return response["AuthenticationResult"]
 
