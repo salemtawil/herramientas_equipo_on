@@ -6,10 +6,12 @@ import hashlib
 import hmac
 import json
 import os
+import secrets
 
 import boto3
 from botocore import UNSIGNED
 from botocore.config import Config
+from botocore.exceptions import ClientError
 import requests
 
 
@@ -23,6 +25,28 @@ USER_POOL_ID = os.getenv("MULTIADMIN_USER_POOL_ID", "us-east-1_ViIazRdoA")
 REGION = os.getenv("AWS_DEFAULT_REGION", "us-east-1")
 SINCE_EXPIRATION = os.getenv("MULTIADMIN_USERS_SINCE_EXPIRATION", "1746057600000")
 OUTPUT_FILE = ".env.vercel.multiadmin.tokens"
+POOL_NAME = USER_POOL_ID.split("_", 1)[1] if "_" in USER_POOL_ID else USER_POOL_ID
+
+N_HEX = (
+    "FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD1"
+    "29024E088A67CC74020BBEA63B139B22514A08798E3404DD"
+    "EF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245"
+    "E485B576625E7EC6F44C42E9A637ED6B0BFF5CB6F406B7ED"
+    "EE386BFB5A899FA5AE9F24117C4B1FE649286651ECE45B3D"
+    "C2007CB8A163BF0598DA48361C55D39A69163FA8FD24CF5F"
+    "83655D23DCA3AD961C62F356208552BB9ED529077096966D"
+    "670C354E4ABC9804F1746C08CA18217C32905E462E36CE3B"
+    "E39E772C180E86039B2783A2EC07A28FB5C55DF06F4C52C9"
+    "DE2BCBF6955817183995497CEA956AE515D2261898FA051015"
+    "728E5A8AAAC42DAD33170D04507A33A85521ABDF1CBA64EC"
+    "FB850458DBEF0A8AEA71575D060C7DB3970F85A6E1E4C7AB"
+    "F5AE8CDB0933D71E8C94E04A25619DCEE3D2261AD2EE6BF"
+    "12FFA06D98A0864D87602733EC86A64521F2B18177B200CB"
+    "BE117577A615D6C770988C0BAD946E208E24FA074E5AB3143"
+    "DB5BFCE0FD108E4B82D120A93AD2CAFFFFFFFFFFFFFFFF"
+)
+N = int(N_HEX, 16)
+G = 2
 
 
 def secret_hash(username):
@@ -51,6 +75,112 @@ def auth_parameters(username, password):
         },
         username,
     )
+
+
+def hex_hash(hex_value):
+    return hashlib.sha256(bytearray.fromhex(hex_value)).hexdigest()
+
+
+def hex_to_long(hex_value):
+    return int(hex_value, 16)
+
+
+def long_to_hex(value):
+    return f"{value:x}"
+
+
+def pad_hex(value):
+    if isinstance(value, int):
+        value = long_to_hex(value)
+    if len(value) % 2 == 1:
+        value = f"0{value}"
+    if "89ABCDEFabcdef".find(value[0]) != -1:
+        value = f"00{value}"
+    return value
+
+
+def hash_sha256(value):
+    if isinstance(value, str):
+        value = value.encode("utf-8")
+    return hashlib.sha256(value).hexdigest()
+
+
+def compute_hkdf(ikm, salt):
+    prk = hmac.new(salt, ikm, hashlib.sha256).digest()
+    info_bits = bytearray("Caldera Derived Key", "utf-8") + bytearray(chr(1), "utf-8")
+    return hmac.new(prk, info_bits, hashlib.sha256).digest()[:16]
+
+
+def cognito_timestamp():
+    now = datetime.now(timezone.utc)
+    weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    return (
+        f"{weekdays[now.weekday()]} {months[now.month - 1]} {now.day} "
+        f"{now:%H:%M:%S} UTC {now.year}"
+    )
+
+
+class CognitoSrp:
+    def __init__(self, username, password):
+        self.username = username
+        self.password = password
+        self.a = secrets.randbits(1024) % N
+        self.A = pow(G, self.a, N)
+        self.k = hex_to_long(hex_hash(pad_hex(N) + pad_hex(G)))
+
+    def get_auth_params(self):
+        return agregar_secret_hash(
+            {
+                "USERNAME": self.username,
+                "SRP_A": long_to_hex(self.A),
+            },
+            self.username,
+        )
+
+    def get_password_verifier_params(self, challenge):
+        username_for_srp = challenge["USER_ID_FOR_SRP"]
+        salt_hex = challenge["SALT"]
+        srp_b_hex = challenge["SRP_B"]
+        secret_block = base64.b64decode(challenge["SECRET_BLOCK"])
+
+        B = hex_to_long(srp_b_hex)
+        if B % N == 0:
+            raise RuntimeError("Respuesta SRP invalida: SRP_B modulo N es cero.")
+
+        u = hex_to_long(hex_hash(pad_hex(self.A) + pad_hex(B)))
+        if u == 0:
+            raise RuntimeError("Respuesta SRP invalida: U es cero.")
+
+        username_password = f"{POOL_NAME}{username_for_srp}:{self.password}"
+        username_password_hash = hash_sha256(username_password)
+        x = hex_to_long(hex_hash(pad_hex(salt_hex) + username_password_hash))
+        g_mod_pow_xn = pow(G, x, N)
+        int_value2 = (B - self.k * g_mod_pow_xn) % N
+        s_value = pow(int_value2, self.a + u * x, N)
+        hkdf = compute_hkdf(
+            bytearray.fromhex(pad_hex(s_value)),
+            bytearray.fromhex(pad_hex(u)),
+        )
+
+        timestamp = cognito_timestamp()
+        message = bytearray(POOL_NAME, "utf-8")
+        message += bytearray(username_for_srp, "utf-8")
+        message += bytearray(secret_block)
+        message += bytearray(timestamp, "utf-8")
+        signature = base64.b64encode(
+            hmac.new(hkdf, message, hashlib.sha256).digest()
+        ).decode("utf-8")
+
+        return agregar_secret_hash(
+            {
+                "USERNAME": username_for_srp,
+                "PASSWORD_CLAIM_SECRET_BLOCK": challenge["SECRET_BLOCK"],
+                "TIMESTAMP": timestamp,
+                "PASSWORD_CLAIM_SIGNATURE": signature,
+            },
+            username_for_srp,
+        )
 
 
 def challenge_parameters(username, response):
@@ -93,18 +223,43 @@ def login(username, password):
         region_name=REGION,
         config=Config(signature_version=UNSIGNED),
     )
-    response = client.initiate_auth(
-        ClientId=CLIENT_ID,
-        AuthFlow="USER_PASSWORD_AUTH",
-        AuthParameters=auth_parameters(username, password),
-    )
+    try:
+        response = client.initiate_auth(
+            ClientId=CLIENT_ID,
+            AuthFlow="USER_PASSWORD_AUTH",
+            AuthParameters=auth_parameters(username, password),
+        )
+        srp = None
+    except ClientError as error:
+        code = error.response.get("Error", {}).get("Code")
+        message = error.response.get("Error", {}).get("Message", "")
+        if code != "InvalidParameterException" or "USER_PASSWORD_AUTH" not in message:
+            raise
+
+        print("El cliente no permite password directo. Probando login SRP...")
+        srp = CognitoSrp(username, password)
+        response = client.initiate_auth(
+            ClientId=CLIENT_ID,
+            AuthFlow="USER_SRP_AUTH",
+            AuthParameters=srp.get_auth_params(),
+        )
 
     while "ChallengeName" in response:
+        challenge_name = response["ChallengeName"]
+        if challenge_name == "PASSWORD_VERIFIER":
+            if srp is None:
+                raise RuntimeError("Cognito pidio PASSWORD_VERIFIER sin flujo SRP activo.")
+            challenge_responses = srp.get_password_verifier_params(
+                response["ChallengeParameters"]
+            )
+        else:
+            challenge_responses = challenge_parameters(username, response)
+
         response = client.respond_to_auth_challenge(
             ClientId=CLIENT_ID,
-            ChallengeName=response["ChallengeName"],
+            ChallengeName=challenge_name,
             Session=response["Session"],
-            ChallengeResponses=challenge_parameters(username, response),
+            ChallengeResponses=challenge_responses,
         )
 
     return response["AuthenticationResult"]
