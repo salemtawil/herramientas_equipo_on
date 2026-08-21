@@ -1527,6 +1527,17 @@ th.desc::after {
   max-width: 100%;
 }
 
+.auditoria-salientes-page .auditoria-rule-field {
+  display: grid;
+  gap: 6px;
+  min-width: 180px;
+}
+
+.auditoria-salientes-page .auditoria-rule-field input[type="number"] {
+  width: 100%;
+  max-width: 220px;
+}
+
 .break-admin-page .break-chip-list,
 .break-admin-page .slot-forms-grid,
 .break-admin-page .shift-forms-grid,

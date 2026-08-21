@@ -42,6 +42,13 @@ KNOWN_SYSTEM_KEYS = {
     "chispita",
 }
 
+
+def _normalizar_system_key(value):
+    return str(value or "").strip().lower()
+
+
+KNOWN_SYSTEM_KEYS_NORMALIZED = {_normalizar_system_key(key) for key in KNOWN_SYSTEM_KEYS}
+
 DIRECT_SYSTEMS = {
     "Compinche": {
         "api_key": "compinche",
@@ -792,7 +799,7 @@ def _obtener_metricas_multiadmin_legacy():
             )
 
     for key, value in data.items():
-        if key in KNOWN_SYSTEM_KEYS:
+        if _normalizar_system_key(key) in KNOWN_SYSTEM_KEYS_NORMALIZED:
             continue
         if not isinstance(value, dict) or ("active" not in value and "running" not in value):
             continue

@@ -10,6 +10,7 @@ from flask import Blueprint, Response, current_app, render_template, request
 from utils.archivos import _leer_csv_desde_bytes
 from utils.archivos import leer_bytes_archivo_csv
 from utils.turnos import cargar_turnos_fijos
+from utils.turnos import obtener_turno
 from utils.estado_temporal import cargar_estado_temporal
 from utils.estado_temporal import guardar_estado_temporal
 from utils.estado_temporal import limpiar_estados_temporales_expirados
@@ -19,6 +20,8 @@ logger = logging.getLogger(__name__)
 FORM_KEY_PAYLOAD = "auditoria_salientes_payload"
 MAX_FILAS_VISTA_PREVIA = 500
 VENTANA_CASO_MINUTOS = 10
+MIN_SEGUNDO_INTENTO_SIN_VM_DEFAULT = 10
+MAX_SEGUNDO_INTENTO_SIN_VM = 14
 TURNO_SIN_TURNO = "Sin turno"
 STATE_NAMESPACE = "auditoria_salientes"
 STATE_TTL_HOURS = 24
@@ -28,6 +31,7 @@ ESTADO_CONTESTADA = "Cumple por contestada"
 ESTADO_COMPLETO = "Cumple completo"
 ESTADO_SEGUNDO_INTENTO = "Cumple segundo intento, sin voicemail probable"
 ESTADO_NO_CUMPLE = "No cumple"
+ESTADO_NO_AUDITABLE = "No auditable"
 
 COLUMNAS_DETALLE = [
     "Agente",
@@ -38,6 +42,7 @@ COLUMNAS_DETALLE = [
     "Hubo contestada",
     "Voicemail probable",
     "Estado final",
+    "Observacion",
     "TicketId",
 ]
 
@@ -48,10 +53,14 @@ COLUMNAS_RESUMEN_TURNO = [
     "Cumple completo",
     "Cumple segundo intento sin voicemail probable",
     "No cumple",
+    "No auditable",
     "Porcentaje de cumplimiento",
 ]
 
 COLUMNAS_CASOS_INTERNAS = COLUMNAS_DETALLE + ["_estado", "_agente"]
+
+MOTIVO_DATOS_INSUFICIENTES = "Datos insuficientes"
+MOTIVO_DUPLICADO_EXACTO = "Duplicado exacto no usado para cumplimiento"
 
 ALIAS_COLUMNAS = {
     "agente": [
@@ -266,14 +275,36 @@ def parsear_duracion_segundos(valor):
 
 def parsear_fechas(serie):
     serie_texto = serie.apply(limpiar_texto)
-    fechas = pd.to_datetime(serie_texto, errors="coerce", dayfirst=True)
-    faltantes = fechas.isna()
-    if faltantes.any():
-        fechas.loc[faltantes] = pd.to_datetime(
-            serie_texto.loc[faltantes],
+    fechas = pd.Series(pd.NaT, index=serie.index, dtype="datetime64[ns]")
+    tiene_valor = serie_texto.ne("")
+    es_iso = serie_texto.str.match(r"^\d{4}-\d{1,2}-\d{1,2}(?:[ T].*)?$", na=False)
+
+    if (tiene_valor & es_iso).any():
+        fechas.loc[tiene_valor & es_iso] = pd.to_datetime(
+            serie_texto.loc[tiene_valor & es_iso],
+            errors="coerce",
+            format="ISO8601",
+            dayfirst=False,
+            utc=True,
+        ).dt.tz_convert(None)
+
+    pendientes = tiene_valor & fechas.isna() & ~es_iso
+    if pendientes.any():
+        fechas.loc[pendientes] = pd.to_datetime(
+            serie_texto.loc[pendientes],
+            errors="coerce",
+            dayfirst=True,
+            utc=True,
+        ).dt.tz_convert(None)
+
+    pendientes = tiene_valor & fechas.isna() & ~es_iso
+    if pendientes.any():
+        fechas.loc[pendientes] = pd.to_datetime(
+            serie_texto.loc[pendientes],
             errors="coerce",
             dayfirst=False,
-        )
+            utc=True,
+        ).dt.tz_convert(None)
     return fechas
 
 
@@ -324,11 +355,16 @@ def formatear_fecha(valor, fallback=""):
     return valor.strftime("%Y-%m-%d %H:%M:%S")
 
 
-def clasificar_caso(llamadas):
+def clasificar_caso(llamadas, min_segundo_intento_sin_vm=MIN_SEGUNDO_INTENTO_SIN_VM_DEFAULT):
     duraciones = [llamada["duracion_segundos"] for llamada in llamadas]
     hubo_contestada = any(_llamada_contestada(llamada) for llamada in llamadas)
     voicemail_probable = any(
         duracion is not None and 15 <= duracion <= 75
+        for duracion in duraciones[1:]
+    )
+    segundo_intento_valido_sin_vm = any(
+        duracion is not None
+        and min_segundo_intento_sin_vm <= duracion <= MAX_SEGUNDO_INTENTO_SIN_VM
         for duracion in duraciones[1:]
     )
 
@@ -341,16 +377,26 @@ def clasificar_caso(llamadas):
     if voicemail_probable:
         return ESTADO_COMPLETO, False, True
 
-    return ESTADO_SEGUNDO_INTENTO, False, False
+    if segundo_intento_valido_sin_vm:
+        return ESTADO_SEGUNDO_INTENTO, False, False
+
+    return ESTADO_NO_CUMPLE, False, False
 
 
 def _llamada_contestada(llamada):
     duracion = llamada.get("duracion_segundos")
-    return duracion is not None and duracion > 75
+    return bool(llamada.get("fue_contestada")) or (duracion is not None and duracion > 75)
 
 
-def construir_caso_desde_llamadas(llamadas, observacion=""):
-    estado, hubo_contestada, voicemail_probable = clasificar_caso(llamadas)
+def construir_caso_desde_llamadas(
+    llamadas,
+    observacion="",
+    min_segundo_intento_sin_vm=MIN_SEGUNDO_INTENTO_SIN_VM_DEFAULT,
+):
+    estado, hubo_contestada, voicemail_probable = clasificar_caso(
+        llamadas,
+        min_segundo_intento_sin_vm=min_segundo_intento_sin_vm,
+    )
     primera = llamadas[0]
     tickets = [llamada["ticket_id"] for llamada in llamadas if llamada["ticket_id"]]
     ticket_texto = ", ".join(dict.fromkeys(tickets))
@@ -364,6 +410,7 @@ def construir_caso_desde_llamadas(llamadas, observacion=""):
         "Hubo contestada": "Si" if hubo_contestada else "No",
         "Voicemail probable": "Si" if voicemail_probable else "No",
         "Estado final": estado,
+        "Observacion": observacion,
         "TicketId": ticket_texto,
         "_estado": estado,
         "_agente": primera["agente"] or "Sin agente",
@@ -378,18 +425,20 @@ def construir_caso_ambiguo_desde_fila(fila, motivo):
         "fecha_original": fila.get("Fecha original", ""),
         "duracion_segundos": fila.get("Duracion segundos"),
         "ticket_id": fila.get("TicketId", ""),
+        "fue_contestada": fila.get("Fue contestada", False),
     }
     caso = construir_caso_desde_llamadas([llamada], observacion=motivo)
     caso["Hubo contestada"] = "No"
     caso["Voicemail probable"] = "No"
-    caso["Estado final"] = ESTADO_NO_CUMPLE
-    caso["_estado"] = ESTADO_NO_CUMPLE
+    caso["Estado final"] = ESTADO_NO_AUDITABLE
+    caso["_estado"] = ESTADO_NO_AUDITABLE
     return caso
 
 
-def analizar_casos(df_preparado):
+def analizar_casos(df_preparado, min_segundo_intento_sin_vm=MIN_SEGUNDO_INTENTO_SIN_VM_DEFAULT):
     casos = []
     validas = []
+    claves_vistas = set()
 
     for fila in df_preparado.to_dict(orient="records"):
         faltan_datos = (
@@ -399,10 +448,26 @@ def analizar_casos(df_preparado):
             or pd.isna(fila["Duracion segundos"])
         )
 
+        clave_dedupe = None
+        if not faltan_datos:
+            fecha = fila["Fecha llamada"]
+            clave_dedupe = (
+                normalizar_texto(fila["Agente"]),
+                fila["Numero normalizado"],
+                fecha.isoformat() if pd.notna(fecha) else "",
+                fila["Duracion segundos"],
+                fila["TicketId"],
+            )
+
         if faltan_datos:
-            casos.append(construir_caso_ambiguo_desde_fila(fila, "Datos insuficientes"))
+            casos.append(construir_caso_ambiguo_desde_fila(fila, MOTIVO_DATOS_INSUFICIENTES))
             continue
 
+        if clave_dedupe in claves_vistas:
+            casos.append(construir_caso_ambiguo_desde_fila(fila, MOTIVO_DUPLICADO_EXACTO))
+            continue
+
+        claves_vistas.add(clave_dedupe)
         validas.append(
             {
                 "agente": fila["Agente"],
@@ -412,7 +477,9 @@ def analizar_casos(df_preparado):
                 "fecha_original": fila["Fecha original"],
                 "duracion_segundos": fila["Duracion segundos"],
                 "ticket_id": fila["TicketId"],
-                "fue_contestada": pd.notna(fila["Duracion segundos"]) and fila["Duracion segundos"] > 75,
+                "fue_contestada": bool(fila.get("Fue contestada")) or (
+                    pd.notna(fila["Duracion segundos"]) and fila["Duracion segundos"] > 75
+                ),
             }
         )
 
@@ -444,7 +511,12 @@ def analizar_casos(df_preparado):
                 llamadas_caso.append(actual)
                 siguiente += 1
 
-            casos.append(construir_caso_desde_llamadas(llamadas_caso))
+            casos.append(
+                construir_caso_desde_llamadas(
+                    llamadas_caso,
+                    min_segundo_intento_sin_vm=min_segundo_intento_sin_vm,
+                )
+            )
             indice = siguiente
 
     if not casos:
@@ -463,8 +535,35 @@ def porcentaje_cumplimiento(cumplidos, total):
     return round((cumplidos / total) * 100, 2)
 
 
+def parsear_min_segundo_intento(valor):
+    try:
+        numero = int(float(str(valor or "").strip()))
+    except (TypeError, ValueError):
+        return MIN_SEGUNDO_INTENTO_SIN_VM_DEFAULT
+
+    if numero < 1:
+        return 1
+    if numero > MAX_SEGUNDO_INTENTO_SIN_VM:
+        return MAX_SEGUNDO_INTENTO_SIN_VM
+    return numero
+
+
+def construir_configuracion_auditoria(min_segundo_intento_sin_vm=None):
+    return {
+        "min_segundo_intento_sin_vm": parsear_min_segundo_intento(
+            min_segundo_intento_sin_vm
+            if min_segundo_intento_sin_vm is not None
+            else MIN_SEGUNDO_INTENTO_SIN_VM_DEFAULT
+        ),
+        "max_segundo_intento_sin_vm": MAX_SEGUNDO_INTENTO_SIN_VM,
+        "min_voicemail_probable": 15,
+        "max_voicemail_probable": 75,
+    }
+
+
 def construir_resumen_general(df_casos):
-    total = int(len(df_casos))
+    no_auditable = int((df_casos["_estado"] == ESTADO_NO_AUDITABLE).sum())
+    total = int(len(df_casos) - no_auditable)
     contestada = int((df_casos["_estado"] == ESTADO_CONTESTADA).sum())
     completo = int((df_casos["_estado"] == ESTADO_COMPLETO).sum())
     segundo = int((df_casos["_estado"] == ESTADO_SEGUNDO_INTENTO).sum())
@@ -473,12 +572,109 @@ def construir_resumen_general(df_casos):
 
     return {
         "Total de casos evaluados": total,
+        "No auditable": no_auditable,
         "Cumple por contestada": contestada,
         "Cumple completo": completo,
         "Cumple segundo intento sin voicemail probable": segundo,
         "No cumple": no_cumple,
         "Porcentaje general de cumplimiento": porcentaje_cumplimiento(cumplidos, total),
     }
+
+
+def construir_reconciliacion(df_preparado, df_casos):
+    total_filas = int(len(df_preparado))
+    no_auditables = int((df_casos["_estado"] == ESTADO_NO_AUDITABLE).sum())
+    datos_insuficientes = int((df_casos["Observacion"] == MOTIVO_DATOS_INSUFICIENTES).sum())
+    duplicados_exactos = int((df_casos["Observacion"] == MOTIVO_DUPLICADO_EXACTO).sum())
+    filas_validas_usadas = max(total_filas - datos_insuficientes - duplicados_exactos, 0)
+    casos_evaluados = int(len(df_casos) - no_auditables)
+
+    return {
+        "Filas recibidas": total_filas,
+        "Filas validas usadas": filas_validas_usadas,
+        "Datos insuficientes": datos_insuficientes,
+        "Duplicados exactos": duplicados_exactos,
+        "No auditables": no_auditables,
+        "Casos evaluados": casos_evaluados,
+        "Casos finales totales": int(len(df_casos)),
+    }
+
+
+def construir_reconciliacion_desde_casos(df_casos):
+    no_auditables = int((df_casos["_estado"] == ESTADO_NO_AUDITABLE).sum())
+    datos_insuficientes = int((df_casos["Observacion"] == MOTIVO_DATOS_INSUFICIENTES).sum())
+    duplicados_exactos = int((df_casos["Observacion"] == MOTIVO_DUPLICADO_EXACTO).sum())
+    casos_evaluados = int(len(df_casos) - no_auditables)
+
+    return {
+        "Filas recibidas": "",
+        "Filas validas usadas": "",
+        "Datos insuficientes": datos_insuficientes,
+        "Duplicados exactos": duplicados_exactos,
+        "No auditables": no_auditables,
+        "Casos evaluados": casos_evaluados,
+        "Casos finales totales": int(len(df_casos)),
+    }
+
+
+def construir_advertencias_calidad(reconciliacion):
+    if not reconciliacion:
+        return []
+
+    advertencias = []
+    datos_insuficientes = int(reconciliacion.get("Datos insuficientes") or 0)
+    duplicados_exactos = int(reconciliacion.get("Duplicados exactos") or 0)
+    no_auditables = int(reconciliacion.get("No auditables") or 0)
+    filas_recibidas = reconciliacion.get("Filas recibidas")
+    casos_evaluados = int(reconciliacion.get("Casos evaluados") or 0)
+
+    if datos_insuficientes:
+        advertencias.append(
+            f"{datos_insuficientes} fila(s) quedaron no auditables por datos insuficientes."
+        )
+    if duplicados_exactos:
+        advertencias.append(
+            f"{duplicados_exactos} duplicado(s) exactos no se usaron para calcular cumplimiento."
+        )
+    if no_auditables and not datos_insuficientes and not duplicados_exactos:
+        advertencias.append(f"{no_auditables} caso(s) quedaron no auditables.")
+    if filas_recibidas != "" and filas_recibidas is not None and int(filas_recibidas) == 0:
+        advertencias.append("El CSV no contiene filas de llamadas para evaluar.")
+    if casos_evaluados == 0 and no_auditables:
+        advertencias.append("No hay casos evaluables; el porcentaje de cumplimiento no debe interpretarse.")
+
+    return advertencias
+
+
+def construir_advertencias_columnas(columnas):
+    advertencias = []
+    if not columnas.get("ticket_id"):
+        advertencias.append("El CSV no trae TicketId; la trazabilidad por caso queda limitada.")
+    if not columnas.get("fecha_contestada"):
+        advertencias.append(
+            "El CSV no trae fecha de contestación; las contestadas se inferirán solo por duración."
+        )
+    return advertencias
+
+
+def dataframe_reconciliacion(reconciliacion, advertencias_calidad=None, configuracion=None):
+    filas = [
+        {"Metrica": nombre, "Valor": valor}
+        for nombre, valor in (reconciliacion or {}).items()
+    ]
+
+    if configuracion:
+        filas.append(
+            {
+                "Metrica": "Minimo 2do intento sin VM",
+                "Valor": configuracion.get("min_segundo_intento_sin_vm"),
+            }
+        )
+
+    for indice, advertencia in enumerate(advertencias_calidad or [], start=1):
+        filas.append({"Metrica": f"Advertencia {indice}", "Valor": advertencia})
+
+    return pd.DataFrame(filas, columns=["Metrica", "Valor"])
 
 
 def construir_resumen_por_agente(df_casos):
@@ -492,6 +688,7 @@ def construir_resumen_por_agente(df_casos):
                 "Cumple completo",
                 "Cumple segundo intento sin voicemail probable",
                 "No cumple",
+                "No auditable",
                 "Porcentaje de cumplimiento",
             ]
         )
@@ -499,7 +696,8 @@ def construir_resumen_por_agente(df_casos):
     filas = []
 
     for agente, grupo in df_casos.groupby("_agente", dropna=False):
-        total = int(len(grupo))
+        no_auditable = int((grupo["_estado"] == ESTADO_NO_AUDITABLE).sum())
+        total = int(len(grupo) - no_auditable)
         contestada = int((grupo["_estado"] == ESTADO_CONTESTADA).sum())
         completo = int((grupo["_estado"] == ESTADO_COMPLETO).sum())
         segundo = int((grupo["_estado"] == ESTADO_SEGUNDO_INTENTO).sum())
@@ -515,6 +713,7 @@ def construir_resumen_por_agente(df_casos):
                 "Cumple completo": completo,
                 "Cumple segundo intento sin voicemail probable": segundo,
                 "No cumple": no_cumple,
+                "No auditable": no_auditable,
                 "Porcentaje de cumplimiento": porcentaje_cumplimiento(cumplidos, total),
             }
         )
@@ -541,6 +740,22 @@ def construir_mapa_agente_turno():
     return mapa
 
 
+def obtener_turno_auditoria(agente, mapa_agente_turno=None, turnos_config=None):
+    if mapa_agente_turno is None:
+        mapa_agente_turno = construir_mapa_agente_turno()
+    if turnos_config is None:
+        turnos_config = cargar_turnos_fijos()
+
+    clave = normalizar_texto(agente)
+    if clave in mapa_agente_turno:
+        return mapa_agente_turno[clave]
+
+    turno = obtener_turno(agente, turnos_config)
+    if turno == "Sin asignar":
+        return TURNO_SIN_TURNO
+    return turno
+
+
 def asignar_turnos_a_casos(df_casos):
     if df_casos.empty:
         df_resultado = df_casos.reindex(columns=COLUMNAS_CASOS_INTERNAS).copy()
@@ -548,9 +763,10 @@ def asignar_turnos_a_casos(df_casos):
         return df_resultado
 
     mapa_agente_turno = construir_mapa_agente_turno()
+    turnos_config = cargar_turnos_fijos()
     df_resultado = df_casos.copy()
     df_resultado["_turno"] = df_resultado["_agente"].apply(
-        lambda agente: mapa_agente_turno.get(normalizar_texto(agente), TURNO_SIN_TURNO)
+        lambda agente: obtener_turno_auditoria(agente, mapa_agente_turno, turnos_config)
     )
     return df_resultado
 
@@ -570,7 +786,8 @@ def construir_resumen_por_turno(df_casos):
     filas = []
 
     for turno, grupo in df_casos.groupby("_turno", dropna=False):
-        total = int(len(grupo))
+        no_auditable = int((grupo["_estado"] == ESTADO_NO_AUDITABLE).sum())
+        total = int(len(grupo) - no_auditable)
         contestada = int((grupo["_estado"] == ESTADO_CONTESTADA).sum())
         completo = int((grupo["_estado"] == ESTADO_COMPLETO).sum())
         segundo = int((grupo["_estado"] == ESTADO_SEGUNDO_INTENTO).sum())
@@ -585,6 +802,7 @@ def construir_resumen_por_turno(df_casos):
                 "Cumple completo": completo,
                 "Cumple segundo intento sin voicemail probable": segundo,
                 "No cumple": no_cumple,
+                "No auditable": no_auditable,
                 "Porcentaje de cumplimiento": porcentaje_cumplimiento(cumplidos, total),
             }
         )
@@ -609,10 +827,18 @@ def respuesta_csv_desde_df(df, nombre_archivo):
     )
 
 
-def serializar_resultado_auditoria(df_casos):
+def serializar_resultado_auditoria(
+    df_casos,
+    reconciliacion=None,
+    configuracion=None,
+    advertencias_calidad=None,
+):
     return guardar_estado_temporal(
         {
             "casos": df_casos.to_dict(orient="records"),
+            "reconciliacion": reconciliacion or construir_reconciliacion_desde_casos(df_casos),
+            "configuracion": configuracion or construir_configuracion_auditoria(),
+            "advertencias_calidad": advertencias_calidad or [],
         },
         secret_key=current_app.secret_key,
         salt="auditoria-salientes-payload",
@@ -645,7 +871,69 @@ def cargar_resultado_auditoria_desde_payload(payload):
     if df_casos.empty:
         return pd.DataFrame(columns=COLUMNAS_CASOS_INTERNAS)
 
+    for columna in COLUMNAS_CASOS_INTERNAS:
+        if columna not in df_casos.columns:
+            df_casos[columna] = ""
+
     return df_casos
+
+
+def cargar_reconciliacion_desde_payload(payload, df_casos=None):
+    if not payload:
+        return None
+
+    item = cargar_estado_temporal(
+        payload,
+        secret_key=current_app.secret_key,
+        salt="auditoria-salientes-payload",
+        namespace=STATE_NAMESPACE,
+    )
+    if not item:
+        return construir_reconciliacion_desde_casos(df_casos) if df_casos is not None else None
+
+    reconciliacion = item.get("reconciliacion") if isinstance(item, dict) else None
+    if isinstance(reconciliacion, dict):
+        return reconciliacion
+
+    return construir_reconciliacion_desde_casos(df_casos) if df_casos is not None else None
+
+
+def cargar_configuracion_desde_payload(payload):
+    if not payload:
+        return construir_configuracion_auditoria()
+
+    item = cargar_estado_temporal(
+        payload,
+        secret_key=current_app.secret_key,
+        salt="auditoria-salientes-payload",
+        namespace=STATE_NAMESPACE,
+    )
+    if not item or not isinstance(item, dict):
+        return construir_configuracion_auditoria()
+
+    configuracion = item.get("configuracion")
+    if not isinstance(configuracion, dict):
+        return construir_configuracion_auditoria()
+
+    return construir_configuracion_auditoria(
+        configuracion.get("min_segundo_intento_sin_vm")
+    )
+
+
+def cargar_advertencias_calidad_desde_payload(payload, reconciliacion=None):
+    if not payload:
+        return construir_advertencias_calidad(reconciliacion)
+
+    item = cargar_estado_temporal(
+        payload,
+        secret_key=current_app.secret_key,
+        salt="auditoria-salientes-payload",
+        namespace=STATE_NAMESPACE,
+    )
+    if isinstance(item, dict) and isinstance(item.get("advertencias_calidad"), list):
+        return item["advertencias_calidad"]
+
+    return construir_advertencias_calidad(reconciliacion)
 
 
 @auditoria_salientes_bp.route("/auditoria-salientes", methods=["GET", "POST"])
@@ -661,6 +949,9 @@ def auditoria_salientes():
     columnas_resumen_agente = None
     columnas_resumen_turno = COLUMNAS_RESUMEN_TURNO
     columnas_detalle = COLUMNAS_DETALLE
+    reconciliacion = None
+    advertencias_calidad = []
+    configuracion_auditoria = construir_configuracion_auditoria()
     payload_cache = ""
     turnos_disponibles = obtener_orden_turnos()
     turnos_seleccionados = turnos_disponibles.copy()
@@ -675,10 +966,30 @@ def auditoria_salientes():
                 if not archivo or not archivo.filename:
                     advertencia = "Selecciona un archivo CSV."
                 else:
+                    configuracion_auditoria = construir_configuracion_auditoria(
+                        request.form.get("min_segundo_intento_sin_vm")
+                    )
                     df = leer_csv_historial(archivo)
                     df_preparado, _columnas = preparar_dataframe_historial(df)
-                    df_casos = asignar_turnos_a_casos(analizar_casos(df_preparado))
-                    payload_cache = serializar_resultado_auditoria(df_casos)
+                    df_casos = asignar_turnos_a_casos(
+                        analizar_casos(
+                            df_preparado,
+                            min_segundo_intento_sin_vm=configuracion_auditoria[
+                                "min_segundo_intento_sin_vm"
+                            ],
+                        )
+                    )
+                    reconciliacion = construir_reconciliacion(df_preparado, df_casos)
+                    advertencias_calidad = (
+                        construir_advertencias_calidad(reconciliacion)
+                        + construir_advertencias_columnas(_columnas)
+                    )
+                    payload_cache = serializar_resultado_auditoria(
+                        df_casos,
+                        reconciliacion,
+                        configuracion_auditoria,
+                        advertencias_calidad,
+                    )
 
                     resumen_general = construir_resumen_general(df_casos)
 
@@ -699,6 +1010,12 @@ def auditoria_salientes():
             else:
                 payload_cache = (request.form.get(FORM_KEY_PAYLOAD) or "").strip()
                 df_casos = cargar_resultado_auditoria_desde_payload(payload_cache)
+                reconciliacion = cargar_reconciliacion_desde_payload(payload_cache, df_casos)
+                configuracion_auditoria = cargar_configuracion_desde_payload(payload_cache)
+                advertencias_calidad = cargar_advertencias_calidad_desde_payload(
+                    payload_cache,
+                    reconciliacion,
+                )
                 if request.form.get("usar_filtro_turnos") == "1":
                     turnos_seleccionados = request.form.getlist("turnos")
                 elif accion == "limpiar_filtro_turnos":
@@ -724,6 +1041,20 @@ def auditoria_salientes():
                         construir_resumen_por_turno(df_casos_filtrado_turnos),
                         "auditoria_salientes_resumen_turno.csv",
                     )
+                elif accion == "descargar_reconciliacion":
+                    return respuesta_csv_desde_df(
+                        dataframe_reconciliacion(
+                            reconciliacion,
+                            advertencias_calidad,
+                            configuracion_auditoria,
+                        ),
+                        "auditoria_salientes_reconciliacion.csv",
+                    )
+                elif accion == "descargar_no_auditables":
+                    return respuesta_csv_desde_df(
+                        df_casos[df_casos["_estado"] == ESTADO_NO_AUDITABLE][COLUMNAS_DETALLE],
+                        "auditoria_salientes_no_auditables.csv",
+                    )
                 elif accion == "filtrar_turnos":
                     pass
                 elif accion == "limpiar_filtro_turnos":
@@ -735,6 +1066,12 @@ def auditoria_salientes():
                 df_casos = cargar_resultado_auditoria_desde_payload(payload_cache)
                 if df_casos is not None:
                     resumen_general = construir_resumen_general(df_casos)
+                    if reconciliacion is None:
+                        reconciliacion = cargar_reconciliacion_desde_payload(payload_cache, df_casos)
+                    advertencias_calidad = cargar_advertencias_calidad_desde_payload(
+                        payload_cache,
+                        reconciliacion,
+                    )
                     df_resumen_agente = construir_resumen_por_agente(df_casos)
                     columnas_resumen_agente = list(df_resumen_agente.columns)
                     resumen_agente = df_resumen_agente.to_dict(orient="records")
@@ -762,6 +1099,9 @@ def auditoria_salientes():
         columnas_resumen_turno=columnas_resumen_turno,
         detalle_casos=detalle_casos,
         columnas_detalle=columnas_detalle,
+        reconciliacion=reconciliacion,
+        advertencias_calidad=advertencias_calidad,
+        configuracion_auditoria=configuracion_auditoria,
         payload_cache=payload_cache,
         turnos_disponibles=turnos_disponibles,
         turnos_seleccionados=turnos_seleccionados,

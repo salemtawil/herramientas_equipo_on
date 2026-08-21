@@ -68,7 +68,9 @@ class UsuariosActivosTests(unittest.TestCase):
             "nuevo": {"active": 0, "running": 0},
         }
 
-        with patch("tools.api_multiadmin.requests.get") as request_get:
+        with patch("tools.api_multiadmin._hay_config_directa_multiadmin", return_value=False), patch(
+            "tools.api_multiadmin.requests.get"
+        ) as request_get:
             response = Mock()
             response.json.return_value = payload
             request_get.return_value = response

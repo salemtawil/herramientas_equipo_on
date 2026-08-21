@@ -147,6 +147,19 @@ OLLAMA_WEEKLY_REPORT_MODEL=qwen2.5:7b
 - El repo contiene una carpeta `tools/trash/` con scripts archivados que no forman parte del runtime activo.
 - Las variables y dependencias asociadas a `Paripe` quedaron fuera de la documentación del runtime activo; hoy solo viven en scripts archivados dentro de `tools/trash/`.
 
+## Auditoría de salientes
+
+- La herramienta espera un CSV ya filtrado a llamadas salientes.
+- Agrupa casos por agente, número normalizado y una ventana de `10 minutos` desde la primera llamada.
+- Una llamada se considera contestada si trae fecha de contestación (`dateAnswered` o alias equivalente) o si dura más de `75 segundos`.
+- Desde el segundo intento, una duración entre `15` y `75 segundos` se marca como voicemail probable y cuenta como cumplimiento completo.
+- El segundo intento sin voicemail cuenta como cumplimiento solo si dura entre el mínimo configurable en pantalla y `14 segundos`; el mínimo por defecto es `10 segundos`.
+- Filas con agente, número, fecha o duración insuficiente quedan como `No auditable` y no entran en el denominador del cumplimiento.
+- Duplicados exactos por agente, número, fecha, duración y `TicketId` quedan como `No auditable` para evitar falsos segundos intentos.
+- La pantalla muestra reconciliación de filas recibidas, filas válidas usadas, duplicados, no auditables y casos finales. También permite descargar la reconciliación y los casos no auditables.
+- Si faltan columnas opcionales como `TicketId` o fecha de contestación, la herramienta advierte que la trazabilidad o la clasificación tendrá menos evidencia.
+- La asignación de turno usa coincidencia exacta de nombre y luego coincidencias flexibles por primer nombre/prefijo según la configuración de turnos.
+
 ## Límites de CSV
 
 - Los CSV subidos se validan antes de procesarse con pandas.
