@@ -1,4 +1,5 @@
 import io
+import gzip
 import os
 import sys
 import unittest
@@ -55,6 +56,29 @@ class LeerCsvSubidoTests(unittest.TestCase):
     def test_rechaza_archivo_mayor_al_limite(self):
         contenido = b"123456"
         archivo = FileStorage(stream=io.BytesIO(contenido), filename="grande.csv")
+
+        with self.assertRaises(ValueError) as error:
+            leer_bytes_archivo_csv(archivo, max_bytes=5)
+
+        self.assertIn("supera el limite permitido", str(error.exception))
+
+    def test_lee_csv_comprimido_gzip(self):
+        contenido = (
+            "First Name,Last Name,Calls,Outgoing calls,Missed calls,Call seconds,Outgoing call seconds\n"
+            "Ana,Perez,3,1,0,120,60\n"
+        ).encode("utf-8")
+        comprimido = gzip.compress(contenido)
+        archivo = FileStorage(stream=io.BytesIO(comprimido), filename="reporte.csv.gz")
+
+        df = leer_csv_subido(archivo)
+
+        self.assertIn("First Name", df.columns)
+        self.assertEqual(1, len(df))
+        self.assertEqual("Ana", df.iloc[0]["First Name"])
+
+    def test_rechaza_gzip_si_descomprimido_supera_limite(self):
+        comprimido = gzip.compress(b"123456")
+        archivo = FileStorage(stream=io.BytesIO(comprimido), filename="grande.csv.gz")
 
         with self.assertRaises(ValueError) as error:
             leer_bytes_archivo_csv(archivo, max_bytes=5)

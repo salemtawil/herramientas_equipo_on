@@ -45,10 +45,10 @@
       <span class="hero-badge hero-badge-soft">1 archivo</span>
     </div>
 
-    <form method="post" enctype="multipart/form-data" data-processing-message="Analizando historial de llamadas y agrupando casos...">
+    <form method="post" enctype="multipart/form-data" data-processing-message="Analizando historial de llamadas y agrupando casos..." data-compress-upload="gzip">
       <input type="hidden" name="accion" value="analizar_csv">
       <div class="row auditoria-upload-row">
-        <div><input type="file" name="archivo" accept=".csv"></div>
+        <div><input type="file" name="archivo" accept=".csv,.gz,.csv.gz"></div>
         <div class="auditoria-rule-field">
           <label class="small" for="min-segundo-intento">Mínimo 2do intento sin VM</label>
           <input

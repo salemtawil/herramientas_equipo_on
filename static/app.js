@@ -149,6 +149,14 @@
     overlay.setAttribute("aria-hidden", "false");
   }
 
+  function hideProcessingOverlay() {
+    const overlay = document.getElementById("global-processing-overlay");
+    if (!overlay) return;
+
+    overlay.classList.remove("is-visible");
+    overlay.setAttribute("aria-hidden", "true");
+  }
+
   function disableFormControls(form, submitter) {
     window.setTimeout(() => {
       const elements = form.querySelectorAll("button, input, select, textarea");
@@ -179,11 +187,69 @@
     });
   }
 
+  async function comprimirArchivoGzip(file) {
+    const gzipStream = file.stream().pipeThrough(new CompressionStream("gzip"));
+    const compressedBlob = await new Response(gzipStream).blob();
+    return new File([compressedBlob], `${file.name}.gz`, {
+      type: "application/gzip",
+      lastModified: file.lastModified,
+    });
+  }
+
+  function initCompressedUploadForms() {
+    document.querySelectorAll("form[data-compress-upload='gzip']").forEach((form) => {
+      form.addEventListener("submit", async (event) => {
+        if (form.dataset.compressedSubmitting === "true") {
+          delete form.dataset.compressedSubmitting;
+          return;
+        }
+
+        const input = form.querySelector("input[type='file']");
+        const file = input?.files?.[0];
+        if (!file || file.name.toLowerCase().endsWith(".gz")) return;
+
+        const threshold = Number.parseInt(form.dataset.compressMinBytes || "4194304", 10);
+        if (file.size < threshold) return;
+
+        event.preventDefault();
+        event.stopImmediatePropagation();
+
+        if (!("CompressionStream" in window) || !("DataTransfer" in window)) {
+          window.alert(
+            "Este archivo es grande. Comprímelo como .csv.gz o intenta desde un navegador actualizado."
+          );
+          return;
+        }
+
+        const submitter = event.submitter || null;
+        showProcessingOverlay("Comprimiendo el CSV para poder subirlo a Vercel...");
+
+        try {
+          const compressedFile = await comprimirArchivoGzip(file);
+          const dataTransfer = new DataTransfer();
+          dataTransfer.items.add(compressedFile);
+          input.files = dataTransfer.files;
+          form.dataset.compressedSubmitting = "true";
+
+          if (typeof form.requestSubmit === "function") {
+            form.requestSubmit(submitter);
+          } else {
+            form.submit();
+          }
+        } catch (error) {
+          hideProcessingOverlay();
+          window.alert("No se pudo comprimir el CSV. Intenta comprimirlo manualmente como .csv.gz.");
+        }
+      });
+    });
+  }
+
   document.addEventListener("DOMContentLoaded", () => {
     initThemeToggle();
     initSidebarToggle();
     initBackButtons();
     initSortableTables();
+    initCompressedUploadForms();
     initProcessingForms();
   });
 })();

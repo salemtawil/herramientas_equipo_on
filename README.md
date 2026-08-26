@@ -157,11 +157,13 @@ OLLAMA_WEEKLY_REPORT_MODEL=qwen2.5:7b
 - Filas con agente, número, fecha o duración insuficiente quedan como `No auditable` y no entran en el denominador del cumplimiento.
 - Duplicados exactos por agente, número, fecha, duración y `TicketId` quedan como `No auditable` para evitar falsos segundos intentos.
 - La pantalla muestra reconciliación de filas recibidas, filas válidas usadas, duplicados, no auditables y casos finales. También permite descargar la reconciliación y los casos no auditables.
+- La pantalla marca alertas de casos raros cuando un agente llama más de `3` veces al mismo número dentro de `10 minutos`.
 - Si faltan columnas opcionales como `TicketId` o fecha de contestación, la herramienta advierte que la trazabilidad o la clasificación tendrá menos evidencia.
 - La asignación de turno usa coincidencia exacta de nombre y luego coincidencias flexibles por primer nombre/prefijo según la configuración de turnos.
 
 ## Límites de CSV
 
 - Los CSV subidos se validan antes de procesarse con pandas.
-- Límite actual por archivo: `5 MB`.
-- Si el archivo supera ese tamaño, la app devuelve un error funcional antes de intentar procesarlo.
+- Límite actual del CSV ya leído: `25 MB`.
+- En auditoría de salientes, el navegador comprime automáticamente CSV grandes antes de enviarlos a Vercel. También se aceptan archivos `.csv.gz`.
+- Si el archivo descomprimido supera ese tamaño, la app devuelve un error funcional antes de intentar procesarlo.

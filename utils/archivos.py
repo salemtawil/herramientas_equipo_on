@@ -1,4 +1,5 @@
 import io
+import gzip
 import logging
 import pandas as pd
 
@@ -8,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 ENCODINGS_CANDIDATOS = ("utf-8-sig", "utf-8", "cp1252", "latin-1")
 SEPARADORES_CANDIDATOS = (None, ",", ";", "\t", "|")
-MAX_CSV_FILE_SIZE_BYTES = 5 * 1024 * 1024
+MAX_CSV_FILE_SIZE_BYTES = 25 * 1024 * 1024
 
 
 def formatear_tamano_bytes(num_bytes):
@@ -41,12 +42,23 @@ def leer_bytes_archivo_csv(file_storage, max_bytes=MAX_CSV_FILE_SIZE_BYTES):
     if hasattr(file_storage, "seek"):
         file_storage.seek(0)
 
+    if _contenido_es_gzip(contenido):
+        try:
+            with gzip.GzipFile(fileobj=io.BytesIO(contenido)) as archivo_gzip:
+                contenido = archivo_gzip.read(max_bytes + 1)
+        except OSError as exc:
+            raise ValueError("No se pudo descomprimir el CSV comprimido.") from exc
+
     if len(contenido) > max_bytes:
         raise ValueError(
             f"El archivo supera el limite permitido de {formatear_tamano_bytes(max_bytes)}."
         )
 
     return contenido
+
+
+def _contenido_es_gzip(contenido):
+    return len(contenido) >= 2 and contenido[:2] == b"\x1f\x8b"
 
 
 def _leer_csv_desde_bytes(contenido):
