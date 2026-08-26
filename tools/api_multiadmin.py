@@ -650,6 +650,7 @@ def _metricas_desde_usuarios(system, usuarios, exclude_admins=False):
 
 def _obtener_metricas_multiadmin_directo_con_token(token):
     metricas = {}
+    errores_por_sistema = {}
     with ThreadPoolExecutor(max_workers=8) as executor:
         future_to_system = {
             executor.submit(_obtener_usuarios_directo, config, token): (system, config)
@@ -658,22 +659,46 @@ def _obtener_metricas_multiadmin_directo_con_token(token):
         bonus_future = executor.submit(_obtener_bonus_directo, token)
 
         for future, (system, config) in future_to_system.items():
-            usuarios = future.result()
+            try:
+                usuarios = future.result()
+            except Exception as exc:
+                errores_por_sistema[system] = exc
+                continue
             metricas[system] = _metricas_desde_usuarios(
                 system,
                 usuarios,
                 exclude_admins=config.get("exclude_admins", False),
             )
 
-        bonus_stats = bonus_future.result()
+        try:
+            bonus_stats = bonus_future.result()
+        except Exception:
+            bonus_stats = None
 
     try:
-        paripe_legacy = _obtener_metricas_multiadmin_legacy().get("Paripe", {})
+        metricas_legacy = _obtener_metricas_multiadmin_legacy()
     except Exception:
-        paripe_legacy = {}
-    metricas["Paripe"]["good_standing_users"] = metricas["Paripe"]["active_users"]
-    metricas["Paripe"]["photo_pool"] = paripe_legacy.get("photo_pool", 0)
-    metricas["Compinche"]["bonus_stats"] = bonus_stats
+        metricas_legacy = {}
+
+    for system, error in errores_por_sistema.items():
+        if system in metricas_legacy:
+            metricas[system] = metricas_legacy[system]
+        else:
+            metricas[system] = {
+                "system": system,
+                "display_name": str(system).replace("_", " ").replace("-", " ").title(),
+                "active_users": 0,
+                "running_users": 0,
+                "progress": "Error",
+                "error": str(error),
+            }
+
+    if "Paripe" in metricas:
+        paripe_legacy = metricas_legacy.get("Paripe", {})
+        metricas["Paripe"]["good_standing_users"] = metricas["Paripe"]["active_users"]
+        metricas["Paripe"]["photo_pool"] = paripe_legacy.get("photo_pool", 0)
+    if "Compinche" in metricas:
+        metricas["Compinche"]["bonus_stats"] = bonus_stats
     if "chispita" in metricas:
         try:
             ofertas_chispita = _obtener_metricas_ofertas_chispita(token)
@@ -695,13 +720,13 @@ def _obtener_metricas_multiadmin_directo():
     try:
         return _obtener_metricas_multiadmin_directo_con_token(token)
     except requests.HTTPError as error:
-        if (
-            _error_autenticacion_multiadmin(error)
-            and MULTIADMIN_USERNAME
-            and MULTIADMIN_PASSWORD
-        ):
-            tokens = iniciar_sesion_multiadmin()
-            return _obtener_metricas_multiadmin_directo_con_token(tokens["id_token"])
+        if _error_autenticacion_multiadmin(error):
+            if MULTIADMIN_REFRESH_TOKEN or _TOKEN_CACHE.get("refresh_token"):
+                tokens = refrescar_multiadmin_token()
+                return _obtener_metricas_multiadmin_directo_con_token(tokens["id_token"])
+            if MULTIADMIN_USERNAME and MULTIADMIN_PASSWORD:
+                tokens = iniciar_sesion_multiadmin()
+                return _obtener_metricas_multiadmin_directo_con_token(tokens["id_token"])
         raise
 
 
