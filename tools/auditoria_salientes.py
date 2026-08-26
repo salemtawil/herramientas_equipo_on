@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 FORM_KEY_PAYLOAD = "auditoria_salientes_payload"
 MAX_FILAS_VISTA_PREVIA = 500
 VENTANA_CASO_MINUTOS = 10
+MAX_LLAMADAS_ESPERADAS_POR_VENTANA = 3
 MIN_SEGUNDO_INTENTO_SIN_VM_DEFAULT = 10
 MAX_SEGUNDO_INTENTO_SIN_VM = 14
 TURNO_SIN_TURNO = "Sin turno"
@@ -55,6 +56,17 @@ COLUMNAS_RESUMEN_TURNO = [
     "No cumple",
     "No auditable",
     "Porcentaje de cumplimiento",
+]
+
+COLUMNAS_CASOS_RAROS = [
+    "Agente",
+    "Numero",
+    "Hora primera llamada",
+    "Hora ultima llamada",
+    "Llamadas en ventana",
+    "Duraciones intentos",
+    "TicketIds",
+    "Motivo alerta",
 ]
 
 COLUMNAS_CASOS_INTERNAS = COLUMNAS_DETALLE + ["_estado", "_agente"]
@@ -657,6 +669,103 @@ def construir_advertencias_columnas(columnas):
     return advertencias
 
 
+def construir_alertas_casos_raros(df_preparado):
+    if df_preparado.empty:
+        return pd.DataFrame(columns=COLUMNAS_CASOS_RAROS)
+
+    columnas_obligatorias = [
+        "Agente",
+        "Numero",
+        "Numero normalizado",
+        "Fecha llamada",
+        "Duracion segundos",
+    ]
+    for columna in columnas_obligatorias:
+        if columna not in df_preparado.columns:
+            return pd.DataFrame(columns=COLUMNAS_CASOS_RAROS)
+
+    validas = df_preparado[
+        df_preparado["Agente"].astype(str).str.strip().ne("")
+        & df_preparado["Numero normalizado"].astype(str).str.strip().ne("")
+        & df_preparado["Fecha llamada"].notna()
+        & df_preparado["Duracion segundos"].notna()
+    ].copy()
+    if validas.empty:
+        return pd.DataFrame(columns=COLUMNAS_CASOS_RAROS)
+
+    validas = validas.drop_duplicates(
+        subset=[
+            "Agente",
+            "Numero normalizado",
+            "Fecha llamada",
+            "Duracion segundos",
+            "TicketId",
+        ]
+    )
+    validas = validas.sort_values(
+        by=["Agente", "Numero normalizado", "Fecha llamada"]
+    ).reset_index(drop=True)
+
+    alertas = []
+    ventana = pd.Timedelta(minutes=VENTANA_CASO_MINUTOS)
+
+    for (_, _), grupo in validas.groupby(["Agente", "Numero normalizado"], sort=False):
+        llamadas = grupo.to_dict(orient="records")
+        indice = 0
+
+        while indice < len(llamadas):
+            inicio = llamadas[indice]["Fecha llamada"]
+            llamadas_ventana = [llamadas[indice]]
+            siguiente = indice + 1
+
+            while siguiente < len(llamadas):
+                llamada = llamadas[siguiente]
+                if llamada["Fecha llamada"] > inicio + ventana:
+                    break
+                llamadas_ventana.append(llamada)
+                siguiente += 1
+
+            if len(llamadas_ventana) > MAX_LLAMADAS_ESPERADAS_POR_VENTANA:
+                duraciones = [
+                    formatear_duracion(llamada.get("Duracion segundos"))
+                    for llamada in llamadas_ventana
+                ]
+                ticket_ids = sorted(
+                    {
+                        limpiar_texto(llamada.get("TicketId"))
+                        for llamada in llamadas_ventana
+                        if limpiar_texto(llamada.get("TicketId"))
+                    }
+                )
+                primera = llamadas_ventana[0]
+                ultima = llamadas_ventana[-1]
+                alertas.append(
+                    {
+                        "Agente": primera["Agente"],
+                        "Numero": primera["Numero"],
+                        "Hora primera llamada": formatear_fecha(
+                            primera["Fecha llamada"],
+                            primera.get("Fecha original", ""),
+                        ),
+                        "Hora ultima llamada": formatear_fecha(
+                            ultima["Fecha llamada"],
+                            ultima.get("Fecha original", ""),
+                        ),
+                        "Llamadas en ventana": len(llamadas_ventana),
+                        "Duraciones intentos": " | ".join(duraciones),
+                        "TicketIds": ", ".join(ticket_ids),
+                        "Motivo alerta": (
+                            f"Mas de {MAX_LLAMADAS_ESPERADAS_POR_VENTANA} llamadas "
+                            f"al mismo numero en {VENTANA_CASO_MINUTOS} minutos"
+                        ),
+                    }
+                )
+
+            indice = siguiente
+
+    return pd.DataFrame(alertas, columns=COLUMNAS_CASOS_RAROS)
+
+
 def dataframe_reconciliacion(reconciliacion, advertencias_calidad=None, configuracion=None):
     filas = [
         {"Metrica": nombre, "Valor": valor}
@@ -832,6 +941,7 @@ def serializar_resultado_auditoria(
     reconciliacion=None,
     configuracion=None,
     advertencias_calidad=None,
+    df_casos_raros=None,
 ):
     return guardar_estado_temporal(
         {
@@ -839,6 +949,11 @@ def serializar_resultado_auditoria(
             "reconciliacion": reconciliacion or construir_reconciliacion_desde_casos(df_casos),
             "configuracion": configuracion or construir_configuracion_auditoria(),
             "advertencias_calidad": advertencias_calidad or [],
+            "casos_raros": (
+                df_casos_raros.to_dict(orient="records")
+                if df_casos_raros is not None
+                else []
+            ),
         },
         secret_key=current_app.secret_key,
         salt="auditoria-salientes-payload",
@@ -936,6 +1051,31 @@ def cargar_advertencias_calidad_desde_payload(payload, reconciliacion=None):
     return construir_advertencias_calidad(reconciliacion)
 
 
+def cargar_casos_raros_desde_payload(payload):
+    if not payload:
+        return pd.DataFrame(columns=COLUMNAS_CASOS_RAROS)
+
+    item = cargar_estado_temporal(
+        payload,
+        secret_key=current_app.secret_key,
+        salt="auditoria-salientes-payload",
+        namespace=STATE_NAMESPACE,
+    )
+    if not isinstance(item, dict):
+        return pd.DataFrame(columns=COLUMNAS_CASOS_RAROS)
+
+    casos_raros = item.get("casos_raros")
+    if not isinstance(casos_raros, list):
+        return pd.DataFrame(columns=COLUMNAS_CASOS_RAROS)
+
+    df_casos_raros = pd.DataFrame(casos_raros)
+    for columna in COLUMNAS_CASOS_RAROS:
+        if columna not in df_casos_raros.columns:
+            df_casos_raros[columna] = ""
+
+    return df_casos_raros[COLUMNAS_CASOS_RAROS]
+
+
 @auditoria_salientes_bp.route("/auditoria-salientes", methods=["GET", "POST"])
 def auditoria_salientes():
     limpiar_estados_temporales_expirados(STATE_NAMESPACE, ttl_hours=STATE_TTL_HOURS)
@@ -946,9 +1086,12 @@ def auditoria_salientes():
     resumen_agente = None
     resumen_turno = None
     detalle_casos = None
+    casos_raros = None
+    casos_raros_total = 0
     columnas_resumen_agente = None
     columnas_resumen_turno = COLUMNAS_RESUMEN_TURNO
     columnas_detalle = COLUMNAS_DETALLE
+    columnas_casos_raros = COLUMNAS_CASOS_RAROS
     reconciliacion = None
     advertencias_calidad = []
     configuracion_auditoria = construir_configuracion_auditoria()
@@ -979,6 +1122,7 @@ def auditoria_salientes():
                             ],
                         )
                     )
+                    df_casos_raros = construir_alertas_casos_raros(df_preparado)
                     reconciliacion = construir_reconciliacion(df_preparado, df_casos)
                     advertencias_calidad = (
                         construir_advertencias_calidad(reconciliacion)
@@ -989,6 +1133,7 @@ def auditoria_salientes():
                         reconciliacion,
                         configuracion_auditoria,
                         advertencias_calidad,
+                        df_casos_raros,
                     )
 
                     resumen_general = construir_resumen_general(df_casos)
@@ -1002,14 +1147,21 @@ def auditoria_salientes():
                         .head(MAX_FILAS_VISTA_PREVIA)
                         .to_dict(orient="records")
                     )
+                    casos_raros = (
+                        df_casos_raros.head(MAX_FILAS_VISTA_PREVIA).to_dict(orient="records")
+                    )
+                    casos_raros_total = len(df_casos_raros)
 
                     mensaje = "CSV analizado correctamente."
                     if len(df_casos) > MAX_FILAS_VISTA_PREVIA:
                         mensaje += f" Mostrando los primeros {MAX_FILAS_VISTA_PREVIA} casos en el detalle."
+                    if len(df_casos_raros) > MAX_FILAS_VISTA_PREVIA:
+                        mensaje += f" Mostrando las primeras {MAX_FILAS_VISTA_PREVIA} alertas de casos raros."
 
             else:
                 payload_cache = (request.form.get(FORM_KEY_PAYLOAD) or "").strip()
                 df_casos = cargar_resultado_auditoria_desde_payload(payload_cache)
+                df_casos_raros = cargar_casos_raros_desde_payload(payload_cache)
                 reconciliacion = cargar_reconciliacion_desde_payload(payload_cache, df_casos)
                 configuracion_auditoria = cargar_configuracion_desde_payload(payload_cache)
                 advertencias_calidad = cargar_advertencias_calidad_desde_payload(
@@ -1055,6 +1207,11 @@ def auditoria_salientes():
                         df_casos[df_casos["_estado"] == ESTADO_NO_AUDITABLE][COLUMNAS_DETALLE],
                         "auditoria_salientes_no_auditables.csv",
                     )
+                elif accion == "descargar_casos_raros":
+                    return respuesta_csv_desde_df(
+                        df_casos_raros[COLUMNAS_CASOS_RAROS],
+                        "auditoria_salientes_casos_raros.csv",
+                    )
                 elif accion == "filtrar_turnos":
                     pass
                 elif accion == "limpiar_filtro_turnos":
@@ -1078,6 +1235,11 @@ def auditoria_salientes():
                     df_casos_filtrado_turnos = filtrar_casos_por_turnos(df_casos, turnos_seleccionados)
                     df_resumen_turno = construir_resumen_por_turno(df_casos_filtrado_turnos)
                     resumen_turno = df_resumen_turno.to_dict(orient="records")
+                    df_casos_raros = cargar_casos_raros_desde_payload(payload_cache)
+                    casos_raros = (
+                        df_casos_raros.head(MAX_FILAS_VISTA_PREVIA).to_dict(orient="records")
+                    )
+                    casos_raros_total = len(df_casos_raros)
                     detalle_casos = (
                         df_casos[COLUMNAS_DETALLE]
                         .head(MAX_FILAS_VISTA_PREVIA)
@@ -1099,6 +1261,9 @@ def auditoria_salientes():
         columnas_resumen_turno=columnas_resumen_turno,
         detalle_casos=detalle_casos,
         columnas_detalle=columnas_detalle,
+        casos_raros=casos_raros,
+        casos_raros_total=casos_raros_total,
+        columnas_casos_raros=columnas_casos_raros,
         reconciliacion=reconciliacion,
         advertencias_calidad=advertencias_calidad,
         configuracion_auditoria=configuracion_auditoria,

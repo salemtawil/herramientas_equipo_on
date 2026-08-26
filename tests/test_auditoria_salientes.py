@@ -16,6 +16,7 @@ from tools.auditoria_salientes import (
     asignar_turnos_a_casos,
     construir_advertencias_calidad,
     construir_advertencias_columnas,
+    construir_alertas_casos_raros,
     construir_reconciliacion,
     dataframe_reconciliacion,
     obtener_turno_auditoria,
@@ -439,6 +440,50 @@ class AuditoriaSalientesTests(unittest.TestCase):
         self.assertEqual(2, len(advertencias))
         self.assertIn("TicketId", advertencias[0])
         self.assertIn("fecha de contestación", advertencias[1])
+
+    def test_detecta_casos_raros_con_mas_de_tres_llamadas_mismo_numero(self):
+        df = pd.DataFrame(
+            [
+                {
+                    "Agente": "Julio",
+                    "Numero llamado": "+1 720 978 3354",
+                    "Fecha llamada": "2026-08-14 15:09:24",
+                    "Duracion": "6",
+                    "ticketId": "bkt9kj01",
+                },
+                {
+                    "Agente": "Julio",
+                    "Numero llamado": "+1 720 978 3354",
+                    "Fecha llamada": "2026-08-14 15:09:40",
+                    "Duracion": "7",
+                    "ticketId": "bkt9kj01",
+                },
+                {
+                    "Agente": "Julio",
+                    "Numero llamado": "+1 720 978 3354",
+                    "Fecha llamada": "2026-08-14 15:10:49",
+                    "Duracion": "5",
+                    "ticketId": "z115xssp",
+                },
+                {
+                    "Agente": "Julio",
+                    "Numero llamado": "+1 720 978 3354",
+                    "Fecha llamada": "2026-08-14 15:11:05",
+                    "Duracion": "5",
+                    "ticketId": "z115xssp",
+                },
+            ]
+        )
+
+        df_preparado, _ = preparar_dataframe_historial(df)
+        alertas = construir_alertas_casos_raros(df_preparado)
+
+        self.assertEqual(1, len(alertas))
+        self.assertEqual("Julio", alertas.iloc[0]["Agente"])
+        self.assertEqual(4, alertas.iloc[0]["Llamadas en ventana"])
+        self.assertEqual("6 s | 7 s | 5 s | 5 s", alertas.iloc[0]["Duraciones intentos"])
+        self.assertIn("bkt9kj01", alertas.iloc[0]["TicketIds"])
+        self.assertIn("z115xssp", alertas.iloc[0]["TicketIds"])
 
     def test_turno_auditoria_usa_coincidencia_flexible(self):
         turnos_config = {"Tarde/Noche": ["Ana"]}

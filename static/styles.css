@@ -1518,6 +1518,26 @@ th.desc::after {
   line-height: 1.25;
 }
 
+.auditoria-salientes-page .alerta-casos-raros {
+  border-color: var(--warning-border);
+}
+
+.auditoria-salientes-page .warning-strong {
+  font-weight: 700;
+}
+
+.auditoria-salientes-page .warning-strong p {
+  margin: 0;
+}
+
+.auditoria-salientes-page .tabla-alertas tbody tr {
+  background: color-mix(in srgb, var(--warning-bg) 56%, transparent);
+}
+
+.auditoria-salientes-page .tabla-alertas tbody tr:hover {
+  background: color-mix(in srgb, var(--warning-bg) 82%, transparent);
+}
+
 .auditoria-salientes-page .turnos-filtro-grid {
   margin-top: 0;
 }

@@ -18,12 +18,12 @@
       <article class="dashboard-highlight-card dashboard-highlight-card--primary">
         <span class="dashboard-highlight-card__eyebrow">Regla</span>
         <strong>Casos agrupados por primera llamada</strong>
-        <p>La vista agrupa por agente, número y la hora del primer intento, con cierre inmediato si hubo contestada.</p>
+        <p>La vista agrupa por agente, número y la hora del primer intento dentro de una ventana operativa.</p>
       </article>
       <article class="dashboard-highlight-card">
-        <span class="dashboard-highlight-card__eyebrow">Heuristica</span>
-        <strong>Lectura conservadora</strong>
-        <p>Si los datos no alcanzan para clasificar con seguridad, el caso se marca como no auditable.</p>
+        <span class="dashboard-highlight-card__eyebrow">Alertas</span>
+        <strong>Casos raros visibles</strong>
+        <p>Si un agente llama más de 3 veces al mismo número en 10 minutos, se marca para revisión.</p>
       </article>
     </div>
 
@@ -109,6 +109,75 @@
             <div class="value">{{ valor if valor != "" else "No disponible" }}</div>
           </div>
         {% endfor %}
+      </div>
+    </div>
+  </details>
+  {% endif %}
+
+  {% if casos_raros %}
+  <details class="card seccion-desplegable alerta-casos-raros" open>
+    <summary class="titulo-desplegable">
+      <span>Alertas de casos raros</span>
+      <span class="small">{{ casos_raros_total }} alertas detectadas</span>
+    </summary>
+
+    <div class="top-space">
+      <div class="warning warning-strong">
+        <p>Estos registros superan el máximo operativo esperado de 3 llamadas al mismo número dentro de 10 minutos. Revíselos antes de tomar el cumplimiento como definitivo.</p>
+      </div>
+
+      {% if payload_cache %}
+      <form method="post" class="acciones-barra">
+        <input type="hidden" name="auditoria_salientes_payload" value="{{ payload_cache }}">
+        <button type="submit" name="accion" value="descargar_casos_raros" class="btn secondary">
+          Descargar casos raros
+        </button>
+      </form>
+      {% endif %}
+
+      <div class="search-panel top-space">
+        <label for="buscador-casos-raros" class="small">¿Qué quieres buscar?</label>
+        <input
+          type="text"
+          id="buscador-casos-raros"
+          placeholder="Buscar por agente, número, ticket o motivo"
+          data-table-filter="casos-raros"
+        >
+      </div>
+
+      <div class="table-wrap">
+        <table class="tabla-ordenable tabla-compacta tabla-auditoria tabla-alertas" data-filter-table="casos-raros" data-filter-columns="Agente,Numero,TicketIds,Motivo alerta">
+          <thead>
+            <tr>
+              {% for col in columnas_casos_raros %}
+                <th>
+                  {% if col == "Hora primera llamada" %}
+                    Primera llamada
+                  {% elif col == "Hora ultima llamada" %}
+                    Última llamada
+                  {% elif col == "Llamadas en ventana" %}
+                    Llamadas
+                  {% elif col == "Duraciones intentos" %}
+                    Duraciones
+                  {% elif col == "Motivo alerta" %}
+                    Motivo
+                  {% else %}
+                    {{ col }}
+                  {% endif %}
+                </th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for fila in casos_raros %}
+              <tr>
+                {% for col in columnas_casos_raros %}
+                  <td>{{ fila[col] }}</td>
+                {% endfor %}
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
       </div>
     </div>
   </details>
