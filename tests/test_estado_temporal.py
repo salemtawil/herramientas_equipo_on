@@ -48,3 +48,23 @@ class EstadoTemporalTests(unittest.TestCase):
                 )
 
         self.assertEqual({"payload": "x" * 5000}, estado)
+
+    def test_estado_grande_pero_comprimible_permanece_inline(self):
+        with patch("utils.estado_temporal.guardar_json_temporal") as guardar_archivo:
+            token = guardar_estado_temporal(
+                {"payload": "x" * 5000},
+                secret_key="secret-test",
+                salt="salt-test",
+                namespace="estado-comprimido-tests",
+                inline_limit_bytes=256,
+            )
+
+        estado = cargar_estado_temporal(
+            token,
+            secret_key="secret-test",
+            salt="salt-test",
+            namespace="estado-comprimido-tests",
+        )
+
+        guardar_archivo.assert_not_called()
+        self.assertEqual({"payload": "x" * 5000}, estado)

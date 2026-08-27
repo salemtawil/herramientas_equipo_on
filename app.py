@@ -16,6 +16,9 @@ from tools.comparar_csv import comparar_csv_bp
 from tools.usuarios_a_sheets import usuarios_a_sheets_bp
 
 app = Flask(__name__)
+app.config["MAX_FORM_MEMORY_SIZE"] = int(
+    os.getenv("MAX_FORM_MEMORY_SIZE", str(8 * 1024 * 1024))
+)
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO").upper(),
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",

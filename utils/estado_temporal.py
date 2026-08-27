@@ -113,12 +113,12 @@ def guardar_estado_temporal(
     limpiar_estados_temporales_expirados(namespace, ttl_hours=ttl_hours)
 
     serializer = URLSafeSerializer(secret_key, salt=salt)
-    data_bytes = json.dumps(data, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    data_inline = _serializar_inline(data)
 
-    if len(data_bytes) <= inline_limit_bytes:
+    if len(data_inline.encode("ascii")) <= inline_limit_bytes:
         payload = {
             "mode": "inline",
-            "data": _serializar_inline(data),
+            "data": data_inline,
         }
     else:
         state_id = guardar_json_temporal(data, namespace=namespace)
