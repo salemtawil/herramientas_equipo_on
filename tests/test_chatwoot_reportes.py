@@ -3,6 +3,7 @@ import unittest
 from unittest.mock import patch
 
 from utils.chatwoot_reportes import (
+    ChatwootClient,
     construir_rango_chatwoot,
     construir_rango_diario,
     obtener_dataframe_reporte_chatwoot,
@@ -110,6 +111,26 @@ class ChatwootReportesTests(unittest.TestCase):
         with patch.dict(os.environ, {"CHATWOOT_TIMEZONE": "UTC"}):
             with self.assertRaises(ValueError):
                 construir_rango_chatwoot("2026-09-15", "18:00", "08:00")
+
+    def test_call_stats_usa_endpoint_custom(self):
+        class CapturingClient(ChatwootClient):
+            def __init__(self):
+                super().__init__(
+                    base_url="https://chat.mybrandpatch.com",
+                    account_id="2",
+                    api_token="token",
+                )
+                self.path = None
+
+            def get(self, path, params=None):
+                self.path = path
+                return {"rows": []}
+
+        cliente = CapturingClient()
+        rango = construir_rango_chatwoot("2026-09-14", "08:00", "09:00")
+        cliente.estadisticas_llamadas(rango)
+
+        self.assertEqual("/api/v1/accounts/2/custom/call_stats", cliente.path)
 
 
 if __name__ == "__main__":

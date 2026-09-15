@@ -121,9 +121,26 @@ class ChatwootClient:
         url = f"{self.base_url}{path}"
         respuesta = requests.get(url, headers=self.headers, params=params or {}, timeout=self.timeout)
         if respuesta.status_code >= 400:
-            detalle = respuesta.text[:300]
-            raise RuntimeError(f"Chatwoot respondio {respuesta.status_code}: {detalle}")
-        return respuesta.json()
+            self._raise_http_error(respuesta, url)
+        try:
+            return respuesta.json()
+        except ValueError as exc:
+            content_type = respuesta.headers.get("content-type", "")
+            raise RuntimeError(
+                "Chatwoot no devolvio JSON. "
+                f"URL: {url}. Content-Type: {content_type}."
+            ) from exc
+
+    def _raise_http_error(self, respuesta, url):
+        detalle = respuesta.text[:300]
+        content_type = respuesta.headers.get("content-type", "")
+        if "<!DOCTYPE html" in detalle or "text/html" in content_type:
+            raise RuntimeError(
+                f"Chatwoot respondio {respuesta.status_code} con una pagina HTML en {url}. "
+                "Verifica que CHATWOOT_BASE_URL apunte a https://chat.mybrandpatch.com, "
+                "CHATWOOT_ACCOUNT_ID sea 2 y que el endpoint custom de llamadas exista."
+            )
+        raise RuntimeError(f"Chatwoot respondio {respuesta.status_code} en {url}: {detalle}")
 
     def listar_agentes(self):
         return self.get(f"/api/v1/accounts/{self.account_id}/agents")
@@ -142,7 +159,7 @@ class ChatwootClient:
 
     def estadisticas_llamadas(self, rango, group_by="agent"):
         return self.get(
-            f"/api/v1/accounts/{self.account_id}/call_stats",
+            f"/api/v1/accounts/{self.account_id}/custom/call_stats",
             params={"group_by": group_by, "since": str(rango.since), "until": str(rango.until)},
         )
 
