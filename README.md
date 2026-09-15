@@ -71,6 +71,10 @@ Opcionales según funcionalidad:
 - `OLLAMA_BASE_URL`
 - `OLLAMA_CSAT_MODEL`
 - `OLLAMA_WEEKLY_REPORT_MODEL`
+- `CHATWOOT_BASE_URL`
+- `CHATWOOT_ACCOUNT_ID`
+- `CHATWOOT_API_ACCESS_TOKEN`
+- `CHATWOOT_TIMEZONE`
 
 ## Deploy en Vercel
 
@@ -105,6 +109,11 @@ Antes de desplegar:
    - `MULTIADMIN_ID_TOKEN` junto con `MULTIADMIN_REFRESH_TOKEN`, o
    - `MULTIADMIN_USERNAME` y `MULTIADMIN_PASSWORD`.
    Si no configuras estas variables, la app usa el endpoint Lambda legado, que solo trae agregados basicos.
+8. Si usaras `reporte_agentes` con Chatwoot, configura:
+   - `CHATWOOT_BASE_URL` (por defecto `https://app.chatwoot.com`)
+   - `CHATWOOT_ACCOUNT_ID`
+   - `CHATWOOT_API_ACCESS_TOKEN`
+   - `CHATWOOT_TIMEZONE` (por defecto `America/Caracas`)
 
 ## Conectar IA para Informe Semanal CS
 
@@ -160,6 +169,14 @@ OLLAMA_WEEKLY_REPORT_MODEL=qwen2.5:7b
 - La pantalla marca alertas de casos raros cuando un agente llama más de `3` veces al mismo número dentro de `10 minutos`.
 - Si faltan columnas opcionales como `TicketId` o fecha de contestación, la herramienta advierte que la trazabilidad o la clasificación tendrá menos evidencia.
 - La asignación de turno usa coincidencia exacta de nombre y luego coincidencias flexibles por primer nombre/prefijo según la configuración de turnos.
+
+## Reporte de agentes con Chatwoot
+
+- El botón "Buscar stats diarias" consulta Chatwoot desde el backend usando `CHATWOOT_API_ACCESS_TOKEN`; el token no se expone al frontend.
+- La consulta usa el rango completo de la fecha seleccionada según `CHATWOOT_TIMEZONE`.
+- La primera integración usa los reportes oficiales de Chatwoot por agente: conversaciones asignadas, conversaciones resueltas y mensajes salientes agrupados por agente.
+- En la tabla existente, `Llamadas` corresponde a conversaciones del rango, `Salientes` a mensajes salientes y `Perdidas` a conversaciones no resueltas dentro del día. Las duraciones exactas de voz quedan en `Mins llamadas` solo si Chatwoot las expone en sus reportes de la cuenta.
+- El flujo manual por CSV se mantiene como respaldo.
 
 ## Límites de CSV
 

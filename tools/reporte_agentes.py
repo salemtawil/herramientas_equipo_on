@@ -4,6 +4,7 @@ import pandas as pd
 from flask import Blueprint, render_template, request
 
 from utils.archivos import leer_csv_subido
+from utils.chatwoot_reportes import obtener_dataframe_reporte_chatwoot
 from utils.config_ranking import obtener_pesos_turno
 from utils.transformaciones import (
     COLUMNAS_VISIBLES,
@@ -222,6 +223,102 @@ def construir_ranking_agentes(df_final):
     return ranking, top_5_mejores, top_5_peores
 
 
+def construir_contexto_reporte(df, turnos_config):
+    registrar_agentes_desde_dataframe(df)
+    turnos_config = cargar_turnos_fijos()
+    df_final = preparar_dataframe(df, turnos_config)
+    lista_agentes = sorted(df_final["Agente"].dropna().unique().tolist())
+
+    resumen = {
+        "Agentes": int(df_final["Agente"].nunique()),
+        "Llamadas": int(df_final["Llamadas"].sum()),
+        "Salientes": int(df_final["Salientes"].sum()),
+        "Perdidas": int(df_final["Perdidas"].sum()),
+        "Mins llamadas": int(df_final["Mins llamadas"].sum()),
+        "Mins salientes": int(df_final["Mins salientes"].sum()),
+    }
+
+    df_tabla_general = df_final[COLUMNAS_VISIBLES].copy()
+    tabla_general = html_tabla(df_tabla_general)
+    totales_tabla_general = construir_fila_totales(df_tabla_general, COLUMNAS_VISIBLES, etiqueta="TOTAL")
+
+    df_resumen_turnos = construir_resumen_turnos(df_final)
+    tabla_resumen_turnos = html_tabla(df_resumen_turnos)
+
+    columnas_resumen_turnos = [
+        "Turno",
+        "Agentes",
+        "Llamadas",
+        "Salientes",
+        "Perdidas",
+        "Mins llamadas",
+        "Mins salientes",
+    ]
+    totales_resumen_turnos = construir_fila_totales(
+        df_resumen_turnos,
+        columnas_resumen_turnos,
+        etiqueta="TOTAL",
+    )
+
+    df_ranking, df_top_5_mejores, df_top_5_peores = construir_ranking_agentes(df_final)
+    ranking_completo = html_tabla(df_ranking)
+    ranking_completo_json = json.dumps(ranking_completo or [], ensure_ascii=False)
+    top_5_mejores = html_tabla(df_top_5_mejores)
+    top_5_peores = html_tabla(df_top_5_peores)
+
+    turnos_ranking_disponibles = []
+    if ranking_completo:
+        turnos_ranking_disponibles = sorted({fila["Turno"] for fila in ranking_completo if fila.get("Turno")})
+
+    secciones_turnos = []
+    for turno in sorted(turnos_config.keys()):
+        columnas_turno = [c for c in COLUMNAS_VISIBLES if c != "Turno"]
+        bloque = df_final[df_final["Turno"] == turno][columnas_turno].copy()
+        if not bloque.empty:
+            secciones_turnos.append(
+                {
+                    "nombre": turno,
+                    "filas": html_tabla(bloque),
+                    "totales": construir_fila_totales(bloque, columnas_turno, etiqueta="TOTAL"),
+                }
+            )
+
+    columnas_turno = [c for c in COLUMNAS_VISIBLES if c != "Turno"]
+    bloque_sin = df_final[df_final["Turno"] == "Sin asignar"][columnas_turno].copy()
+    if not bloque_sin.empty:
+        secciones_turnos.append(
+            {
+                "nombre": "Sin asignar",
+                "filas": html_tabla(bloque_sin),
+                "totales": construir_fila_totales(bloque_sin, columnas_turno, etiqueta="TOTAL"),
+            }
+        )
+
+    agentes_configurados = set()
+    for agentes in turnos_config.values():
+        for agente in agentes:
+            agentes_configurados.add(agente)
+
+    agentes_sin_asignar = [ag for ag in lista_agentes if ag not in agentes_configurados]
+
+    return {
+        "resumen": resumen,
+        "tabla_general": tabla_general,
+        "secciones_turnos": secciones_turnos,
+        "tabla_resumen_turnos": tabla_resumen_turnos,
+        "turnos_config": turnos_config,
+        "agentes_sin_asignar": agentes_sin_asignar,
+        "totales_tabla_general": totales_tabla_general,
+        "totales_resumen_turnos": totales_resumen_turnos,
+        "top_5_mejores": top_5_mejores,
+        "top_5_peores": top_5_peores,
+        "ranking_completo": ranking_completo,
+        "ranking_completo_json": ranking_completo_json,
+        "turnos_ranking_disponibles": turnos_ranking_disponibles,
+        "filas_tabla_general": len(df_tabla_general),
+    }
+
+
 @reporte_agentes_bp.route("/reporte-agentes", methods=["GET", "POST"])
 def reporte_agentes():
     mensaje = ""
@@ -243,6 +340,8 @@ def reporte_agentes():
     ranking_completo = None
     ranking_completo_json = "[]"
     turnos_ranking_disponibles = []
+    metadata_fuente = None
+    fecha_chatwoot = request.form.get("fecha_chatwoot", "")
 
     if request.method == "POST":
         repetidos = detectar_repetidos(turnos_config)
@@ -250,94 +349,42 @@ def reporte_agentes():
             advertencia = "Estos agentes están repetidos en la configuración de turnos: " + ", ".join(repetidos)
 
         try:
-            archivo = request.files.get("archivo")
+            accion = request.form.get("accion", "procesar_csv")
 
-            if not archivo or not archivo.filename:
-                advertencia = "Selecciona un archivo CSV."
+            if accion == "buscar_chatwoot":
+                df, metadata_fuente = obtener_dataframe_reporte_chatwoot(fecha_chatwoot)
+                fecha_chatwoot = metadata_fuente["fecha"]
             else:
+                archivo = request.files.get("archivo")
+                if not archivo or not archivo.filename:
+                    raise ValueError("Selecciona un archivo CSV.")
                 df = leer_csv_subido(archivo)
-                registrar_agentes_desde_dataframe(df)
-                turnos_config = cargar_turnos_fijos()
-                df_final = preparar_dataframe(df, turnos_config)
-                lista_agentes = sorted(df_final["Agente"].dropna().unique().tolist())
 
-                resumen = {
-                    "Agentes": int(df_final["Agente"].nunique()),
-                    "Llamadas": int(df_final["Llamadas"].sum()),
-                    "Salientes": int(df_final["Salientes"].sum()),
-                    "Perdidas": int(df_final["Perdidas"].sum()),
-                    "Mins llamadas": int(df_final["Mins llamadas"].sum()),
-                    "Mins salientes": int(df_final["Mins salientes"].sum()),
-                }
+            contexto = construir_contexto_reporte(df, turnos_config)
+            resumen = contexto["resumen"]
+            tabla_general = contexto["tabla_general"]
+            secciones_turnos = contexto["secciones_turnos"]
+            tabla_resumen_turnos = contexto["tabla_resumen_turnos"]
+            turnos_config = contexto["turnos_config"]
+            agentes_sin_asignar = contexto["agentes_sin_asignar"]
+            totales_tabla_general = contexto["totales_tabla_general"]
+            totales_resumen_turnos = contexto["totales_resumen_turnos"]
+            top_5_mejores = contexto["top_5_mejores"]
+            top_5_peores = contexto["top_5_peores"]
+            ranking_completo = contexto["ranking_completo"]
+            ranking_completo_json = contexto["ranking_completo_json"]
+            turnos_ranking_disponibles = contexto["turnos_ranking_disponibles"]
 
-                df_tabla_general = df_final[COLUMNAS_VISIBLES].copy()
-                tabla_general = html_tabla(df_tabla_general)
-                totales_tabla_general = construir_fila_totales(df_tabla_general, COLUMNAS_VISIBLES, etiqueta="TOTAL")
-
-                df_resumen_turnos = construir_resumen_turnos(df_final)
-                tabla_resumen_turnos = html_tabla(df_resumen_turnos)
-
-                columnas_resumen_turnos = [
-                    "Turno",
-                    "Agentes",
-                    "Llamadas",
-                    "Salientes",
-                    "Perdidas",
-                    "Mins llamadas",
-                    "Mins salientes",
-                ]
-                totales_resumen_turnos = construir_fila_totales(
-                    df_resumen_turnos,
-                    columnas_resumen_turnos,
-                    etiqueta="TOTAL",
-                )
-
-                df_ranking, df_top_5_mejores, df_top_5_peores = construir_ranking_agentes(df_final)
-                ranking_completo = html_tabla(df_ranking)
-                ranking_completo_json = json.dumps(ranking_completo or [], ensure_ascii=False)
-                top_5_mejores = html_tabla(df_top_5_mejores)
-                top_5_peores = html_tabla(df_top_5_peores)
-
-                if ranking_completo:
-                    turnos_ranking_disponibles = sorted({fila["Turno"] for fila in ranking_completo if fila.get("Turno")})
-
-                for turno in sorted(turnos_config.keys()):
-                    columnas_turno = [c for c in COLUMNAS_VISIBLES if c != "Turno"]
-                    bloque = df_final[df_final["Turno"] == turno][columnas_turno].copy()
-                    if not bloque.empty:
-                        secciones_turnos.append(
-                            {
-                                "nombre": turno,
-                                "filas": html_tabla(bloque),
-                                "totales": construir_fila_totales(bloque, columnas_turno, etiqueta="TOTAL"),
-                            }
-                        )
-
-                columnas_turno = [c for c in COLUMNAS_VISIBLES if c != "Turno"]
-                bloque_sin = df_final[df_final["Turno"] == "Sin asignar"][columnas_turno].copy()
-                if not bloque_sin.empty:
-                    secciones_turnos.append(
-                        {
-                            "nombre": "Sin asignar",
-                            "filas": html_tabla(bloque_sin),
-                            "totales": construir_fila_totales(bloque_sin, columnas_turno, etiqueta="TOTAL"),
-                        }
-                    )
-
-                agentes_configurados = set()
-                for agentes in turnos_config.values():
-                    for agente in agentes:
-                        agentes_configurados.add(agente)
-
-                agentes_sin_asignar = [ag for ag in lista_agentes if ag not in agentes_configurados]
-
+            if accion == "buscar_chatwoot":
+                mensaje = f"Stats de Chatwoot cargadas para {metadata_fuente['fecha']}."
+            else:
                 mensaje = "CSV procesado correctamente."
-                if len(df_tabla_general) > MAX_FILAS_VISTA_PREVIA:
-                    mensaje += f" Mostrando las primeras {MAX_FILAS_VISTA_PREVIA} filas en la vista previa."
+            if contexto["filas_tabla_general"] > MAX_FILAS_VISTA_PREVIA:
+                mensaje += f" Mostrando las primeras {MAX_FILAS_VISTA_PREVIA} filas en la vista previa."
 
         except Exception as e:
             logger.exception("Error procesando reporte_agentes")
-            advertencia = f"No se pudo procesar el archivo: {e}"
+            advertencia = f"No se pudo procesar el reporte: {e}"
 
     return render_template(
         "reporte_agentes.html",
@@ -357,4 +404,6 @@ def reporte_agentes():
         ranking_completo=ranking_completo,
         ranking_completo_json=ranking_completo_json,
         turnos_ranking_disponibles=turnos_ranking_disponibles,
+        metadata_fuente=metadata_fuente,
+        fecha_chatwoot=fecha_chatwoot,
     )

@@ -9,16 +9,16 @@
     <div class="page-section-title">
       <div>
         <h1>Reporte de agentes</h1>
-        <p>Los turnos se toman desde la herramienta Turnos de trabajo. El CSV del reporte solo se procesa temporalmente.</p>
+        <p>Los turnos se toman desde la herramienta Turnos de trabajo. Puedes traer las stats diarias desde Chatwoot o cargar un CSV como respaldo.</p>
       </div>
-      <span class="hero-badge">CSV operativo</span>
+      <span class="hero-badge">Chatwoot + CSV</span>
     </div>
 
     <div class="dashboard-highlight-grid top-space">
       <article class="dashboard-highlight-card dashboard-highlight-card--primary">
-        <span class="dashboard-highlight-card__eyebrow">Lectura</span>
+        <span class="dashboard-highlight-card__eyebrow">Automático</span>
         <strong>Resumen, detalle y ranking</strong>
-        <p>La vista mantiene el flujo completo del reporte en una sola pantalla, con tablas y ranking reutilizables.</p>
+        <p>Consulta Chatwoot por fecha y reutiliza las mismas tablas, turnos y ranking del reporte actual.</p>
       </article>
       <article class="dashboard-highlight-card">
         <span class="dashboard-highlight-card__eyebrow">Base fija</span>
@@ -73,12 +73,44 @@
   <section class="card">
     <div class="page-section-title">
       <div>
-        <h2>Cargar CSV</h2>
-        <p class="small">Solo se muestran agentes con tiempo de trabajo real mayor a 0 en la columna Worktime.</p>
+        <h2>Buscar stats en Chatwoot</h2>
+        <p class="small">Trae las stats del día usando la API de Chatwoot configurada en el backend.</p>
       </div>
-      <span class="hero-badge hero-badge-soft">Filtro backend</span>
+      <span class="hero-badge hero-badge-soft">Diario</span>
+    </div>
+
+    <form method="post" data-processing-message="Consultando Chatwoot y construyendo el reporte...">
+      <input type="hidden" name="accion" value="buscar_chatwoot">
+      <div class="row">
+        <div>
+          <label class="small" for="fecha_chatwoot">Fecha</label>
+          <input id="fecha_chatwoot" type="date" name="fecha_chatwoot" value="{{ fecha_chatwoot }}">
+        </div>
+        <div>
+          <button type="submit">Buscar stats diarias</button>
+        </div>
+      </div>
+    </form>
+
+    <p class="small top-space">La API de Chatwoot entrega conversaciones por agente y mensajes salientes. Las duraciones exactas de llamadas dependen de que Chatwoot exponga esos datos en tu cuenta.</p>
+
+    {% if metadata_fuente %}
+      <div class="success top-space">
+        Fuente: {{ metadata_fuente.fuente }} · Fecha {{ metadata_fuente.fecha }} · Zona {{ metadata_fuente.timezone }}
+      </div>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <div class="page-section-title">
+      <div>
+        <h2>Cargar CSV</h2>
+        <p class="small">Respaldo manual. Solo se muestran agentes con tiempo de trabajo real mayor a 0 en la columna Worktime.</p>
+      </div>
+      <span class="hero-badge hero-badge-soft">Manual</span>
     </div>
     <form method="post" enctype="multipart/form-data" data-processing-message="Procesando CSV y construyendo el reporte...">
+      <input type="hidden" name="accion" value="procesar_csv">
       <div class="row">
         <div><input type="file" name="archivo" accept=".csv"></div>
         <div><button type="submit">Procesar CSV</button></div>
