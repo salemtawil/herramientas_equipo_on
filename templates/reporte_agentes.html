@@ -9,16 +9,16 @@
     <div class="page-section-title">
       <div>
         <h1>Reporte de agentes</h1>
-        <p>Los turnos se toman desde la herramienta Turnos de trabajo. Puedes traer las stats diarias desde Chatwoot o cargar un CSV como respaldo.</p>
+        <p>Presiona el botón y la herramienta consulta Chatwoot para construir el reporte diario con los turnos actuales.</p>
       </div>
-      <span class="hero-badge">Chatwoot + CSV</span>
+      <span class="hero-badge">Chatwoot automático</span>
     </div>
 
     <div class="dashboard-highlight-grid top-space">
       <article class="dashboard-highlight-card dashboard-highlight-card--primary">
         <span class="dashboard-highlight-card__eyebrow">Automático</span>
         <strong>Resumen, detalle y ranking</strong>
-        <p>Consulta Chatwoot por fecha y reutiliza las mismas tablas, turnos y ranking del reporte actual.</p>
+        <p>Consulta Chatwoot y reutiliza las mismas tablas, turnos y ranking del reporte actual.</p>
       </article>
       <article class="dashboard-highlight-card">
         <span class="dashboard-highlight-card__eyebrow">Base fija</span>
@@ -73,8 +73,8 @@
   <section class="card">
     <div class="page-section-title">
       <div>
-        <h2>Buscar stats en Chatwoot</h2>
-        <p class="small">Trae las stats del día usando la API de Chatwoot configurada en el backend.</p>
+        <h2>Reporte diario automático</h2>
+        <p class="small">Usa la fecha de hoy por defecto. Selecciona una fecha solo si necesitas revisar otro día.</p>
       </div>
       <span class="hero-badge hero-badge-soft">Diario</span>
     </div>
@@ -83,11 +83,11 @@
       <input type="hidden" name="accion" value="buscar_chatwoot">
       <div class="row">
         <div>
-          <label class="small" for="fecha_chatwoot">Fecha</label>
+          <label class="small" for="fecha_chatwoot">Fecha opcional</label>
           <input id="fecha_chatwoot" type="date" name="fecha_chatwoot" value="{{ fecha_chatwoot }}">
         </div>
         <div>
-          <button type="submit">Buscar stats diarias</button>
+          <button type="submit">Traer stats de Chatwoot</button>
         </div>
       </div>
     </form>
@@ -101,22 +101,23 @@
     {% endif %}
   </section>
 
-  <section class="card">
-    <div class="page-section-title">
-      <div>
-        <h2>Cargar CSV</h2>
-        <p class="small">Respaldo manual. Solo se muestran agentes con tiempo de trabajo real mayor a 0 en la columna Worktime.</p>
-      </div>
-      <span class="hero-badge hero-badge-soft">Manual</span>
+  <details class="card seccion-desplegable">
+    <summary class="titulo-desplegable">
+      <span>Respaldo manual por CSV</span>
+      <span class="small">Opcional</span>
+    </summary>
+
+    <div class="top-space">
+      <p class="small">Usa esto solo si Chatwoot no está disponible o necesitas procesar un archivo histórico.</p>
+      <form method="post" enctype="multipart/form-data" data-processing-message="Procesando CSV y construyendo el reporte...">
+        <input type="hidden" name="accion" value="procesar_csv">
+        <div class="row">
+          <div><input type="file" name="archivo" accept=".csv"></div>
+          <div><button type="submit">Procesar CSV</button></div>
+        </div>
+      </form>
     </div>
-    <form method="post" enctype="multipart/form-data" data-processing-message="Procesando CSV y construyendo el reporte...">
-      <input type="hidden" name="accion" value="procesar_csv">
-      <div class="row">
-        <div><input type="file" name="archivo" accept=".csv"></div>
-        <div><button type="submit">Procesar CSV</button></div>
-      </div>
-    </form>
-  </section>
+  </details>
 
   {% if resumen %}
   <details class="card seccion-desplegable">
