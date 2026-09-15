@@ -342,6 +342,8 @@ def reporte_agentes():
     turnos_ranking_disponibles = []
     metadata_fuente = None
     fecha_chatwoot = request.form.get("fecha_chatwoot", "")
+    hora_inicio_chatwoot = request.form.get("hora_inicio_chatwoot", "")
+    hora_fin_chatwoot = request.form.get("hora_fin_chatwoot", "")
 
     if request.method == "POST":
         repetidos = detectar_repetidos(turnos_config)
@@ -352,7 +354,11 @@ def reporte_agentes():
             accion = request.form.get("accion", "procesar_csv")
 
             if accion == "buscar_chatwoot":
-                df, metadata_fuente = obtener_dataframe_reporte_chatwoot(fecha_chatwoot)
+                df, metadata_fuente = obtener_dataframe_reporte_chatwoot(
+                    fecha_chatwoot,
+                    hora_inicio_chatwoot,
+                    hora_fin_chatwoot,
+                )
                 fecha_chatwoot = metadata_fuente["fecha"]
             else:
                 archivo = request.files.get("archivo")
@@ -376,7 +382,10 @@ def reporte_agentes():
             turnos_ranking_disponibles = contexto["turnos_ranking_disponibles"]
 
             if accion == "buscar_chatwoot":
-                mensaje = f"Stats de Chatwoot cargadas para {metadata_fuente['fecha']}."
+                mensaje = (
+                    "Stats de Chatwoot cargadas para "
+                    f"{metadata_fuente['inicio_local']} - {metadata_fuente['fin_local']}."
+                )
             else:
                 mensaje = "CSV procesado correctamente."
             if contexto["filas_tabla_general"] > MAX_FILAS_VISTA_PREVIA:
@@ -406,4 +415,6 @@ def reporte_agentes():
         turnos_ranking_disponibles=turnos_ranking_disponibles,
         metadata_fuente=metadata_fuente,
         fecha_chatwoot=fecha_chatwoot,
+        hora_inicio_chatwoot=hora_inicio_chatwoot,
+        hora_fin_chatwoot=hora_fin_chatwoot,
     )

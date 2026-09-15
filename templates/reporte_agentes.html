@@ -74,7 +74,7 @@
     <div class="page-section-title">
       <div>
         <h2>Reporte diario automático</h2>
-        <p class="small">Usa la fecha de hoy por defecto. Selecciona una fecha solo si necesitas revisar otro día.</p>
+        <p class="small">Por defecto consulta desde las 00:00 hasta este momento. Ajusta las horas si necesitas un turno específico.</p>
       </div>
       <span class="hero-badge hero-badge-soft">Diario</span>
     </div>
@@ -87,6 +87,14 @@
           <input id="fecha_chatwoot" type="date" name="fecha_chatwoot" value="{{ fecha_chatwoot }}">
         </div>
         <div>
+          <label class="small" for="hora_inicio_chatwoot">Desde</label>
+          <input id="hora_inicio_chatwoot" type="time" name="hora_inicio_chatwoot" value="{{ hora_inicio_chatwoot or '00:00' }}">
+        </div>
+        <div>
+          <label class="small" for="hora_fin_chatwoot">Hasta</label>
+          <input id="hora_fin_chatwoot" type="time" name="hora_fin_chatwoot" value="{{ hora_fin_chatwoot }}">
+        </div>
+        <div>
           <button type="submit">Traer stats de Chatwoot</button>
         </div>
       </div>
@@ -96,7 +104,7 @@
 
     {% if metadata_fuente %}
       <div class="success top-space">
-        Fuente: {{ metadata_fuente.fuente }} · Fecha {{ metadata_fuente.fecha }} · Zona {{ metadata_fuente.timezone }}
+        Fuente: {{ metadata_fuente.fuente }} · Rango {{ metadata_fuente.inicio_local }} - {{ metadata_fuente.fin_local }} · Zona {{ metadata_fuente.timezone }}
       </div>
     {% endif %}
   </section>

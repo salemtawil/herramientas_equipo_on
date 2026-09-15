@@ -17,6 +17,8 @@ class RangoChatwoot:
     since: int
     until: int
     timezone: str
+    inicio_local: str
+    fin_local: str
 
 
 def _env_requerida(nombre):
@@ -56,24 +58,52 @@ def _obtener_timezone(tz_name):
         ) from exc
 
 
-def construir_rango_diario(fecha_texto=None):
+def _parsear_hora(hora_texto, nombre_campo):
+    texto = str(hora_texto or "").strip()
+    if not texto:
+        return None
+    try:
+        return datetime.strptime(texto, "%H:%M").time()
+    except ValueError as exc:
+        raise ValueError(f"{nombre_campo} debe tener formato HH:MM.") from exc
+
+
+def construir_rango_chatwoot(fecha_texto=None, hora_inicio_texto=None, hora_fin_texto=None):
     tz_name = _timezone()
     tz = _obtener_timezone(tz_name)
+    ahora = datetime.now(tz)
 
     if fecha_texto:
         fecha = datetime.strptime(fecha_texto, "%Y-%m-%d").date()
     else:
-        fecha = datetime.now(tz).date()
+        fecha = ahora.date()
 
-    inicio = datetime.combine(fecha, time.min, tzinfo=tz)
-    fin = datetime.combine(fecha + timedelta(days=1), time.min, tzinfo=tz)
+    hora_inicio = _parsear_hora(hora_inicio_texto, "La hora de inicio") or time.min
+    hora_fin = _parsear_hora(hora_fin_texto, "La hora de fin")
+
+    inicio = datetime.combine(fecha, hora_inicio, tzinfo=tz)
+    if hora_fin:
+        fin = datetime.combine(fecha, hora_fin, tzinfo=tz) + timedelta(seconds=59)
+    elif fecha == ahora.date():
+        fin = ahora
+    else:
+        fin = datetime.combine(fecha + timedelta(days=1), time.min, tzinfo=tz) - timedelta(seconds=1)
+
+    if fin <= inicio:
+        raise ValueError("La hora de fin debe ser posterior a la hora de inicio.")
 
     return RangoChatwoot(
         fecha=fecha,
         since=int(inicio.timestamp()),
         until=int(fin.timestamp()),
         timezone=tz_name,
+        inicio_local=inicio.strftime("%Y-%m-%d %H:%M:%S"),
+        fin_local=fin.strftime("%Y-%m-%d %H:%M:%S"),
     )
+
+
+def construir_rango_diario(fecha_texto=None):
+    return construir_rango_chatwoot(fecha_texto)
 
 
 class ChatwootClient:
@@ -142,8 +172,8 @@ def _normalizar_lista_respuesta(respuesta):
     return []
 
 
-def obtener_dataframe_reporte_chatwoot(fecha_texto=None, cliente=None):
-    rango = construir_rango_diario(fecha_texto)
+def obtener_dataframe_reporte_chatwoot(fecha_texto=None, hora_inicio_texto=None, hora_fin_texto=None, cliente=None):
+    rango = construir_rango_chatwoot(fecha_texto, hora_inicio_texto, hora_fin_texto)
     cliente = cliente or ChatwootClient()
 
     agentes = _indice_agentes(_normalizar_lista_respuesta(cliente.listar_agentes()))
@@ -221,6 +251,8 @@ def obtener_dataframe_reporte_chatwoot(fecha_texto=None, cliente=None):
         "since": rango.since,
         "until": rango.until,
         "timezone": rango.timezone,
+        "inicio_local": rango.inicio_local,
+        "fin_local": rango.fin_local,
         "fuente": "Chatwoot",
     }
     return df, metadata
