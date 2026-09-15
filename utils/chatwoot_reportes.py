@@ -140,6 +140,12 @@ class ChatwootClient:
             params={"group_by": "agent", "since": str(rango.since), "until": str(rango.until)},
         )
 
+    def estadisticas_llamadas(self, rango, group_by="agent"):
+        return self.get(
+            f"/api/v1/accounts/{self.account_id}/call_stats",
+            params={"group_by": group_by, "since": str(rango.since), "until": str(rango.until)},
+        )
+
 
 def _partir_nombre(nombre):
     partes = str(nombre or "").strip().split()
@@ -172,66 +178,85 @@ def _normalizar_lista_respuesta(respuesta):
     return []
 
 
+def _normalizar_float(valor):
+    numero = pd.to_numeric(valor, errors="coerce")
+    if pd.isna(numero):
+        return 0.0
+    return float(numero)
+
+
+def _normalizar_int(valor):
+    return int(round(_normalizar_float(valor)))
+
+
+def _filas_call_stats(respuesta):
+    if isinstance(respuesta, dict):
+        filas = respuesta.get("rows")
+        if isinstance(filas, list):
+            return filas
+    if isinstance(respuesta, list):
+        return respuesta
+    return []
+
+
+def _nombre_fila_call_stats(fila, agentes):
+    agente_id = fila.get("id")
+    if agente_id is not None:
+        try:
+            agente_id = int(agente_id)
+        except (TypeError, ValueError):
+            pass
+        nombre = agentes.get(agente_id)
+        if nombre:
+            return nombre
+
+    return (
+        fila.get("name")
+        or fila.get("agent")
+        or fila.get("email")
+        or fila.get("inbox")
+        or "Sin asignar"
+    )
+
+
+def _dataframe_desde_call_stats(respuesta, agentes):
+    filas = []
+    for item in _filas_call_stats(respuesta):
+        nombre = _nombre_fila_call_stats(item, agentes)
+        first_name, last_name = _partir_nombre(nombre)
+
+        contestadas = _normalizar_int(item.get("callsAnswered"))
+        perdidas = _normalizar_int(item.get("missedCalls"))
+        salientes = _normalizar_int(item.get("outboundCalls"))
+        mins_llamadas = _normalizar_float(item.get("callMinutes"))
+        mins_salientes = _normalizar_float(item.get("outboundCallMinutes"))
+
+        if not any([contestadas, perdidas, salientes, mins_llamadas, mins_salientes]):
+            continue
+
+        filas.append(
+            {
+                "First Name": first_name,
+                "Last Name": last_name,
+                "Calls": contestadas + perdidas,
+                "Outgoing calls": salientes,
+                "Missed calls": perdidas,
+                "Call seconds": round(mins_llamadas * 60),
+                "Outgoing call seconds": round(mins_salientes * 60),
+                "Worktime": "00:00:01",
+            }
+        )
+
+    return pd.DataFrame(filas)
+
+
 def obtener_dataframe_reporte_chatwoot(fecha_texto=None, hora_inicio_texto=None, hora_fin_texto=None, cliente=None):
     rango = construir_rango_chatwoot(fecha_texto, hora_inicio_texto, hora_fin_texto)
     cliente = cliente or ChatwootClient()
 
     agentes = _indice_agentes(_normalizar_lista_respuesta(cliente.listar_agentes()))
-    resumen = _normalizar_lista_respuesta(cliente.resumen_por_agente(rango))
-    salientes = _normalizar_lista_respuesta(cliente.mensajes_salientes_por_agente(rango))
-    salientes_por_id = {
-        int(item["id"]): int(item.get("outgoing_messages_count") or 0)
-        for item in salientes
-        if item.get("id") is not None
-    }
-
-    filas = []
-    ids_vistos = set()
-    for item in resumen:
-        agente_id = item.get("id")
-        if agente_id is None:
-            continue
-        agente_id = int(agente_id)
-        ids_vistos.add(agente_id)
-        nombre = agentes.get(agente_id) or item.get("name") or f"Agente {agente_id}"
-        first_name, last_name = _partir_nombre(nombre)
-        llamadas = int(item.get("conversations_count") or 0)
-        resueltas = int(item.get("resolved_conversations_count") or 0)
-        salientes_count = salientes_por_id.get(agente_id, 0)
-        avg_resolution = int(float(item.get("avg_resolution_time") or 0))
-
-        filas.append(
-            {
-                "First Name": first_name,
-                "Last Name": last_name,
-                "Calls": llamadas,
-                "Outgoing calls": salientes_count,
-                "Missed calls": max(llamadas - resueltas, 0),
-                "Call seconds": avg_resolution,
-                "Outgoing call seconds": 0,
-                "Worktime": "00:00:01" if llamadas or salientes_count else "00:00:00",
-            }
-        )
-
-    for agente_id, salientes_count in salientes_por_id.items():
-        if agente_id in ids_vistos or salientes_count <= 0:
-            continue
-        nombre = agentes.get(agente_id) or f"Agente {agente_id}"
-        first_name, last_name = _partir_nombre(nombre)
-        filas.append(
-            {
-                "First Name": first_name,
-                "Last Name": last_name,
-                "Calls": 0,
-                "Outgoing calls": salientes_count,
-                "Missed calls": 0,
-                "Call seconds": 0,
-                "Outgoing call seconds": 0,
-                "Worktime": "00:00:01",
-            }
-        )
-
-    df = pd.DataFrame(filas)
+    respuesta_call_stats = cliente.estadisticas_llamadas(rango, group_by="agent")
+    df = _dataframe_desde_call_stats(respuesta_call_stats, agentes)
     if df.empty:
         df = pd.DataFrame(
             columns=[

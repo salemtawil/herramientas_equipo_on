@@ -110,7 +110,7 @@ Antes de desplegar:
    - `MULTIADMIN_USERNAME` y `MULTIADMIN_PASSWORD`.
    Si no configuras estas variables, la app usa el endpoint Lambda legado, que solo trae agregados basicos.
 8. Si usaras `reporte_agentes` con Chatwoot, configura:
-   - `CHATWOOT_BASE_URL` (por defecto `https://app.chatwoot.com`)
+   - `CHATWOOT_BASE_URL` (para Chatpatch: `https://chat.mybrandpatch.com`)
    - `CHATWOOT_ACCOUNT_ID`
    - `CHATWOOT_API_ACCESS_TOKEN`
    - `CHATWOOT_TIMEZONE` (por defecto `America/Caracas`)
@@ -174,8 +174,8 @@ OLLAMA_WEEKLY_REPORT_MODEL=qwen2.5:7b
 
 - El botón "Buscar stats diarias" consulta Chatwoot desde el backend usando `CHATWOOT_API_ACCESS_TOKEN`; el token no se expone al frontend.
 - La consulta usa el rango completo de la fecha seleccionada según `CHATWOOT_TIMEZONE`.
-- La primera integración usa los reportes oficiales de Chatwoot por agente: conversaciones asignadas, conversaciones resueltas y mensajes salientes agrupados por agente.
-- En la tabla existente, `Llamadas` corresponde a conversaciones del rango, `Salientes` a mensajes salientes y `Perdidas` a conversaciones no resueltas dentro del día. Las duraciones exactas de voz quedan en `Mins llamadas` solo si Chatwoot las expone en sus reportes de la cuenta.
+- La integración usa el reporte de voz de Chatwoot/Chatpatch: `GET /api/v1/accounts/:account_id/call_stats`.
+- En la tabla existente, `Llamadas` corresponde a contestadas + perdidas, `Salientes` a llamadas salientes, `Perdidas` a llamadas perdidas, `Mins llamadas` a minutos entrantes y `Mins salientes` a minutos salientes.
 - El flujo manual por CSV se mantiene como respaldo.
 
 ## Límites de CSV
