@@ -325,10 +325,14 @@ def construir_consultas_turnos_chatwoot(
     if fecha_fin < fecha_inicio:
         raise ValueError("La fecha fin debe ser igual o posterior a la fecha inicio.")
 
-    if tipo_rango == "media_noche":
-        turnos = ["Media noche"]
-    else:
-        turnos = list((turnos_config or {}).keys())
+    # El reporte diario siempre representa el periodo seleccionado completo.
+    # Los turnos solo se usan despues para organizar los agentes, no para
+    # recortar sus estadisticas a una ventana distinta.
+    if tipo_rango != "media_noche":
+        rango = construir_rango_chatwoot_fechas(fecha_inicio.isoformat(), fecha_fin.isoformat())
+        return [{"turno": None, "rango": rango}]
+
+    turnos = ["Media noche"]
 
     consultas = []
     for fecha in _fechas_inclusivas(fecha_inicio, fecha_fin):
@@ -640,7 +644,9 @@ def obtener_dataframe_reporte_chatwoot(
         turno = consulta["turno"]
         respuesta_call_stats = cliente.estadisticas_llamadas(rango, group_by="agent")
         df_turno = _dataframe_desde_call_stats(respuesta_call_stats, agentes)
-        dataframes.append(_filtrar_dataframe_por_turno(df_turno, turno, turnos_config))
+        if turno:
+            df_turno = _filtrar_dataframe_por_turno(df_turno, turno, turnos_config)
+        dataframes.append(df_turno)
 
     df = pd.concat(dataframes, ignore_index=True) if dataframes else pd.DataFrame()
     if df.empty:
@@ -672,10 +678,10 @@ def obtener_dataframe_reporte_chatwoot(
         "tipo_rango": tipo_rango,
         "periodo_fechas": periodo_fechas or "personalizado",
         "cantidad_rangos": len(consultas_turnos),
-        "modo_consulta": "ventanas_por_turno",
+        "modo_consulta": "ventanas_media_noche" if tipo_rango == "media_noche" else "periodo_completo",
         "detalle_rangos": [
             {
-                "turno": consulta["turno"],
+                "turno": consulta["turno"] or "Todos los turnos",
                 "inicio_local": consulta["rango"].inicio_local,
                 "fin_local": consulta["rango"].fin_local,
             }
