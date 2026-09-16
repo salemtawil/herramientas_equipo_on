@@ -206,6 +206,13 @@ def _normalizar_int(valor):
     return int(round(_normalizar_float(valor)))
 
 
+def _valor(item, *claves, default=None):
+    for clave in claves:
+        if clave in item:
+            return item.get(clave)
+    return default
+
+
 def _filas_call_stats(respuesta):
     if isinstance(respuesta, dict):
         filas = respuesta.get("rows")
@@ -217,7 +224,7 @@ def _filas_call_stats(respuesta):
 
 
 def _nombre_fila_call_stats(fila, agentes):
-    agente_id = fila.get("id")
+    agente_id = _valor(fila, "id", "agent_id", "agentId")
     if agente_id is not None:
         try:
             agente_id = int(agente_id)
@@ -228,10 +235,10 @@ def _nombre_fila_call_stats(fila, agentes):
             return nombre
 
     return (
-        fila.get("name")
-        or fila.get("agent")
-        or fila.get("email")
-        or fila.get("inbox")
+        _valor(fila, "name")
+        or _valor(fila, "agent")
+        or _valor(fila, "email")
+        or _valor(fila, "inbox")
         or "Sin asignar"
     )
 
@@ -242,11 +249,13 @@ def _dataframe_desde_call_stats(respuesta, agentes):
         nombre = _nombre_fila_call_stats(item, agentes)
         first_name, last_name = _partir_nombre(nombre)
 
-        contestadas = _normalizar_int(item.get("callsAnswered"))
-        perdidas = _normalizar_int(item.get("missedCalls"))
-        salientes = _normalizar_int(item.get("outboundCalls"))
-        mins_llamadas = _normalizar_float(item.get("callMinutes"))
-        mins_salientes = _normalizar_float(item.get("outboundCallMinutes"))
+        contestadas = _normalizar_int(_valor(item, "callsAnswered", "calls_answered"))
+        perdidas = _normalizar_int(_valor(item, "missedCalls", "missed_calls"))
+        salientes = _normalizar_int(_valor(item, "outboundCalls", "outbound_calls"))
+        mins_llamadas = _normalizar_float(_valor(item, "callMinutes", "call_minutes"))
+        mins_salientes = _normalizar_float(
+            _valor(item, "outboundCallMinutes", "outbound_call_minutes")
+        )
 
         if not any([contestadas, perdidas, salientes, mins_llamadas, mins_salientes]):
             continue

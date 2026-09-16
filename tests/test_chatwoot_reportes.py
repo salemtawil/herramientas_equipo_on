@@ -64,6 +64,30 @@ class FakeChatwootClient:
         }
 
 
+class FakeSnakeCaseChatwootClient(FakeChatwootClient):
+    def estadisticas_llamadas(self, rango, group_by="agent"):
+        self.rangos.append(rango)
+        return {
+            "rows": [
+                {
+                    "agent_id": 10,
+                    "name": "Ana Perez",
+                    "calls_answered": 4,
+                    "missed_calls": 1,
+                    "call_minutes": 9.5,
+                    "outbound_calls": 2,
+                    "outbound_call_minutes": 3.25,
+                }
+            ],
+            "totals": {
+                "received_calls": 5,
+                "calls_answered": 4,
+                "missed_calls": 1,
+                "outbound_calls": 2,
+            },
+        }
+
+
 class ChatwootReportesTests(unittest.TestCase):
     def test_construye_dataframe_compatible_con_reporte_agentes(self):
         cliente = FakeChatwootClient()
@@ -91,6 +115,23 @@ class ChatwootReportesTests(unittest.TestCase):
         self.assertEqual(0, luis["Calls"])
         self.assertEqual(3, luis["Outgoing calls"])
         self.assertEqual(150, luis["Outgoing call seconds"])
+
+    def test_construye_dataframe_con_respuesta_snake_case_de_chatwoot(self):
+        cliente = FakeSnakeCaseChatwootClient()
+        df, _metadata = obtener_dataframe_reporte_chatwoot(
+            "2026-09-15",
+            cliente=cliente,
+        )
+
+        self.assertEqual(1, len(df))
+        ana = df.iloc[0]
+        self.assertEqual("Ana", ana["First Name"])
+        self.assertEqual("Perez", ana["Last Name"])
+        self.assertEqual(5, ana["Calls"])
+        self.assertEqual(2, ana["Outgoing calls"])
+        self.assertEqual(1, ana["Missed calls"])
+        self.assertEqual(570, ana["Call seconds"])
+        self.assertEqual(195, ana["Outgoing call seconds"])
 
     def test_rango_diario_usa_timezone_configurado(self):
         with patch.dict(os.environ, {"CHATWOOT_TIMEZONE": "UTC"}):
