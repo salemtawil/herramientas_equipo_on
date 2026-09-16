@@ -368,6 +368,11 @@ def reporte_agentes():
             accion = request.form.get("accion", "procesar_csv")
 
             if accion == "buscar_chatwoot":
+                if (
+                    tipo_rango_chatwoot == "media_noche"
+                    and request.form.get("media_noche_fin_confirmado") != "1"
+                ):
+                    hora_fin_chatwoot = ""
                 df, metadata_fuente = obtener_dataframe_reporte_chatwoot(
                     fecha_chatwoot,
                     hora_inicio_chatwoot,
