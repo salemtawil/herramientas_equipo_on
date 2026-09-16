@@ -32,8 +32,8 @@ class RangoReporteChatwoot:
 
 
 MEDIA_NOCHE_HORA_INICIO = "21:00"
-MEDIA_NOCHE_HORA_FIN_DEFAULT = "05:30"
-MEDIA_NOCHE_HORA_FIN_EXTENDIDA = "06:30"
+MEDIA_NOCHE_HORA_FIN_CORTA = "05:30"
+MEDIA_NOCHE_HORA_FIN_DEFAULT = "06:30"
 
 
 def _env_requerida(nombre):
@@ -204,7 +204,7 @@ def construir_rango_media_noche(fecha_texto=None, hora_fin_texto=None):
 
     hora_fin_texto = hora_fin_texto or MEDIA_NOCHE_HORA_FIN_DEFAULT
     hora_fin = _parsear_hora(hora_fin_texto, "La hora de fin de media noche")
-    if hora_fin_texto not in {MEDIA_NOCHE_HORA_FIN_DEFAULT, MEDIA_NOCHE_HORA_FIN_EXTENDIDA}:
+    if hora_fin_texto not in {MEDIA_NOCHE_HORA_FIN_CORTA, MEDIA_NOCHE_HORA_FIN_DEFAULT}:
         raise ValueError("El fin de Media noche debe ser 05:30 o 06:30.")
 
     inicio = datetime.combine(fecha - timedelta(days=1), time(21, 0), tzinfo=tz)
@@ -437,7 +437,20 @@ def _dataframe_desde_call_stats(respuesta, agentes):
         first_name, last_name = _partir_nombre(nombre)
 
         contestadas = _normalizar_int(_valor(item, "callsAnswered", "calls_answered"))
-        perdidas = _normalizar_int(_valor(item, "missedCalls", "missed_calls"))
+        perdidas = _normalizar_int(
+            _valor(
+                item,
+                "missedCalls",
+                "missed_calls",
+                "callsMissed",
+                "calls_missed",
+                "missed",
+                "missedCount",
+                "missed_count",
+                "unattendedCalls",
+                "unattended_calls",
+            )
+        )
         salientes = _normalizar_int(_valor(item, "outboundCalls", "outbound_calls"))
         mins_llamadas = _normalizar_float(_valor(item, "callMinutes", "call_minutes"))
         mins_salientes = _normalizar_float(
@@ -451,7 +464,7 @@ def _dataframe_desde_call_stats(respuesta, agentes):
             {
                 "First Name": first_name,
                 "Last Name": last_name,
-                "Calls": contestadas + perdidas,
+                "Calls": contestadas,
                 "Outgoing calls": salientes,
                 "Missed calls": perdidas,
                 "Call seconds": round(mins_llamadas * 60),

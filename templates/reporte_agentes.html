@@ -86,7 +86,7 @@
           <label class="small" for="tipo_rango_chatwoot">Tipo de reporte</label>
           <select id="tipo_rango_chatwoot" name="tipo_rango_chatwoot">
             <option value="diario" {% if tipo_rango_chatwoot != 'media_noche' %}selected{% endif %}>Día</option>
-            <option value="media_noche" {% if tipo_rango_chatwoot == 'media_noche' %}selected{% endif %}>Media noche 21:00-05:30/06:30</option>
+            <option value="media_noche" {% if tipo_rango_chatwoot == 'media_noche' %}selected{% endif %}>Media noche 21:00-06:30</option>
           </select>
         </div>
 
@@ -123,8 +123,8 @@
           <div class="chatwoot-field" data-night-end-field>
             <label class="small" for="hora_fin_chatwoot">Fin de media noche</label>
             <select id="hora_fin_chatwoot" name="hora_fin_chatwoot">
-              <option value="05:30" {% if hora_fin_chatwoot != '06:30' %}selected{% endif %}>05:30am</option>
-              <option value="06:30" {% if hora_fin_chatwoot == '06:30' %}selected{% endif %}>06:30am</option>
+              <option value="06:30" {% if hora_fin_chatwoot != '05:30' %}selected{% endif %}>06:30am</option>
+              <option value="05:30" {% if hora_fin_chatwoot == '05:30' %}selected{% endif %}>05:30am</option>
             </select>
           </div>
           <button type="submit">Traer stats de Chatwoot</button>
@@ -132,7 +132,7 @@
       </div>
     </form>
 
-    <p class="small top-space">Hoy consulta desde 00:00 hasta este momento. Ayer consulta de 00:00 a 23:59. Media noche consulta de 21:00 del día anterior hasta 05:30 o 06:30 del día seleccionado. Todo se calcula en zona Venezuela.</p>
+    <p class="small top-space">Hoy consulta desde 00:00 hasta este momento. Ayer consulta de 00:00 a 23:59. Media noche consulta de 21:00 del día anterior hasta 06:30 del día seleccionado, con opción de cerrar a las 05:30. Todo se calcula en zona Venezuela.</p>
 
     {% if metadata_fuente %}
       <div class="success top-space">
