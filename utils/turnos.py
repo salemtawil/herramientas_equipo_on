@@ -23,23 +23,29 @@ def obtener_turno(nombre_completo, turnos_config=None):
 
     nombre_normalizado = normalizar_nombre(nombre_completo)
     primer_nombre = obtener_primer_nombre(nombre_completo)
+    candidatos_primer_nombre = []
 
     for turno, lista_agentes in turnos_config.items():
         for agente in lista_agentes:
             agente_normalizado = normalizar_nombre(agente)
-            agente_primer_nombre = obtener_primer_nombre(agente)
 
-            # Coincidencia exacta
             if agente_normalizado == nombre_normalizado:
                 return turno
 
-            # Coincidencia por primer nombre
-            if agente_primer_nombre and agente_primer_nombre == primer_nombre:
-                return turno
-
-            # Coincidencia si el nombre del CSV empieza con el configurado
+    for turno, lista_agentes in turnos_config.items():
+        for agente in lista_agentes:
+            agente_normalizado = normalizar_nombre(agente)
             if agente_normalizado and nombre_normalizado.startswith(agente_normalizado + " "):
                 return turno
+
+    for turno, lista_agentes in turnos_config.items():
+        for agente in lista_agentes:
+            agente_primer_nombre = obtener_primer_nombre(agente)
+            if agente_primer_nombre and agente_primer_nombre == primer_nombre:
+                candidatos_primer_nombre.append(turno)
+
+    if len(set(candidatos_primer_nombre)) == 1:
+        return candidatos_primer_nombre[0]
 
     return "Sin asignar"
 

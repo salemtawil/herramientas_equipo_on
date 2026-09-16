@@ -3,6 +3,7 @@ import unittest
 import pandas as pd
 
 from tools.reporte_agentes import preparar_dataframe
+from utils.turnos import obtener_turno
 
 
 class ReporteAgentesTests(unittest.TestCase):
@@ -71,6 +72,23 @@ class ReporteAgentesTests(unittest.TestCase):
         self.assertEqual(4, victoria["Perdidas"])
         self.assertEqual(278, victoria["Mins llamadas"])
         self.assertEqual(81, victoria["Mins salientes"])
+
+    def test_turno_prioriza_coincidencia_exacta_antes_de_primer_nombre(self):
+        turnos = {
+            "Madrugada": ["Maria Rivas"],
+            "Shift Leaders": ["Maria Teixeira"],
+        }
+
+        self.assertEqual("Madrugada", obtener_turno("Maria Rivas", turnos))
+        self.assertEqual("Shift Leaders", obtener_turno("Maria Teixeira", turnos))
+
+    def test_turno_no_usa_primer_nombre_si_es_ambiguo(self):
+        turnos = {
+            "Madrugada": ["Maria Rivas"],
+            "Shift Leaders": ["Maria Teixeira"],
+        }
+
+        self.assertEqual("Sin asignar", obtener_turno("Maria Garcia", turnos))
 
 
 if __name__ == "__main__":
