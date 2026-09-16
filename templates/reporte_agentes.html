@@ -86,7 +86,7 @@
           <label class="small" for="tipo_rango_chatwoot">Tipo de reporte</label>
           <select id="tipo_rango_chatwoot" name="tipo_rango_chatwoot">
             <option value="diario" {% if tipo_rango_chatwoot != 'madrugada' %}selected{% endif %}>Día hasta ahora</option>
-            <option value="madrugada" {% if tipo_rango_chatwoot == 'madrugada' %}selected{% endif %}>Madrugada 00:00-07:00</option>
+            <option value="madrugada" {% if tipo_rango_chatwoot == 'madrugada' %}selected{% endif %}>Madrugada 04:00-12:30</option>
           </select>
         </div>
 
@@ -133,7 +133,7 @@
       </div>
     </form>
 
-    <p class="small top-space">Para Madrugada se consulta cada fecha del rango de 00:00 a 07:00 y se suman los resultados; si el turno actual está en curso, consulta hasta este momento.</p>
+    <p class="small top-space">Para Madrugada se consulta cada fecha del rango de 04:00 a 12:30 y se suman los resultados; si el turno actual está en curso, consulta hasta este momento.</p>
 
     {% if metadata_fuente %}
       <div class="success top-space">

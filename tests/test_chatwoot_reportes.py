@@ -173,9 +173,9 @@ class ChatwootReportesTests(unittest.TestCase):
         with patch.dict(os.environ, {"CHATWOOT_TIMEZONE": "UTC"}):
             rango = construir_rango_madrugada("2026-09-15")
 
-        self.assertEqual("2026-09-15 00:00:00", rango.inicio_local)
-        self.assertEqual("2026-09-15 07:00:59", rango.fin_local)
-        self.assertEqual((7 * 60 * 60) + 59, rango.until - rango.since)
+        self.assertEqual("2026-09-15 04:00:00", rango.inicio_local)
+        self.assertEqual("2026-09-15 12:30:59", rango.fin_local)
+        self.assertEqual((8 * 60 * 60) + (30 * 60) + 59, rango.until - rango.since)
 
     def test_dataframe_chatwoot_puede_usar_rango_madrugada(self):
         cliente = FakeChatwootClient()
@@ -186,22 +186,22 @@ class ChatwootReportesTests(unittest.TestCase):
         )
 
         self.assertEqual("madrugada", metadata["tipo_rango"])
-        self.assertEqual("2026-09-15 00:00:00", cliente.rangos[0].inicio_local)
-        self.assertEqual("2026-09-15 07:00:59", cliente.rangos[0].fin_local)
+        self.assertEqual("2026-09-15 04:00:00", cliente.rangos[0].inicio_local)
+        self.assertEqual("2026-09-15 12:30:59", cliente.rangos[0].fin_local)
 
     def test_dataframe_chatwoot_rango_madrugada_consulta_cada_fecha(self):
         cliente = FakeChatwootClient()
         df, metadata = obtener_dataframe_reporte_chatwoot(
-            "2026-09-15",
+            "2026-09-14",
             cliente=cliente,
             tipo_rango="madrugada",
-            fecha_fin_texto="2026-09-16",
+            fecha_fin_texto="2026-09-15",
         )
 
         self.assertEqual(2, len(cliente.rangos))
         self.assertEqual(2, metadata["cantidad_rangos"])
-        self.assertEqual("2026-09-15 00:00:00", cliente.rangos[0].inicio_local)
-        self.assertEqual("2026-09-16 07:00:59", cliente.rangos[1].fin_local)
+        self.assertEqual("2026-09-14 04:00:00", cliente.rangos[0].inicio_local)
+        self.assertEqual("2026-09-15 12:30:59", cliente.rangos[1].fin_local)
         self.assertEqual(4, len(df))
 
     def test_rango_rechaza_fin_antes_de_inicio(self):

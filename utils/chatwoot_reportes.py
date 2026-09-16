@@ -31,6 +31,12 @@ class RangoReporteChatwoot:
     fin_local: str
 
 
+MADRUGADA_HORA_INICIO = "04:00"
+MADRUGADA_HORA_FIN = "12:30"
+MADRUGADA_INICIO = time(4, 0)
+MADRUGADA_FIN = time(12, 30)
+
+
 def _env_requerida(nombre):
     valor = os.getenv(nombre, "").strip()
     if not valor:
@@ -193,10 +199,10 @@ def construir_rango_madrugada(fecha_texto=None):
     else:
         fecha = ahora.date()
 
-    if fecha == ahora.date() and ahora.time() < time(7, 0):
-        return construir_rango_chatwoot(fecha.isoformat(), "00:00", None)
+    if fecha == ahora.date() and MADRUGADA_INICIO <= ahora.time() < MADRUGADA_FIN:
+        return construir_rango_chatwoot(fecha.isoformat(), MADRUGADA_HORA_INICIO, None)
 
-    return construir_rango_chatwoot(fecha.isoformat(), "00:00", "07:00")
+    return construir_rango_chatwoot(fecha.isoformat(), MADRUGADA_HORA_INICIO, MADRUGADA_HORA_FIN)
 
 
 def _fechas_inclusivas(fecha_inicio, fecha_fin):
