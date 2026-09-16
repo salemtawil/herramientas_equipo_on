@@ -174,7 +174,7 @@ OLLAMA_WEEKLY_REPORT_MODEL=qwen2.5:7b
 
 - El botón "Buscar stats diarias" consulta Chatwoot desde el backend usando `CHATWOOT_API_ACCESS_TOKEN`; el token no se expone al frontend.
 - La consulta usa el rango completo de la fecha seleccionada según `CHATWOOT_TIMEZONE`.
-- La integración usa el reporte de voz de Chatwoot/Chatpatch: `GET /api/v1/accounts/:account_id/custom/call_stats`.
+- La integración usa el reporte de voz de Chatwoot/Chatpatch: `GET /custom/api/v1/accounts/:account_id/call_stats`.
 - En la tabla existente, `Llamadas` corresponde a contestadas + perdidas, `Salientes` a llamadas salientes, `Perdidas` a llamadas perdidas, `Mins llamadas` a minutos entrantes y `Mins salientes` a minutos salientes.
 - El flujo manual por CSV se mantiene como respaldo.
 

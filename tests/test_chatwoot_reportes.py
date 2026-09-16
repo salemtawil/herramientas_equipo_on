@@ -130,7 +130,7 @@ class ChatwootReportesTests(unittest.TestCase):
         rango = construir_rango_chatwoot("2026-09-14", "08:00", "09:00")
         cliente.estadisticas_llamadas(rango)
 
-        self.assertEqual("/api/v1/accounts/2/custom/call_stats", cliente.path)
+        self.assertEqual("/custom/api/v1/accounts/2/call_stats", cliente.path)
 
 
 if __name__ == "__main__":

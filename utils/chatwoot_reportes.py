@@ -159,7 +159,7 @@ class ChatwootClient:
 
     def estadisticas_llamadas(self, rango, group_by="agent"):
         return self.get(
-            f"/api/v1/accounts/{self.account_id}/custom/call_stats",
+            f"/custom/api/v1/accounts/{self.account_id}/call_stats",
             params={"group_by": group_by, "since": str(rango.since), "until": str(rango.until)},
         )
 
