@@ -67,7 +67,18 @@ def preparar_dataframe(df, turnos_config):
         ]
     ].copy()
 
-    return df_final.rename(columns=TRADUCCIONES)
+    df_final = df_final.rename(columns=TRADUCCIONES)
+
+    columnas_metricas = ["Llamadas", "Salientes", "Perdidas", "Mins llamadas", "Mins salientes"]
+    df_final = (
+        df_final.groupby(["Agente", "Turno"], dropna=False, as_index=False)
+        .agg(
+            Nombre=("Nombre", "first"),
+            **{columna: (columna, "sum") for columna in columnas_metricas},
+        )
+    )
+
+    return df_final[["Turno", "Nombre", *columnas_metricas, "Agente"]]
 
 
 def html_tabla(df):
