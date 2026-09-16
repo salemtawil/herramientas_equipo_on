@@ -2612,6 +2612,41 @@ html[data-theme="dark"] .reporte-agentes-page .segmented-control input:checked +
   white-space: nowrap;
 }
 
+.reporte-agentes-page .chatwoot-range-details {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--surface-muted) 82%, transparent);
+  padding: 10px 12px;
+}
+
+.reporte-agentes-page .chatwoot-range-details summary {
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.reporte-agentes-page .chatwoot-range-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.reporte-agentes-page .chatwoot-range-item {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.35fr) minmax(0, 1fr);
+  gap: 10px;
+  align-items: baseline;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.reporte-agentes-page .chatwoot-range-item span {
+  min-width: 0;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 820px) {
   .reporte-agentes-page .chatwoot-report-grid,
   .reporte-agentes-page .chatwoot-date-range,
@@ -2625,6 +2660,11 @@ html[data-theme="dark"] .reporte-agentes-page .segmented-control input:checked +
 
   .reporte-agentes-page .chatwoot-night-end button {
     width: 100%;
+  }
+
+  .reporte-agentes-page .chatwoot-range-item {
+    grid-template-columns: 1fr;
+    gap: 4px;
   }
 }
 

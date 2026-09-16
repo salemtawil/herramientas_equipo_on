@@ -673,5 +673,13 @@ def obtener_dataframe_reporte_chatwoot(
         "periodo_fechas": periodo_fechas or "personalizado",
         "cantidad_rangos": len(consultas_turnos),
         "modo_consulta": "ventanas_por_turno",
+        "detalle_rangos": [
+            {
+                "turno": consulta["turno"],
+                "inicio_local": consulta["rango"].inicio_local,
+                "fin_local": consulta["rango"].fin_local,
+            }
+            for consulta in consultas_turnos
+        ],
     }
     return df, metadata

@@ -137,8 +137,21 @@
 
     {% if metadata_fuente %}
       <div class="success top-space">
-        Fuente: {{ metadata_fuente.fuente }} · Rango {{ metadata_fuente.inicio_local }} - {{ metadata_fuente.fin_local }} · Zona {{ metadata_fuente.timezone }}{% if metadata_fuente.cantidad_rangos and metadata_fuente.cantidad_rangos > 1 %} · {{ metadata_fuente.cantidad_rangos }} consultas{% endif %}
+        Fuente: {{ metadata_fuente.fuente }} · Periodo seleccionado {{ metadata_fuente.fecha }}{% if metadata_fuente.fecha_fin and metadata_fuente.fecha_fin != metadata_fuente.fecha %} - {{ metadata_fuente.fecha_fin }}{% endif %} · Zona {{ metadata_fuente.timezone }}{% if metadata_fuente.cantidad_rangos and metadata_fuente.cantidad_rangos > 1 %} · {{ metadata_fuente.cantidad_rangos }} consultas por ventanas de turno{% endif %}
       </div>
+      {% if metadata_fuente.detalle_rangos %}
+        <details class="chatwoot-range-details top-space">
+          <summary>Ver ventanas consultadas</summary>
+          <div class="chatwoot-range-list">
+            {% for rango in metadata_fuente.detalle_rangos %}
+              <div class="chatwoot-range-item">
+                <strong>{{ rango.turno }}</strong>
+                <span>{{ rango.inicio_local }} - {{ rango.fin_local }}</span>
+              </div>
+            {% endfor %}
+          </div>
+        </details>
+      {% endif %}
     {% endif %}
   </section>
 
