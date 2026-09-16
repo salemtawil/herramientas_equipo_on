@@ -6,6 +6,7 @@ from utils.chatwoot_reportes import (
     ChatwootClient,
     construir_rango_chatwoot,
     construir_rango_diario,
+    construir_rango_madrugada,
     obtener_dataframe_reporte_chatwoot,
 )
 
@@ -147,6 +148,26 @@ class ChatwootReportesTests(unittest.TestCase):
         self.assertEqual("2026-09-15 08:30:00", rango.inicio_local)
         self.assertEqual("2026-09-15 16:45:59", rango.fin_local)
         self.assertEqual((8 * 60 * 60) + (15 * 60) + 59, rango.until - rango.since)
+
+    def test_rango_madrugada_usa_ventana_del_turno(self):
+        with patch.dict(os.environ, {"CHATWOOT_TIMEZONE": "UTC"}):
+            rango = construir_rango_madrugada("2026-09-15")
+
+        self.assertEqual("2026-09-15 00:00:00", rango.inicio_local)
+        self.assertEqual("2026-09-15 07:00:59", rango.fin_local)
+        self.assertEqual((7 * 60 * 60) + 59, rango.until - rango.since)
+
+    def test_dataframe_chatwoot_puede_usar_rango_madrugada(self):
+        cliente = FakeChatwootClient()
+        _df, metadata = obtener_dataframe_reporte_chatwoot(
+            "2026-09-15",
+            cliente=cliente,
+            tipo_rango="madrugada",
+        )
+
+        self.assertEqual("madrugada", metadata["tipo_rango"])
+        self.assertEqual("2026-09-15 00:00:00", cliente.rangos[0].inicio_local)
+        self.assertEqual("2026-09-15 07:00:59", cliente.rangos[0].fin_local)
 
     def test_rango_rechaza_fin_antes_de_inicio(self):
         with patch.dict(os.environ, {"CHATWOOT_TIMEZONE": "UTC"}):

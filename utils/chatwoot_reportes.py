@@ -106,6 +106,28 @@ def construir_rango_diario(fecha_texto=None):
     return construir_rango_chatwoot(fecha_texto)
 
 
+def construir_rango_madrugada(fecha_texto=None):
+    tz_name = _timezone()
+    tz = _obtener_timezone(tz_name)
+    ahora = datetime.now(tz)
+
+    if fecha_texto:
+        fecha = datetime.strptime(fecha_texto, "%Y-%m-%d").date()
+    else:
+        fecha = ahora.date()
+
+    if fecha == ahora.date() and ahora.time() < time(7, 0):
+        return construir_rango_chatwoot(fecha.isoformat(), "00:00", None)
+
+    return construir_rango_chatwoot(fecha.isoformat(), "00:00", "07:00")
+
+
+def construir_rango_reporte(tipo_rango="diario", fecha_texto=None, hora_inicio_texto=None, hora_fin_texto=None):
+    if tipo_rango == "madrugada":
+        return construir_rango_madrugada(fecha_texto)
+    return construir_rango_chatwoot(fecha_texto, hora_inicio_texto, hora_fin_texto)
+
+
 class ChatwootClient:
     def __init__(self, base_url=None, account_id=None, api_token=None, timeout=30):
         self.base_url = (base_url or _base_url()).rstrip("/")
@@ -276,8 +298,14 @@ def _dataframe_desde_call_stats(respuesta, agentes):
     return pd.DataFrame(filas)
 
 
-def obtener_dataframe_reporte_chatwoot(fecha_texto=None, hora_inicio_texto=None, hora_fin_texto=None, cliente=None):
-    rango = construir_rango_chatwoot(fecha_texto, hora_inicio_texto, hora_fin_texto)
+def obtener_dataframe_reporte_chatwoot(
+    fecha_texto=None,
+    hora_inicio_texto=None,
+    hora_fin_texto=None,
+    cliente=None,
+    tipo_rango="diario",
+):
+    rango = construir_rango_reporte(tipo_rango, fecha_texto, hora_inicio_texto, hora_fin_texto)
     cliente = cliente or ChatwootClient()
 
     agentes = _indice_agentes(_normalizar_lista_respuesta(cliente.listar_agentes()))
@@ -305,5 +333,6 @@ def obtener_dataframe_reporte_chatwoot(fecha_texto=None, hora_inicio_texto=None,
         "inicio_local": rango.inicio_local,
         "fin_local": rango.fin_local,
         "fuente": "Chatwoot",
+        "tipo_rango": tipo_rango,
     }
     return df, metadata

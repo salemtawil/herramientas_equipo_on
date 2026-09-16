@@ -74,7 +74,7 @@
     <div class="page-section-title">
       <div>
         <h2>Reporte diario automático</h2>
-        <p class="small">Por defecto consulta desde las 00:00 hasta este momento. Ajusta las horas si necesitas un turno específico.</p>
+        <p class="small">Elige el rango del turno para que Chatwoot consulte exactamente esa ventana horaria.</p>
       </div>
       <span class="hero-badge hero-badge-soft">Diario</span>
     </div>
@@ -82,6 +82,13 @@
     <form method="post" data-processing-message="Consultando Chatwoot y construyendo el reporte...">
       <input type="hidden" name="accion" value="buscar_chatwoot">
       <div class="row">
+        <div>
+          <label class="small" for="tipo_rango_chatwoot">Rango</label>
+          <select id="tipo_rango_chatwoot" name="tipo_rango_chatwoot">
+            <option value="diario" {% if tipo_rango_chatwoot != 'madrugada' %}selected{% endif %}>Día hasta ahora</option>
+            <option value="madrugada" {% if tipo_rango_chatwoot == 'madrugada' %}selected{% endif %}>Madrugada 00:00-07:00</option>
+          </select>
+        </div>
         <div>
           <label class="small" for="fecha_chatwoot">Fecha opcional</label>
           <input id="fecha_chatwoot" type="date" name="fecha_chatwoot" value="{{ fecha_chatwoot }}">
@@ -100,7 +107,7 @@
       </div>
     </form>
 
-    <p class="small top-space">La API de Chatwoot entrega conversaciones por agente y mensajes salientes. Las duraciones exactas de llamadas dependen de que Chatwoot exponga esos datos en tu cuenta.</p>
+    <p class="small top-space">Para Madrugada se usa la zona configurada en backend y se consulta de 00:00 a 07:00 del día elegido; si el turno está en curso, consulta hasta este momento.</p>
 
     {% if metadata_fuente %}
       <div class="success top-space">

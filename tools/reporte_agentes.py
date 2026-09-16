@@ -355,6 +355,7 @@ def reporte_agentes():
     fecha_chatwoot = request.form.get("fecha_chatwoot", "")
     hora_inicio_chatwoot = request.form.get("hora_inicio_chatwoot", "")
     hora_fin_chatwoot = request.form.get("hora_fin_chatwoot", "")
+    tipo_rango_chatwoot = request.form.get("tipo_rango_chatwoot", "diario")
 
     if request.method == "POST":
         repetidos = detectar_repetidos(turnos_config)
@@ -369,8 +370,10 @@ def reporte_agentes():
                     fecha_chatwoot,
                     hora_inicio_chatwoot,
                     hora_fin_chatwoot,
+                    tipo_rango=tipo_rango_chatwoot,
                 )
                 fecha_chatwoot = metadata_fuente["fecha"]
+                tipo_rango_chatwoot = metadata_fuente["tipo_rango"]
             else:
                 archivo = request.files.get("archivo")
                 if not archivo or not archivo.filename:
@@ -428,4 +431,5 @@ def reporte_agentes():
         fecha_chatwoot=fecha_chatwoot,
         hora_inicio_chatwoot=hora_inicio_chatwoot,
         hora_fin_chatwoot=hora_fin_chatwoot,
+        tipo_rango_chatwoot=tipo_rango_chatwoot,
     )
