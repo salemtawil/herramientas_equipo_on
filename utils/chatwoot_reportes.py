@@ -21,6 +21,16 @@ class RangoChatwoot:
     fin_local: str
 
 
+@dataclass
+class RangoReporteChatwoot:
+    rangos: list
+    fecha: date
+    fecha_fin: date
+    timezone: str
+    inicio_local: str
+    fin_local: str
+
+
 def _env_requerida(nombre):
     valor = os.getenv(nombre, "").strip()
     if not valor:
@@ -102,6 +112,53 @@ def construir_rango_chatwoot(fecha_texto=None, hora_inicio_texto=None, hora_fin_
     )
 
 
+def construir_rango_chatwoot_fechas(
+    fecha_inicio_texto=None,
+    fecha_fin_texto=None,
+    hora_inicio_texto=None,
+    hora_fin_texto=None,
+):
+    tz_name = _timezone()
+    tz = _obtener_timezone(tz_name)
+    ahora = datetime.now(tz)
+
+    if fecha_inicio_texto:
+        fecha_inicio = datetime.strptime(fecha_inicio_texto, "%Y-%m-%d").date()
+    else:
+        fecha_inicio = ahora.date()
+
+    if fecha_fin_texto:
+        fecha_fin = datetime.strptime(fecha_fin_texto, "%Y-%m-%d").date()
+    else:
+        fecha_fin = fecha_inicio
+
+    if fecha_fin < fecha_inicio:
+        raise ValueError("La fecha fin debe ser igual o posterior a la fecha inicio.")
+
+    hora_inicio = _parsear_hora(hora_inicio_texto, "La hora de inicio") or time.min
+    hora_fin = _parsear_hora(hora_fin_texto, "La hora de fin")
+
+    inicio = datetime.combine(fecha_inicio, hora_inicio, tzinfo=tz)
+    if hora_fin:
+        fin = datetime.combine(fecha_fin, hora_fin, tzinfo=tz) + timedelta(seconds=59)
+    elif fecha_fin == ahora.date():
+        fin = ahora
+    else:
+        fin = datetime.combine(fecha_fin + timedelta(days=1), time.min, tzinfo=tz) - timedelta(seconds=1)
+
+    if fin <= inicio:
+        raise ValueError("El fin del rango debe ser posterior al inicio.")
+
+    return RangoChatwoot(
+        fecha=fecha_inicio,
+        since=int(inicio.timestamp()),
+        until=int(fin.timestamp()),
+        timezone=tz_name,
+        inicio_local=inicio.strftime("%Y-%m-%d %H:%M:%S"),
+        fin_local=fin.strftime("%Y-%m-%d %H:%M:%S"),
+    )
+
+
 def construir_rango_diario(fecha_texto=None):
     return construir_rango_chatwoot(fecha_texto)
 
@@ -122,10 +179,70 @@ def construir_rango_madrugada(fecha_texto=None):
     return construir_rango_chatwoot(fecha.isoformat(), "00:00", "07:00")
 
 
-def construir_rango_reporte(tipo_rango="diario", fecha_texto=None, hora_inicio_texto=None, hora_fin_texto=None):
+def _fechas_inclusivas(fecha_inicio, fecha_fin):
+    fecha = fecha_inicio
+    while fecha <= fecha_fin:
+        yield fecha
+        fecha += timedelta(days=1)
+
+
+def construir_rangos_madrugada(fecha_inicio_texto=None, fecha_fin_texto=None):
+    tz_name = _timezone()
+    tz = _obtener_timezone(tz_name)
+    ahora = datetime.now(tz)
+
+    if fecha_inicio_texto:
+        fecha_inicio = datetime.strptime(fecha_inicio_texto, "%Y-%m-%d").date()
+    else:
+        fecha_inicio = ahora.date()
+
+    if fecha_fin_texto:
+        fecha_fin = datetime.strptime(fecha_fin_texto, "%Y-%m-%d").date()
+    else:
+        fecha_fin = fecha_inicio
+
+    if fecha_fin < fecha_inicio:
+        raise ValueError("La fecha fin debe ser igual o posterior a la fecha inicio.")
+
+    return [construir_rango_madrugada(fecha.isoformat()) for fecha in _fechas_inclusivas(fecha_inicio, fecha_fin)]
+
+
+def construir_rango_reporte(
+    tipo_rango="diario",
+    fecha_texto=None,
+    hora_inicio_texto=None,
+    hora_fin_texto=None,
+    fecha_fin_texto=None,
+):
     if tipo_rango == "madrugada":
-        return construir_rango_madrugada(fecha_texto)
-    return construir_rango_chatwoot(fecha_texto, hora_inicio_texto, hora_fin_texto)
+        rangos = construir_rangos_madrugada(fecha_texto, fecha_fin_texto)
+    else:
+        rangos = [
+            construir_rango_chatwoot_fechas(
+                fecha_texto,
+                fecha_fin_texto,
+                hora_inicio_texto,
+                hora_fin_texto,
+            )
+        ]
+
+    return RangoReporteChatwoot(
+        rangos=rangos,
+        fecha=rangos[0].fecha,
+        fecha_fin=rangos[-1].fecha,
+        timezone=rangos[0].timezone,
+        inicio_local=rangos[0].inicio_local,
+        fin_local=rangos[-1].fin_local,
+    )
+
+
+def _rango_unico_reporte(
+    tipo_rango="diario",
+    fecha_texto=None,
+    hora_inicio_texto=None,
+    hora_fin_texto=None,
+):
+    return construir_rango_reporte(tipo_rango, fecha_texto, hora_inicio_texto, hora_fin_texto).rangos[0]
 
 
 class ChatwootClient:
@@ -304,13 +421,24 @@ def obtener_dataframe_reporte_chatwoot(
     hora_fin_texto=None,
     cliente=None,
     tipo_rango="diario",
+    fecha_fin_texto=None,
 ):
-    rango = construir_rango_reporte(tipo_rango, fecha_texto, hora_inicio_texto, hora_fin_texto)
+    rango_reporte = construir_rango_reporte(
+        tipo_rango,
+        fecha_texto,
+        hora_inicio_texto,
+        hora_fin_texto,
+        fecha_fin_texto,
+    )
     cliente = cliente or ChatwootClient()
 
     agentes = _indice_agentes(_normalizar_lista_respuesta(cliente.listar_agentes()))
-    respuesta_call_stats = cliente.estadisticas_llamadas(rango, group_by="agent")
-    df = _dataframe_desde_call_stats(respuesta_call_stats, agentes)
+    dataframes = []
+    for rango in rango_reporte.rangos:
+        respuesta_call_stats = cliente.estadisticas_llamadas(rango, group_by="agent")
+        dataframes.append(_dataframe_desde_call_stats(respuesta_call_stats, agentes))
+
+    df = pd.concat(dataframes, ignore_index=True) if dataframes else pd.DataFrame()
     if df.empty:
         df = pd.DataFrame(
             columns=[
@@ -326,13 +454,15 @@ def obtener_dataframe_reporte_chatwoot(
         )
 
     metadata = {
-        "fecha": rango.fecha.isoformat(),
-        "since": rango.since,
-        "until": rango.until,
-        "timezone": rango.timezone,
-        "inicio_local": rango.inicio_local,
-        "fin_local": rango.fin_local,
+        "fecha": rango_reporte.fecha.isoformat(),
+        "fecha_fin": rango_reporte.fecha_fin.isoformat(),
+        "since": rango_reporte.rangos[0].since,
+        "until": rango_reporte.rangos[-1].until,
+        "timezone": rango_reporte.timezone,
+        "inicio_local": rango_reporte.inicio_local,
+        "fin_local": rango_reporte.fin_local,
         "fuente": "Chatwoot",
         "tipo_rango": tipo_rango,
+        "cantidad_rangos": len(rango_reporte.rangos),
     }
     return df, metadata

@@ -353,6 +353,7 @@ def reporte_agentes():
     turnos_ranking_disponibles = []
     metadata_fuente = None
     fecha_chatwoot = request.form.get("fecha_chatwoot", "")
+    fecha_fin_chatwoot = request.form.get("fecha_fin_chatwoot", "")
     hora_inicio_chatwoot = request.form.get("hora_inicio_chatwoot", "")
     hora_fin_chatwoot = request.form.get("hora_fin_chatwoot", "")
     tipo_rango_chatwoot = request.form.get("tipo_rango_chatwoot", "diario")
@@ -371,8 +372,10 @@ def reporte_agentes():
                     hora_inicio_chatwoot,
                     hora_fin_chatwoot,
                     tipo_rango=tipo_rango_chatwoot,
+                    fecha_fin_texto=fecha_fin_chatwoot,
                 )
                 fecha_chatwoot = metadata_fuente["fecha"]
+                fecha_fin_chatwoot = metadata_fuente["fecha_fin"]
                 tipo_rango_chatwoot = metadata_fuente["tipo_rango"]
             else:
                 archivo = request.files.get("archivo")
@@ -429,6 +432,7 @@ def reporte_agentes():
         turnos_ranking_disponibles=turnos_ranking_disponibles,
         metadata_fuente=metadata_fuente,
         fecha_chatwoot=fecha_chatwoot,
+        fecha_fin_chatwoot=fecha_fin_chatwoot,
         hora_inicio_chatwoot=hora_inicio_chatwoot,
         hora_fin_chatwoot=hora_fin_chatwoot,
         tipo_rango_chatwoot=tipo_rango_chatwoot,

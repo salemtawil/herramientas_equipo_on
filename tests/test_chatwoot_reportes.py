@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 from utils.chatwoot_reportes import (
     ChatwootClient,
+    construir_rango_chatwoot_fechas,
     construir_rango_chatwoot,
     construir_rango_diario,
     construir_rango_madrugada,
@@ -149,6 +150,18 @@ class ChatwootReportesTests(unittest.TestCase):
         self.assertEqual("2026-09-15 16:45:59", rango.fin_local)
         self.assertEqual((8 * 60 * 60) + (15 * 60) + 59, rango.until - rango.since)
 
+    def test_rango_fechas_diario_usa_inicio_y_fin(self):
+        with patch.dict(os.environ, {"CHATWOOT_TIMEZONE": "UTC"}):
+            rango = construir_rango_chatwoot_fechas(
+                "2026-09-14",
+                "2026-09-16",
+                "08:00",
+                "17:00",
+            )
+
+        self.assertEqual("2026-09-14 08:00:00", rango.inicio_local)
+        self.assertEqual("2026-09-16 17:00:59", rango.fin_local)
+
     def test_rango_madrugada_usa_ventana_del_turno(self):
         with patch.dict(os.environ, {"CHATWOOT_TIMEZONE": "UTC"}):
             rango = construir_rango_madrugada("2026-09-15")
@@ -168,6 +181,21 @@ class ChatwootReportesTests(unittest.TestCase):
         self.assertEqual("madrugada", metadata["tipo_rango"])
         self.assertEqual("2026-09-15 00:00:00", cliente.rangos[0].inicio_local)
         self.assertEqual("2026-09-15 07:00:59", cliente.rangos[0].fin_local)
+
+    def test_dataframe_chatwoot_rango_madrugada_consulta_cada_fecha(self):
+        cliente = FakeChatwootClient()
+        df, metadata = obtener_dataframe_reporte_chatwoot(
+            "2026-09-15",
+            cliente=cliente,
+            tipo_rango="madrugada",
+            fecha_fin_texto="2026-09-16",
+        )
+
+        self.assertEqual(2, len(cliente.rangos))
+        self.assertEqual(2, metadata["cantidad_rangos"])
+        self.assertEqual("2026-09-15 00:00:00", cliente.rangos[0].inicio_local)
+        self.assertEqual("2026-09-16 07:00:59", cliente.rangos[1].fin_local)
+        self.assertEqual(4, len(df))
 
     def test_rango_rechaza_fin_antes_de_inicio(self):
         with patch.dict(os.environ, {"CHATWOOT_TIMEZONE": "UTC"}):

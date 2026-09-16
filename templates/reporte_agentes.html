@@ -90,8 +90,12 @@
           </select>
         </div>
         <div>
-          <label class="small" for="fecha_chatwoot">Fecha opcional</label>
+          <label class="small" for="fecha_chatwoot">Fecha inicio</label>
           <input id="fecha_chatwoot" type="date" name="fecha_chatwoot" value="{{ fecha_chatwoot }}">
+        </div>
+        <div>
+          <label class="small" for="fecha_fin_chatwoot">Fecha fin</label>
+          <input id="fecha_fin_chatwoot" type="date" name="fecha_fin_chatwoot" value="{{ fecha_fin_chatwoot }}">
         </div>
         <div>
           <label class="small" for="hora_inicio_chatwoot">Desde</label>
@@ -107,11 +111,11 @@
       </div>
     </form>
 
-    <p class="small top-space">Para Madrugada se usa la zona configurada en backend y se consulta de 00:00 a 07:00 del día elegido; si el turno está en curso, consulta hasta este momento.</p>
+    <p class="small top-space">Para Madrugada se consulta cada fecha del rango de 00:00 a 07:00 y se suman los resultados; si el turno actual está en curso, consulta hasta este momento.</p>
 
     {% if metadata_fuente %}
       <div class="success top-space">
-        Fuente: {{ metadata_fuente.fuente }} · Rango {{ metadata_fuente.inicio_local }} - {{ metadata_fuente.fin_local }} · Zona {{ metadata_fuente.timezone }}
+        Fuente: {{ metadata_fuente.fuente }} · Rango {{ metadata_fuente.inicio_local }} - {{ metadata_fuente.fin_local }} · Zona {{ metadata_fuente.timezone }}{% if metadata_fuente.cantidad_rangos and metadata_fuente.cantidad_rangos > 1 %} · {{ metadata_fuente.cantidad_rangos }} consultas{% endif %}
       </div>
     {% endif %}
   </section>
