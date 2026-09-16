@@ -31,10 +31,9 @@ class RangoReporteChatwoot:
     fin_local: str
 
 
-MADRUGADA_HORA_INICIO = "04:00"
-MADRUGADA_HORA_FIN = "12:30"
-MADRUGADA_INICIO = time(4, 0)
-MADRUGADA_FIN = time(12, 30)
+MEDIA_NOCHE_HORA_INICIO = "21:00"
+MEDIA_NOCHE_HORA_FIN_DEFAULT = "05:30"
+MEDIA_NOCHE_HORA_FIN_EXTENDIDA = "06:30"
 
 
 def _env_requerida(nombre):
@@ -58,6 +57,10 @@ def _api_token():
 
 def _timezone():
     return os.getenv("CHATWOOT_TIMEZONE", "America/Caracas").strip() or "America/Caracas"
+
+
+def _timezone_venezuela():
+    return "America/Caracas"
 
 
 def _obtener_timezone(tz_name):
@@ -89,7 +92,7 @@ def resolver_fechas_periodo(periodo_fechas=None, fecha_inicio_texto=None, fecha_
     if not periodo:
         return fecha_inicio_texto, fecha_fin_texto
 
-    tz = _obtener_timezone(_timezone())
+    tz = _obtener_timezone(_timezone_venezuela())
     hoy = datetime.now(tz).date()
 
     if periodo == "hoy":
@@ -105,7 +108,7 @@ def resolver_fechas_periodo(periodo_fechas=None, fecha_inicio_texto=None, fecha_
 
 
 def construir_rango_chatwoot(fecha_texto=None, hora_inicio_texto=None, hora_fin_texto=None):
-    tz_name = _timezone()
+    tz_name = _timezone_venezuela()
     tz = _obtener_timezone(tz_name)
     ahora = datetime.now(tz)
 
@@ -144,7 +147,7 @@ def construir_rango_chatwoot_fechas(
     hora_inicio_texto=None,
     hora_fin_texto=None,
 ):
-    tz_name = _timezone()
+    tz_name = _timezone_venezuela()
     tz = _obtener_timezone(tz_name)
     ahora = datetime.now(tz)
 
@@ -189,8 +192,8 @@ def construir_rango_diario(fecha_texto=None):
     return construir_rango_chatwoot(fecha_texto)
 
 
-def construir_rango_madrugada(fecha_texto=None):
-    tz_name = _timezone()
+def construir_rango_media_noche(fecha_texto=None, hora_fin_texto=None):
+    tz_name = _timezone_venezuela()
     tz = _obtener_timezone(tz_name)
     ahora = datetime.now(tz)
 
@@ -199,10 +202,26 @@ def construir_rango_madrugada(fecha_texto=None):
     else:
         fecha = ahora.date()
 
-    if fecha == ahora.date() and MADRUGADA_INICIO <= ahora.time() < MADRUGADA_FIN:
-        return construir_rango_chatwoot(fecha.isoformat(), MADRUGADA_HORA_INICIO, None)
+    hora_fin_texto = hora_fin_texto or MEDIA_NOCHE_HORA_FIN_DEFAULT
+    hora_fin = _parsear_hora(hora_fin_texto, "La hora de fin de media noche")
+    if hora_fin_texto not in {MEDIA_NOCHE_HORA_FIN_DEFAULT, MEDIA_NOCHE_HORA_FIN_EXTENDIDA}:
+        raise ValueError("El fin de Media noche debe ser 05:30 o 06:30.")
 
-    return construir_rango_chatwoot(fecha.isoformat(), MADRUGADA_HORA_INICIO, MADRUGADA_HORA_FIN)
+    inicio = datetime.combine(fecha - timedelta(days=1), time(21, 0), tzinfo=tz)
+    fin_programado = datetime.combine(fecha, hora_fin, tzinfo=tz) + timedelta(seconds=59)
+    fin = min(ahora, fin_programado) if fecha == ahora.date() and ahora < fin_programado else fin_programado
+
+    if fin <= inicio:
+        raise ValueError("El fin del rango debe ser posterior al inicio.")
+
+    return RangoChatwoot(
+        fecha=fecha,
+        since=int(inicio.timestamp()),
+        until=int(fin.timestamp()),
+        timezone=tz_name,
+        inicio_local=inicio.strftime("%Y-%m-%d %H:%M:%S"),
+        fin_local=fin.strftime("%Y-%m-%d %H:%M:%S"),
+    )
 
 
 def _fechas_inclusivas(fecha_inicio, fecha_fin):
@@ -212,8 +231,8 @@ def _fechas_inclusivas(fecha_inicio, fecha_fin):
         fecha += timedelta(days=1)
 
 
-def construir_rangos_madrugada(fecha_inicio_texto=None, fecha_fin_texto=None):
-    tz_name = _timezone()
+def construir_rangos_media_noche(fecha_inicio_texto=None, fecha_fin_texto=None, hora_fin_texto=None):
+    tz_name = _timezone_venezuela()
     tz = _obtener_timezone(tz_name)
     ahora = datetime.now(tz)
 
@@ -230,7 +249,10 @@ def construir_rangos_madrugada(fecha_inicio_texto=None, fecha_fin_texto=None):
     if fecha_fin < fecha_inicio:
         raise ValueError("La fecha fin debe ser igual o posterior a la fecha inicio.")
 
-    return [construir_rango_madrugada(fecha.isoformat()) for fecha in _fechas_inclusivas(fecha_inicio, fecha_fin)]
+    return [
+        construir_rango_media_noche(fecha.isoformat(), hora_fin_texto)
+        for fecha in _fechas_inclusivas(fecha_inicio, fecha_fin)
+    ]
 
 
 def construir_rango_reporte(
@@ -240,8 +262,8 @@ def construir_rango_reporte(
     hora_fin_texto=None,
     fecha_fin_texto=None,
 ):
-    if tipo_rango == "madrugada":
-        rangos = construir_rangos_madrugada(fecha_texto, fecha_fin_texto)
+    if tipo_rango == "media_noche":
+        rangos = construir_rangos_media_noche(fecha_texto, fecha_fin_texto, hora_fin_texto)
     else:
         rangos = [
             construir_rango_chatwoot_fechas(
@@ -451,6 +473,9 @@ def obtener_dataframe_reporte_chatwoot(
     periodo_fechas=None,
 ):
     fecha_texto, fecha_fin_texto = resolver_fechas_periodo(periodo_fechas, fecha_texto, fecha_fin_texto)
+    if tipo_rango != "media_noche":
+        hora_inicio_texto = None
+        hora_fin_texto = None
     rango_reporte = construir_rango_reporte(
         tipo_rango,
         fecha_texto,

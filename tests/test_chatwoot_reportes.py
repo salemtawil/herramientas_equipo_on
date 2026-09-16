@@ -7,7 +7,7 @@ from utils.chatwoot_reportes import (
     construir_rango_chatwoot_fechas,
     construir_rango_chatwoot,
     construir_rango_diario,
-    construir_rango_madrugada,
+    construir_rango_media_noche,
     obtener_dataframe_reporte_chatwoot,
     resolver_fechas_periodo,
 )
@@ -136,12 +136,12 @@ class ChatwootReportesTests(unittest.TestCase):
         self.assertEqual(570, ana["Call seconds"])
         self.assertEqual(195, ana["Outgoing call seconds"])
 
-    def test_rango_diario_usa_timezone_configurado(self):
+    def test_rango_diario_usa_timezone_venezuela(self):
         with patch.dict(os.environ, {"CHATWOOT_TIMEZONE": "UTC"}):
             rango = construir_rango_diario("2026-09-14")
 
         self.assertEqual((24 * 60 * 60) - 1, rango.until - rango.since)
-        self.assertEqual("UTC", rango.timezone)
+        self.assertEqual("America/Caracas", rango.timezone)
 
     def test_rango_respeta_horas_especificas(self):
         with patch.dict(os.environ, {"CHATWOOT_TIMEZONE": "UTC"}):
@@ -169,39 +169,60 @@ class ChatwootReportesTests(unittest.TestCase):
         self.assertEqual("2026-09-10", inicio)
         self.assertEqual("2026-09-12", fin)
 
-    def test_rango_madrugada_usa_ventana_del_turno(self):
+    def test_rango_media_noche_usa_ventana_del_turno(self):
         with patch.dict(os.environ, {"CHATWOOT_TIMEZONE": "UTC"}):
-            rango = construir_rango_madrugada("2026-09-15")
+            rango = construir_rango_media_noche("2026-09-15")
 
-        self.assertEqual("2026-09-15 04:00:00", rango.inicio_local)
-        self.assertEqual("2026-09-15 12:30:59", rango.fin_local)
+        self.assertEqual("2026-09-14 21:00:00", rango.inicio_local)
+        self.assertEqual("2026-09-15 05:30:59", rango.fin_local)
         self.assertEqual((8 * 60 * 60) + (30 * 60) + 59, rango.until - rango.since)
 
-    def test_dataframe_chatwoot_puede_usar_rango_madrugada(self):
+    def test_rango_media_noche_permite_fin_extendido(self):
+        with patch.dict(os.environ, {"CHATWOOT_TIMEZONE": "UTC"}):
+            rango = construir_rango_media_noche("2026-09-15", "06:30")
+
+        self.assertEqual("2026-09-14 21:00:00", rango.inicio_local)
+        self.assertEqual("2026-09-15 06:30:59", rango.fin_local)
+
+    def test_dataframe_chatwoot_puede_usar_rango_media_noche(self):
         cliente = FakeChatwootClient()
         _df, metadata = obtener_dataframe_reporte_chatwoot(
             "2026-09-15",
             cliente=cliente,
-            tipo_rango="madrugada",
+            tipo_rango="media_noche",
         )
 
-        self.assertEqual("madrugada", metadata["tipo_rango"])
-        self.assertEqual("2026-09-15 04:00:00", cliente.rangos[0].inicio_local)
-        self.assertEqual("2026-09-15 12:30:59", cliente.rangos[0].fin_local)
+        self.assertEqual("media_noche", metadata["tipo_rango"])
+        self.assertEqual("2026-09-14 21:00:00", cliente.rangos[0].inicio_local)
+        self.assertEqual("2026-09-15 05:30:59", cliente.rangos[0].fin_local)
 
-    def test_dataframe_chatwoot_rango_madrugada_consulta_cada_fecha(self):
+    def test_dataframe_diario_ignora_hora_fin_de_media_noche(self):
+        cliente = FakeChatwootClient()
+        _df, _metadata = obtener_dataframe_reporte_chatwoot(
+            "2026-09-14",
+            cliente=cliente,
+            tipo_rango="diario",
+            periodo_fechas="rango",
+            fecha_fin_texto="2026-09-14",
+            hora_fin_texto="05:30",
+        )
+
+        self.assertEqual("2026-09-14 00:00:00", cliente.rangos[0].inicio_local)
+        self.assertEqual("2026-09-14 23:59:59", cliente.rangos[0].fin_local)
+
+    def test_dataframe_chatwoot_rango_media_noche_consulta_cada_fecha(self):
         cliente = FakeChatwootClient()
         df, metadata = obtener_dataframe_reporte_chatwoot(
             "2026-09-14",
             cliente=cliente,
-            tipo_rango="madrugada",
+            tipo_rango="media_noche",
             fecha_fin_texto="2026-09-15",
         )
 
         self.assertEqual(2, len(cliente.rangos))
         self.assertEqual(2, metadata["cantidad_rangos"])
-        self.assertEqual("2026-09-14 04:00:00", cliente.rangos[0].inicio_local)
-        self.assertEqual("2026-09-15 12:30:59", cliente.rangos[1].fin_local)
+        self.assertEqual("2026-09-13 21:00:00", cliente.rangos[0].inicio_local)
+        self.assertEqual("2026-09-15 05:30:59", cliente.rangos[1].fin_local)
         self.assertEqual(4, len(df))
 
     def test_rango_rechaza_fin_antes_de_inicio(self):

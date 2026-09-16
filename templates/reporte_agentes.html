@@ -85,8 +85,8 @@
         <div class="chatwoot-field">
           <label class="small" for="tipo_rango_chatwoot">Tipo de reporte</label>
           <select id="tipo_rango_chatwoot" name="tipo_rango_chatwoot">
-            <option value="diario" {% if tipo_rango_chatwoot != 'madrugada' %}selected{% endif %}>Día hasta ahora</option>
-            <option value="madrugada" {% if tipo_rango_chatwoot == 'madrugada' %}selected{% endif %}>Madrugada 04:00-12:30</option>
+            <option value="diario" {% if tipo_rango_chatwoot != 'media_noche' %}selected{% endif %}>Día</option>
+            <option value="media_noche" {% if tipo_rango_chatwoot == 'media_noche' %}selected{% endif %}>Media noche 21:00-05:30/06:30</option>
           </select>
         </div>
 
@@ -119,21 +119,20 @@
           </div>
         </div>
 
-        <div class="chatwoot-time-grid">
-          <div class="chatwoot-field">
-          <label class="small" for="hora_inicio_chatwoot">Desde</label>
-          <input id="hora_inicio_chatwoot" type="time" name="hora_inicio_chatwoot" value="{{ hora_inicio_chatwoot or '00:00' }}">
-          </div>
-          <div class="chatwoot-field">
-            <label class="small" for="hora_fin_chatwoot">Hasta</label>
-            <input id="hora_fin_chatwoot" type="time" name="hora_fin_chatwoot" value="{{ hora_fin_chatwoot }}">
+        <div class="chatwoot-night-end">
+          <div class="chatwoot-field" data-night-end-field>
+            <label class="small" for="hora_fin_chatwoot">Fin de media noche</label>
+            <select id="hora_fin_chatwoot" name="hora_fin_chatwoot">
+              <option value="05:30" {% if hora_fin_chatwoot != '06:30' %}selected{% endif %}>05:30am</option>
+              <option value="06:30" {% if hora_fin_chatwoot == '06:30' %}selected{% endif %}>06:30am</option>
+            </select>
           </div>
           <button type="submit">Traer stats de Chatwoot</button>
         </div>
       </div>
     </form>
 
-    <p class="small top-space">Para Madrugada se consulta cada fecha del rango de 04:00 a 12:30 y se suman los resultados; si el turno actual está en curso, consulta hasta este momento.</p>
+    <p class="small top-space">Hoy consulta desde 00:00 hasta este momento. Ayer consulta de 00:00 a 23:59. Media noche consulta de 21:00 del día anterior hasta 05:30 o 06:30 del día seleccionado. Todo se calcula en zona Venezuela.</p>
 
     {% if metadata_fuente %}
       <div class="success top-space">
@@ -403,20 +402,26 @@ document.addEventListener("DOMContentLoaded", function () {
   const chatwootForm = document.querySelector("[data-chatwoot-report-form]");
   if (chatwootForm) {
     const dateRangeFields = chatwootForm.querySelector("[data-date-range-fields]");
+    const nightEndField = chatwootForm.querySelector("[data-night-end-field]");
+    const reportType = chatwootForm.querySelector("select[name='tipo_rango_chatwoot']");
     const periodInputs = Array.from(chatwootForm.querySelectorAll("input[name='periodo_chatwoot']"));
 
-    function updateDateRangeVisibility() {
+    function updateChatwootFormVisibility() {
       const selected = periodInputs.find(input => input.checked)?.value || "hoy";
       if (dateRangeFields) {
         dateRangeFields.hidden = selected !== "rango";
       }
+      if (nightEndField && reportType) {
+        nightEndField.hidden = reportType.value !== "media_noche";
+      }
     }
 
     periodInputs.forEach(input => {
-      input.addEventListener("change", updateDateRangeVisibility);
+      input.addEventListener("change", updateChatwootFormVisibility);
     });
+    reportType?.addEventListener("change", updateChatwootFormVisibility);
 
-    updateDateRangeVisibility();
+    updateChatwootFormVisibility();
   }
 
   const rankingData = {{ ranking_completo_json|safe if ranking_completo_json else '[]' }};
