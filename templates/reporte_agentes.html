@@ -79,33 +79,55 @@
       <span class="hero-badge hero-badge-soft">Diario</span>
     </div>
 
-    <form method="post" data-processing-message="Consultando Chatwoot y construyendo el reporte...">
+    <form method="post" class="chatwoot-report-form" data-chatwoot-report-form data-processing-message="Consultando Chatwoot y construyendo el reporte...">
       <input type="hidden" name="accion" value="buscar_chatwoot">
-      <div class="row">
-        <div>
-          <label class="small" for="tipo_rango_chatwoot">Rango</label>
+      <div class="chatwoot-report-grid">
+        <div class="chatwoot-field">
+          <label class="small" for="tipo_rango_chatwoot">Tipo de reporte</label>
           <select id="tipo_rango_chatwoot" name="tipo_rango_chatwoot">
             <option value="diario" {% if tipo_rango_chatwoot != 'madrugada' %}selected{% endif %}>Día hasta ahora</option>
             <option value="madrugada" {% if tipo_rango_chatwoot == 'madrugada' %}selected{% endif %}>Madrugada 00:00-07:00</option>
           </select>
         </div>
-        <div>
-          <label class="small" for="fecha_chatwoot">Fecha inicio</label>
-          <input id="fecha_chatwoot" type="date" name="fecha_chatwoot" value="{{ fecha_chatwoot }}">
+
+        <fieldset class="chatwoot-field chatwoot-period-field">
+          <legend class="small">Periodo</legend>
+          <div class="segmented-control" data-period-selector>
+            <label>
+              <input type="radio" name="periodo_chatwoot" value="hoy" {% if periodo_chatwoot not in ['ayer', 'rango'] %}checked{% endif %}>
+              <span>Hoy</span>
+            </label>
+            <label>
+              <input type="radio" name="periodo_chatwoot" value="ayer" {% if periodo_chatwoot == 'ayer' %}checked{% endif %}>
+              <span>Ayer</span>
+            </label>
+            <label>
+              <input type="radio" name="periodo_chatwoot" value="rango" {% if periodo_chatwoot == 'rango' %}checked{% endif %}>
+              <span>Rango de fecha</span>
+            </label>
+          </div>
+        </fieldset>
+
+        <div class="chatwoot-date-range" data-date-range-fields>
+          <div class="chatwoot-field">
+            <label class="small" for="fecha_chatwoot">Fecha inicio</label>
+            <input id="fecha_chatwoot" type="date" name="fecha_chatwoot" value="{{ fecha_chatwoot }}">
+          </div>
+          <div class="chatwoot-field">
+            <label class="small" for="fecha_fin_chatwoot">Fecha fin</label>
+            <input id="fecha_fin_chatwoot" type="date" name="fecha_fin_chatwoot" value="{{ fecha_fin_chatwoot }}">
+          </div>
         </div>
-        <div>
-          <label class="small" for="fecha_fin_chatwoot">Fecha fin</label>
-          <input id="fecha_fin_chatwoot" type="date" name="fecha_fin_chatwoot" value="{{ fecha_fin_chatwoot }}">
-        </div>
-        <div>
+
+        <div class="chatwoot-time-grid">
+          <div class="chatwoot-field">
           <label class="small" for="hora_inicio_chatwoot">Desde</label>
           <input id="hora_inicio_chatwoot" type="time" name="hora_inicio_chatwoot" value="{{ hora_inicio_chatwoot or '00:00' }}">
-        </div>
-        <div>
-          <label class="small" for="hora_fin_chatwoot">Hasta</label>
-          <input id="hora_fin_chatwoot" type="time" name="hora_fin_chatwoot" value="{{ hora_fin_chatwoot }}">
-        </div>
-        <div>
+          </div>
+          <div class="chatwoot-field">
+            <label class="small" for="hora_fin_chatwoot">Hasta</label>
+            <input id="hora_fin_chatwoot" type="time" name="hora_fin_chatwoot" value="{{ hora_fin_chatwoot }}">
+          </div>
           <button type="submit">Traer stats de Chatwoot</button>
         </div>
       </div>
@@ -378,6 +400,25 @@
 {% block scripts %}
 <script>
 document.addEventListener("DOMContentLoaded", function () {
+  const chatwootForm = document.querySelector("[data-chatwoot-report-form]");
+  if (chatwootForm) {
+    const dateRangeFields = chatwootForm.querySelector("[data-date-range-fields]");
+    const periodInputs = Array.from(chatwootForm.querySelectorAll("input[name='periodo_chatwoot']"));
+
+    function updateDateRangeVisibility() {
+      const selected = periodInputs.find(input => input.checked)?.value || "hoy";
+      if (dateRangeFields) {
+        dateRangeFields.hidden = selected !== "rango";
+      }
+    }
+
+    periodInputs.forEach(input => {
+      input.addEventListener("change", updateDateRangeVisibility);
+    });
+
+    updateDateRangeVisibility();
+  }
+
   const rankingData = {{ ranking_completo_json|safe if ranking_completo_json else '[]' }};
   const rankingCheckboxes = Array.from(document.querySelectorAll(".ranking-turno-checkbox"));
   const rankingMejoresLista = document.getElementById("ranking-mejores-lista");

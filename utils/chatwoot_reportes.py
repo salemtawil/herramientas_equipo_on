@@ -78,6 +78,26 @@ def _parsear_hora(hora_texto, nombre_campo):
         raise ValueError(f"{nombre_campo} debe tener formato HH:MM.") from exc
 
 
+def resolver_fechas_periodo(periodo_fechas=None, fecha_inicio_texto=None, fecha_fin_texto=None):
+    periodo = str(periodo_fechas or "").strip().lower()
+    if not periodo:
+        return fecha_inicio_texto, fecha_fin_texto
+
+    tz = _obtener_timezone(_timezone())
+    hoy = datetime.now(tz).date()
+
+    if periodo == "hoy":
+        fecha = hoy.isoformat()
+        return fecha, fecha
+    if periodo == "ayer":
+        fecha = (hoy - timedelta(days=1)).isoformat()
+        return fecha, fecha
+    if periodo == "rango":
+        return fecha_inicio_texto, fecha_fin_texto
+
+    raise ValueError("Periodo de fechas invalido. Usa hoy, ayer o rango.")
+
+
 def construir_rango_chatwoot(fecha_texto=None, hora_inicio_texto=None, hora_fin_texto=None):
     tz_name = _timezone()
     tz = _obtener_timezone(tz_name)
@@ -422,7 +442,9 @@ def obtener_dataframe_reporte_chatwoot(
     cliente=None,
     tipo_rango="diario",
     fecha_fin_texto=None,
+    periodo_fechas=None,
 ):
+    fecha_texto, fecha_fin_texto = resolver_fechas_periodo(periodo_fechas, fecha_texto, fecha_fin_texto)
     rango_reporte = construir_rango_reporte(
         tipo_rango,
         fecha_texto,
@@ -463,6 +485,7 @@ def obtener_dataframe_reporte_chatwoot(
         "fin_local": rango_reporte.fin_local,
         "fuente": "Chatwoot",
         "tipo_rango": tipo_rango,
+        "periodo_fechas": periodo_fechas or "personalizado",
         "cantidad_rangos": len(rango_reporte.rangos),
     }
     return df, metadata

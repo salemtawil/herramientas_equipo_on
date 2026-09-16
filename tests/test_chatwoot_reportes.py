@@ -9,6 +9,7 @@ from utils.chatwoot_reportes import (
     construir_rango_diario,
     construir_rango_madrugada,
     obtener_dataframe_reporte_chatwoot,
+    resolver_fechas_periodo,
 )
 
 
@@ -161,6 +162,12 @@ class ChatwootReportesTests(unittest.TestCase):
 
         self.assertEqual("2026-09-14 08:00:00", rango.inicio_local)
         self.assertEqual("2026-09-16 17:00:59", rango.fin_local)
+
+    def test_periodo_rango_respeta_fechas_elegidas(self):
+        inicio, fin = resolver_fechas_periodo("rango", "2026-09-10", "2026-09-12")
+
+        self.assertEqual("2026-09-10", inicio)
+        self.assertEqual("2026-09-12", fin)
 
     def test_rango_madrugada_usa_ventana_del_turno(self):
         with patch.dict(os.environ, {"CHATWOOT_TIMEZONE": "UTC"}):
