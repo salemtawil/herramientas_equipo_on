@@ -13,6 +13,17 @@ from utils.chatwoot_reportes import (
 )
 
 
+TURNOS_TEST = {
+    "Oficina": ["Ana Perez"],
+    "Tarde/Noche": ["Luis Gomez"],
+    "Media noche": [],
+}
+
+TURNOS_MEDIA_NOCHE_TEST = {
+    "Media noche": ["Ana Perez"],
+}
+
+
 class FakeChatwootClient:
     def __init__(self):
         self.rangos = []
@@ -124,12 +135,14 @@ class ChatwootReportesTests(unittest.TestCase):
         df, metadata = obtener_dataframe_reporte_chatwoot(
             "2026-09-15",
             cliente=cliente,
+            turnos_config=TURNOS_TEST,
         )
 
         self.assertEqual("2026-09-15", metadata["fecha"])
         self.assertEqual("Chatwoot", metadata["fuente"])
-        self.assertEqual("2026-09-15 00:00:00", metadata["inicio_local"])
-        self.assertEqual(1, len(cliente.rangos))
+        self.assertEqual("2026-09-14 21:00:00", metadata["inicio_local"])
+        self.assertEqual("2026-09-15 21:30:59", metadata["fin_local"])
+        self.assertEqual(4, len(cliente.rangos))
         self.assertEqual(2, len(df))
 
         ana = df[df["First Name"] == "Ana"].iloc[0]
@@ -151,6 +164,7 @@ class ChatwootReportesTests(unittest.TestCase):
         df, _metadata = obtener_dataframe_reporte_chatwoot(
             "2026-09-15",
             cliente=cliente,
+            turnos_config=TURNOS_TEST,
         )
 
         self.assertEqual(1, len(df))
@@ -168,6 +182,7 @@ class ChatwootReportesTests(unittest.TestCase):
         df, _metadata = obtener_dataframe_reporte_chatwoot(
             "2026-09-15",
             cliente=cliente,
+            turnos_config=TURNOS_TEST,
         )
 
         ana = df[df["First Name"] == "Ana"].iloc[0]
@@ -232,11 +247,14 @@ class ChatwootReportesTests(unittest.TestCase):
             "2026-09-15",
             cliente=cliente,
             tipo_rango="media_noche",
+            turnos_config=TURNOS_MEDIA_NOCHE_TEST,
         )
 
         self.assertEqual("media_noche", metadata["tipo_rango"])
         self.assertEqual("2026-09-14 21:00:00", cliente.rangos[0].inicio_local)
-        self.assertEqual("2026-09-15 06:30:59", cliente.rangos[0].fin_local)
+        self.assertEqual("2026-09-14 23:59:59", cliente.rangos[0].fin_local)
+        self.assertEqual("2026-09-15 00:00:00", cliente.rangos[1].inicio_local)
+        self.assertEqual("2026-09-15 06:30:59", cliente.rangos[1].fin_local)
 
     def test_dataframe_diario_ignora_hora_fin_de_media_noche(self):
         cliente = FakeChatwootClient()
@@ -247,10 +265,11 @@ class ChatwootReportesTests(unittest.TestCase):
             periodo_fechas="rango",
             fecha_fin_texto="2026-09-14",
             hora_fin_texto="05:30",
+            turnos_config=TURNOS_TEST,
         )
 
-        self.assertEqual("2026-09-14 00:00:00", cliente.rangos[0].inicio_local)
-        self.assertEqual("2026-09-14 23:59:59", cliente.rangos[0].fin_local)
+        self.assertEqual("2026-09-14 08:00:00", cliente.rangos[0].inicio_local)
+        self.assertEqual("2026-09-14 16:30:59", cliente.rangos[0].fin_local)
 
     def test_dataframe_chatwoot_rango_media_noche_consulta_cada_fecha(self):
         cliente = FakeChatwootClient()
@@ -259,12 +278,13 @@ class ChatwootReportesTests(unittest.TestCase):
             cliente=cliente,
             tipo_rango="media_noche",
             fecha_fin_texto="2026-09-15",
+            turnos_config=TURNOS_MEDIA_NOCHE_TEST,
         )
 
-        self.assertEqual(2, len(cliente.rangos))
-        self.assertEqual(2, metadata["cantidad_rangos"])
+        self.assertEqual(4, len(cliente.rangos))
+        self.assertEqual(4, metadata["cantidad_rangos"])
         self.assertEqual("2026-09-13 21:00:00", cliente.rangos[0].inicio_local)
-        self.assertEqual("2026-09-15 06:30:59", cliente.rangos[1].fin_local)
+        self.assertEqual("2026-09-15 06:30:59", cliente.rangos[3].fin_local)
         self.assertEqual(4, len(df))
 
     def test_rango_rechaza_fin_antes_de_inicio(self):

@@ -34,6 +34,12 @@ class RangoReporteChatwoot:
 MEDIA_NOCHE_HORA_INICIO = "21:00"
 MEDIA_NOCHE_HORA_FIN_CORTA = "05:30"
 MEDIA_NOCHE_HORA_FIN_DEFAULT = "06:30"
+HORARIOS_TURNOS_CHATWOOT = {
+    "Oficina": ("08:00", "16:30"),
+    "Madrugada": ("04:00", "12:30"),
+    "Media noche": ("21:00", MEDIA_NOCHE_HORA_FIN_DEFAULT),
+    "Tarde/Noche": ("12:00", "21:30"),
+}
 
 
 def _env_requerida(nombre):
@@ -222,6 +228,121 @@ def construir_rango_media_noche(fecha_texto=None, hora_fin_texto=None):
         inicio_local=inicio.strftime("%Y-%m-%d %H:%M:%S"),
         fin_local=fin.strftime("%Y-%m-%d %H:%M:%S"),
     )
+
+
+def _rango_desde_datetimes(fecha, inicio, fin, tz_name):
+    if fin <= inicio:
+        return None
+    return RangoChatwoot(
+        fecha=fecha,
+        since=int(inicio.timestamp()),
+        until=int(fin.timestamp()),
+        timezone=tz_name,
+        inicio_local=inicio.strftime("%Y-%m-%d %H:%M:%S"),
+        fin_local=fin.strftime("%Y-%m-%d %H:%M:%S"),
+    )
+
+
+def _limitar_rango_al_momento(inicio, fin, ahora):
+    if inicio > ahora:
+        return None
+    if fin > ahora:
+        fin = ahora
+    return inicio, fin
+
+
+def construir_rangos_turno_chatwoot(fecha, turno, hora_fin_media_noche=None):
+    tz_name = _timezone_venezuela()
+    tz = _obtener_timezone(tz_name)
+    ahora = datetime.now(tz)
+
+    if turno == "Media noche":
+        hora_fin_texto = hora_fin_media_noche or MEDIA_NOCHE_HORA_FIN_DEFAULT
+        if hora_fin_texto not in {MEDIA_NOCHE_HORA_FIN_CORTA, MEDIA_NOCHE_HORA_FIN_DEFAULT}:
+            raise ValueError("El fin de Media noche debe ser 05:30 o 06:30.")
+        hora_fin = _parsear_hora(hora_fin_texto, "La hora de fin de media noche")
+        segmentos = [
+            (
+                datetime.combine(fecha - timedelta(days=1), time(21, 0), tzinfo=tz),
+                datetime.combine(fecha, time.min, tzinfo=tz) - timedelta(seconds=1),
+            ),
+            (
+                datetime.combine(fecha, time.min, tzinfo=tz),
+                datetime.combine(fecha, hora_fin, tzinfo=tz) + timedelta(seconds=59),
+            ),
+        ]
+    elif turno in HORARIOS_TURNOS_CHATWOOT:
+        hora_inicio_texto, hora_fin_texto = HORARIOS_TURNOS_CHATWOOT[turno]
+        hora_inicio = _parsear_hora(hora_inicio_texto, f"La hora de inicio de {turno}")
+        hora_fin = _parsear_hora(hora_fin_texto, f"La hora de fin de {turno}")
+        segmentos = [
+            (
+                datetime.combine(fecha, hora_inicio, tzinfo=tz),
+                datetime.combine(fecha, hora_fin, tzinfo=tz) + timedelta(seconds=59),
+            )
+        ]
+    else:
+        segmentos = [
+            (
+                datetime.combine(fecha, time.min, tzinfo=tz),
+                datetime.combine(fecha + timedelta(days=1), time.min, tzinfo=tz) - timedelta(seconds=1),
+            )
+        ]
+
+    rangos = []
+    for inicio, fin in segmentos:
+        limitado = _limitar_rango_al_momento(inicio, fin, ahora)
+        if not limitado:
+            continue
+        inicio_limitado, fin_limitado = limitado
+        rango = _rango_desde_datetimes(fecha, inicio_limitado, fin_limitado, tz_name)
+        if rango:
+            rangos.append(rango)
+    return rangos
+
+
+def construir_consultas_turnos_chatwoot(
+    fecha_inicio_texto=None,
+    fecha_fin_texto=None,
+    turnos_config=None,
+    tipo_rango="diario",
+    hora_fin_media_noche=None,
+):
+    tz_name = _timezone_venezuela()
+    tz = _obtener_timezone(tz_name)
+    ahora = datetime.now(tz)
+
+    if fecha_inicio_texto:
+        fecha_inicio = datetime.strptime(fecha_inicio_texto, "%Y-%m-%d").date()
+    else:
+        fecha_inicio = ahora.date()
+
+    if fecha_fin_texto:
+        fecha_fin = datetime.strptime(fecha_fin_texto, "%Y-%m-%d").date()
+    else:
+        fecha_fin = fecha_inicio
+
+    if fecha_fin < fecha_inicio:
+        raise ValueError("La fecha fin debe ser igual o posterior a la fecha inicio.")
+
+    if tipo_rango == "media_noche":
+        turnos = ["Media noche"]
+    else:
+        turnos = list((turnos_config or {}).keys())
+
+    consultas = []
+    for fecha in _fechas_inclusivas(fecha_inicio, fecha_fin):
+        for turno in turnos:
+            if turno == "Sin asignar":
+                continue
+            rangos = construir_rangos_turno_chatwoot(fecha, turno, hora_fin_media_noche)
+            for rango in rangos:
+                consultas.append({"turno": turno, "rango": rango})
+
+    if not consultas:
+        raise ValueError("No hay rangos de Chatwoot para consultar en el periodo seleccionado.")
+
+    return consultas
 
 
 def _fechas_inclusivas(fecha_inicio, fecha_fin):
@@ -476,6 +597,17 @@ def _dataframe_desde_call_stats(respuesta, agentes):
     return pd.DataFrame(filas)
 
 
+def _filtrar_dataframe_por_turno(df, turno, turnos_config):
+    if df.empty:
+        return df
+
+    from utils.turnos import obtener_turno
+
+    df = df.copy()
+    agentes = (df["First Name"].fillna("") + " " + df["Last Name"].fillna("")).str.strip()
+    return df[agentes.apply(lambda nombre: obtener_turno(nombre, turnos_config) == turno)].copy()
+
+
 def obtener_dataframe_reporte_chatwoot(
     fecha_texto=None,
     hora_inicio_texto=None,
@@ -484,25 +616,31 @@ def obtener_dataframe_reporte_chatwoot(
     tipo_rango="diario",
     fecha_fin_texto=None,
     periodo_fechas=None,
+    turnos_config=None,
 ):
     fecha_texto, fecha_fin_texto = resolver_fechas_periodo(periodo_fechas, fecha_texto, fecha_fin_texto)
-    if tipo_rango != "media_noche":
-        hora_inicio_texto = None
-        hora_fin_texto = None
-    rango_reporte = construir_rango_reporte(
-        tipo_rango,
+    if turnos_config is None:
+        from utils.turnos import cargar_turnos_fijos
+
+        turnos_config = cargar_turnos_fijos()
+
+    consultas_turnos = construir_consultas_turnos_chatwoot(
         fecha_texto,
-        hora_inicio_texto,
-        hora_fin_texto,
         fecha_fin_texto,
+        turnos_config=turnos_config,
+        tipo_rango=tipo_rango,
+        hora_fin_media_noche=hora_fin_texto,
     )
     cliente = cliente or ChatwootClient()
 
     agentes = _indice_agentes(_normalizar_lista_respuesta(cliente.listar_agentes()))
     dataframes = []
-    for rango in rango_reporte.rangos:
+    for consulta in consultas_turnos:
+        rango = consulta["rango"]
+        turno = consulta["turno"]
         respuesta_call_stats = cliente.estadisticas_llamadas(rango, group_by="agent")
-        dataframes.append(_dataframe_desde_call_stats(respuesta_call_stats, agentes))
+        df_turno = _dataframe_desde_call_stats(respuesta_call_stats, agentes)
+        dataframes.append(_filtrar_dataframe_por_turno(df_turno, turno, turnos_config))
 
     df = pd.concat(dataframes, ignore_index=True) if dataframes else pd.DataFrame()
     if df.empty:
@@ -519,17 +657,21 @@ def obtener_dataframe_reporte_chatwoot(
             ]
         )
 
+    primer_rango = min((consulta["rango"] for consulta in consultas_turnos), key=lambda rango: rango.since)
+    ultimo_rango = max((consulta["rango"] for consulta in consultas_turnos), key=lambda rango: rango.until)
+
     metadata = {
-        "fecha": rango_reporte.fecha.isoformat(),
-        "fecha_fin": rango_reporte.fecha_fin.isoformat(),
-        "since": rango_reporte.rangos[0].since,
-        "until": rango_reporte.rangos[-1].until,
-        "timezone": rango_reporte.timezone,
-        "inicio_local": rango_reporte.inicio_local,
-        "fin_local": rango_reporte.fin_local,
+        "fecha": primer_rango.fecha.isoformat(),
+        "fecha_fin": ultimo_rango.fecha.isoformat(),
+        "since": primer_rango.since,
+        "until": ultimo_rango.until,
+        "timezone": primer_rango.timezone,
+        "inicio_local": primer_rango.inicio_local,
+        "fin_local": ultimo_rango.fin_local,
         "fuente": "Chatwoot",
         "tipo_rango": tipo_rango,
         "periodo_fechas": periodo_fechas or "personalizado",
-        "cantidad_rangos": len(rango_reporte.rangos),
+        "cantidad_rangos": len(consultas_turnos),
+        "modo_consulta": "ventanas_por_turno",
     }
     return df, metadata
