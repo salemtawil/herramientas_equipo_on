@@ -515,6 +515,22 @@ def _error_autenticacion_multiadmin(error):
     return getattr(response, "status_code", None) in (401, 403)
 
 
+def _mensaje_error_multiadmin_directo(error):
+    mensaje = str(error)
+    mensaje_normalizado = mensaje.lower()
+    if "refresh token has expired" in mensaje_normalizado:
+        return (
+            "El refresh token de Multiadmin expiró. Genera tokens nuevos con "
+            "tools/generar_env_multiadmin_tokens.py, actualiza Vercel y haz redeploy."
+        )
+    if "403" in mensaje or "401" in mensaje:
+        return (
+            "Multiadmin rechazó el token configurado. Verifica que Vercel tenga "
+            "MULTIADMIN_REFRESH_TOKEN actualizado y que no conserve un token viejo."
+        )
+    return f"No se pudo consultar Chispita desde Multiadmin directo: {mensaje}"
+
+
 def _extraer_items(data, items_key):
     if isinstance(data, list):
         return data
@@ -648,7 +664,7 @@ def _metricas_desde_usuarios(system, usuarios, exclude_admins=False):
     return metricas
 
 
-def _obtener_metricas_multiadmin_directo_con_token(token):
+def _obtener_metricas_multiadmin_directo_con_token(token, permitir_errores_auth=False):
     metricas = {}
     errores_por_sistema = {}
     with ThreadPoolExecutor(max_workers=8) as executor:
@@ -662,6 +678,8 @@ def _obtener_metricas_multiadmin_directo_con_token(token):
             try:
                 usuarios = future.result()
             except Exception as exc:
+                if not permitir_errores_auth and _error_autenticacion_multiadmin(exc):
+                    raise
                 errores_por_sistema[system] = exc
                 continue
             metricas[system] = _metricas_desde_usuarios(
@@ -672,7 +690,9 @@ def _obtener_metricas_multiadmin_directo_con_token(token):
 
         try:
             bonus_stats = bonus_future.result()
-        except Exception:
+        except Exception as exc:
+            if not permitir_errores_auth and _error_autenticacion_multiadmin(exc):
+                raise
             bonus_stats = None
 
     try:
@@ -723,10 +743,16 @@ def _obtener_metricas_multiadmin_directo():
         if _error_autenticacion_multiadmin(error):
             if MULTIADMIN_REFRESH_TOKEN or _TOKEN_CACHE.get("refresh_token"):
                 tokens = refrescar_multiadmin_token()
-                return _obtener_metricas_multiadmin_directo_con_token(tokens["id_token"])
+                return _obtener_metricas_multiadmin_directo_con_token(
+                    tokens["id_token"],
+                    permitir_errores_auth=True,
+                )
             if MULTIADMIN_USERNAME and MULTIADMIN_PASSWORD:
                 tokens = iniciar_sesion_multiadmin()
-                return _obtener_metricas_multiadmin_directo_con_token(tokens["id_token"])
+                return _obtener_metricas_multiadmin_directo_con_token(
+                    tokens["id_token"],
+                    permitir_errores_auth=True,
+                )
         raise
 
 
@@ -837,20 +863,16 @@ def obtener_metricas_multiadmin():
     if _hay_config_directa_multiadmin():
         try:
             return _obtener_metricas_multiadmin_directo()
-        except Exception:
+        except Exception as exc:
             metricas = _obtener_metricas_multiadmin_legacy()
-            if "chispita" not in metricas:
-                metricas["chispita"] = {
-                    "system": "chispita",
-                    "display_name": "Chispita",
-                    "active_users": 0,
-                    "running_users": 0,
-                    "progress": "Error",
-                    "error": (
-                        "No se pudo consultar Chispita desde Multiadmin directo. "
-                        "Revisa MULTIADMIN_USERNAME y MULTIADMIN_PASSWORD en Vercel."
-                    ),
-                }
+            metricas["chispita"] = {
+                "system": "chispita",
+                "display_name": "Chispita",
+                "active_users": 0,
+                "running_users": 0,
+                "progress": "Error",
+                "error": _mensaje_error_multiadmin_directo(exc),
+            }
             return metricas
     return _obtener_metricas_multiadmin_legacy()
 
