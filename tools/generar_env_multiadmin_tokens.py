@@ -335,17 +335,38 @@ def main():
     if not username or not password:
         raise SystemExit("Faltan usuario o password.")
 
-    auth = login(username, password)
-    users = request_json(f"/projects/chispita/users?sinceExpiration={SINCE_EXPIRATION}", auth["IdToken"])
-    spark = request_json("/projects/chispita/offers/won?period=today&app=spark", auth["IdToken"])
-    instacart = request_json("/projects/chispita/offers/won?period=today&app=instacart", auth["IdToken"])
+    try:
+        auth = login(username, password)
+    except ClientError as error:
+        error_info = error.response.get("Error", {})
+        raise SystemExit(
+            f"Login rechazado por Cognito: {error_info.get('Code')} - "
+            f"{error_info.get('Message')}"
+        ) from error
+
+    if not auth.get("RefreshToken"):
+        raise SystemExit(
+            "Login correcto, pero Cognito no devolvio RefreshToken. "
+            "No sirve para Vercel porque el ID token expira rapido."
+        )
+
     write_env(username, auth)
 
     print("Login correcto.")
-    print(f"Chispita usuarios recibidos: {count_items(users)}")
-    print(f"Ofertas Spark recibidas: {count_items(spark)}")
-    print(f"Ofertas Instacart recibidas: {count_items(instacart)}")
     print(f"Archivo generado: {OUTPUT_FILE}")
+    print("Validando endpoints de Chispita...")
+
+    try:
+        users = request_json(f"/projects/chispita/users?sinceExpiration={SINCE_EXPIRATION}", auth["IdToken"])
+        spark = request_json("/projects/chispita/offers/won?period=today&app=spark", auth["IdToken"])
+        instacart = request_json("/projects/chispita/offers/won?period=today&app=instacart", auth["IdToken"])
+    except requests.RequestException as error:
+        print(f"Advertencia: tokens generados, pero la validacion fallo: {error}")
+    else:
+        print(f"Chispita usuarios recibidos: {count_items(users)}")
+        print(f"Ofertas Spark recibidas: {count_items(spark)}")
+        print(f"Ofertas Instacart recibidas: {count_items(instacart)}")
+
     print("Copia esas variables a Vercel Production y haz Redeploy.")
 
 
