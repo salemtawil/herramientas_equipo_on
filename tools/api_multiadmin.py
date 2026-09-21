@@ -13,22 +13,37 @@ from botocore.config import Config
 import requests
 
 
+def _env_limpio(nombre, default=""):
+    return (os.getenv(nombre) or default).strip()
+
+
+def _env_token_multiadmin(nombre):
+    value = _env_limpio(nombre)
+    if not value:
+        return ""
+    if any(char in value for char in ("\r", "\n", "\t")):
+        return ""
+    if "MULTIADMIN_" in value:
+        return ""
+    return value
+
+
 ENDPOINT_MULTIADMIN = "https://pti24ew7fbrhm55ftbbbc5hk6i0meyek.lambda-url.us-east-1.on.aws/"
 MULTIADMIN_API_BASE_URL = (
-    os.getenv("MULTIADMIN_API_BASE_URL")
+    _env_limpio("MULTIADMIN_API_BASE_URL")
     or "https://7b9q0ttttb.execute-api.us-east-1.amazonaws.com"
 )
-MULTIADMIN_ID_TOKEN = os.getenv("MULTIADMIN_ID_TOKEN", "")
-MULTIADMIN_REFRESH_TOKEN = os.getenv("MULTIADMIN_REFRESH_TOKEN", "")
-MULTIADMIN_PROVISIONED_TOKEN = os.getenv("MULTIADMIN_PROVISIONED_TOKEN", "")
-MULTIADMIN_CLIENT_ID = os.getenv("MULTIADMIN_CLIENT_ID") or "24nnt1psojm5aqotu1ckj9jk9g"
-MULTIADMIN_CLIENT_SECRET = os.getenv("MULTIADMIN_CLIENT_SECRET", "")
-MULTIADMIN_USERNAME = os.getenv("MULTIADMIN_USERNAME", "") or os.getenv("MULTIADMIN_PHONE", "")
-MULTIADMIN_PASSWORD = os.getenv("MULTIADMIN_PASSWORD", "")
-MULTIADMIN_USER_POOL_ID = os.getenv("MULTIADMIN_USER_POOL_ID") or "us-east-1_ViIazRdoA"
-MULTIADMIN_AWS_REGION = os.getenv("AWS_DEFAULT_REGION") or "us-east-1"
+MULTIADMIN_ID_TOKEN = _env_token_multiadmin("MULTIADMIN_ID_TOKEN")
+MULTIADMIN_REFRESH_TOKEN = _env_token_multiadmin("MULTIADMIN_REFRESH_TOKEN")
+MULTIADMIN_PROVISIONED_TOKEN = _env_token_multiadmin("MULTIADMIN_PROVISIONED_TOKEN")
+MULTIADMIN_CLIENT_ID = _env_limpio("MULTIADMIN_CLIENT_ID") or "24nnt1psojm5aqotu1ckj9jk9g"
+MULTIADMIN_CLIENT_SECRET = _env_limpio("MULTIADMIN_CLIENT_SECRET")
+MULTIADMIN_USERNAME = _env_limpio("MULTIADMIN_USERNAME") or _env_limpio("MULTIADMIN_PHONE")
+MULTIADMIN_PASSWORD = _env_limpio("MULTIADMIN_PASSWORD")
+MULTIADMIN_USER_POOL_ID = _env_limpio("MULTIADMIN_USER_POOL_ID") or "us-east-1_ViIazRdoA"
+MULTIADMIN_AWS_REGION = _env_limpio("AWS_DEFAULT_REGION") or "us-east-1"
 MULTIADMIN_USERS_SINCE_EXPIRATION = int(
-    os.getenv("MULTIADMIN_USERS_SINCE_EXPIRATION") or "1746057600000"
+    _env_limpio("MULTIADMIN_USERS_SINCE_EXPIRATION") or "1746057600000"
 )
 COMPINCHE_ADMIN_OFFSET = 44
 
