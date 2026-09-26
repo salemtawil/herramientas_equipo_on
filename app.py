@@ -1,6 +1,8 @@
 import logging
 import os
-from flask import Flask, render_template
+from flask import Flask, jsonify, render_template, request
+from werkzeug.exceptions import RequestEntityTooLarge
+from utils.archivos import formatear_tamano_bytes
 from utils.env import cargar_env_local
 
 cargar_env_local()
@@ -16,6 +18,10 @@ from tools.comparar_csv import comparar_csv_bp
 from tools.usuarios_a_sheets import usuarios_a_sheets_bp
 
 app = Flask(__name__)
+# Límite total del cuerpo de la petición (archivos + campos). Flask responde 413 si se supera.
+app.config["MAX_CONTENT_LENGTH"] = int(
+    os.getenv("MAX_CONTENT_LENGTH", str(50 * 1024 * 1024))
+)
 app.config["MAX_FORM_MEMORY_SIZE"] = int(
     os.getenv("MAX_FORM_MEMORY_SIZE", str(8 * 1024 * 1024))
 )
@@ -44,6 +50,28 @@ app.register_blueprint(auditoria_csat_bp)
 app.register_blueprint(auditoria_salientes_bp)
 app.register_blueprint(break_admin_bp)
 app.register_blueprint(informe_semanal_cs_bp)
+
+
+def _espera_json():
+    if request.path.startswith("/usuarios-activos/"):
+        return True
+    mejor = request.accept_mimetypes.best_match(["application/json", "text/html"])
+    return request.is_json or mejor == "application/json"
+
+
+@app.errorhandler(RequestEntityTooLarge)
+def solicitud_demasiado_grande(error):
+    limite = formatear_tamano_bytes(app.config.get("MAX_CONTENT_LENGTH") or 0)
+    mensaje = (
+        f"El archivo o formulario enviado supera el límite permitido de {limite}. "
+        "Reduce el tamaño del archivo o divídelo e inténtalo de nuevo."
+    )
+    if _espera_json():
+        return jsonify({"success": False, "error": mensaje}), 413
+    return (
+        render_template("error.html", titulo="Archivo demasiado grande", mensaje=mensaje),
+        413,
+    )
 
 
 @app.route("/")

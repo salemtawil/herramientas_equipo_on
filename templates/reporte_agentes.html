@@ -166,7 +166,7 @@
       <form method="post" enctype="multipart/form-data" data-processing-message="Procesando CSV y construyendo el reporte...">
         <input type="hidden" name="accion" value="procesar_csv">
         <div class="row">
-          <div><input type="file" name="archivo" accept=".csv"></div>
+          <div><input type="file" name="archivo" accept=".csv" aria-label="Archivo CSV del reporte"></div>
           <div><button type="submit">Procesar CSV</button></div>
         </div>
       </form>
@@ -438,7 +438,7 @@ document.addEventListener("DOMContentLoaded", function () {
     updateChatwootFormVisibility();
   }
 
-  const rankingData = {{ ranking_completo_json|safe if ranking_completo_json else '[]' }};
+  const rankingData = JSON.parse({{ (ranking_completo_json or '[]')|tojson }});
   const rankingCheckboxes = Array.from(document.querySelectorAll(".ranking-turno-checkbox"));
   const rankingMejoresLista = document.getElementById("ranking-mejores-lista");
   const rankingPeoresLista = document.getElementById("ranking-peores-lista");

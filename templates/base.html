@@ -5,17 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Herramientas{% endblock %}</title>
   <script>
+    document.documentElement.classList.add("js");
     try {
       if (localStorage.getItem("sidebarCollapsed") === "true") {
         document.documentElement.classList.add("has-sidebar-collapsed");
       }
     } catch (error) {}
   </script>
-  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v='19') }}">
-  <script src="{{ url_for('static', filename='app.js', v='5') }}" defer></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v='21') }}">
+  <script src="{{ url_for('static', filename='app.js', v='6') }}" defer></script>
   {% block head_extra %}{% endblock %}
 </head>
 <body>
+  <a class="skip-link" href="#contenido-principal">Saltar al contenido</a>
   {% set endpoint = request.endpoint or '' %}
   <div class="app-shell" data-sidebar-shell>
     <aside class="app-sidebar" id="app-sidebar">
@@ -28,53 +30,54 @@
           type="button"
           class="sidebar-icon-toggle"
           data-sidebar-toggle
-          aria-controls="app-sidebar"
+          aria-controls="app-sidebar-nav"
           aria-expanded="true"
-          aria-label="Ocultar menu"
-          title="Ocultar menu"
+          aria-label="Ocultar menú"
+          title="Ocultar menú"
         >
           <span aria-hidden="true"></span>
+          <span class="sidebar-icon-toggle__label">Menú</span>
         </button>
       </div>
 
-      <nav class="app-sidebar__nav" aria-label="Navegación principal">
-        <a class="sidebar-link {% if endpoint == 'inicio' %}is-active{% endif %}" href="{{ url_for('inicio') }}">
+      <nav class="app-sidebar__nav" id="app-sidebar-nav" aria-label="Navegación principal">
+        <a class="sidebar-link {% if endpoint == 'inicio' %}is-active{% endif %}"{% if endpoint == 'inicio' %} aria-current="page"{% endif %} href="{{ url_for('inicio') }}">
           <span class="sidebar-link__eyebrow">Inicio</span>
           <strong>Panel principal</strong>
         </a>
-        <a class="sidebar-link {% if endpoint == 'usuarios_activos.index' %}is-active{% endif %}" href="{{ url_for('usuarios_activos.index') }}">
+        <a class="sidebar-link {% if endpoint == 'usuarios_activos.index' %}is-active{% endif %}"{% if endpoint == 'usuarios_activos.index' %} aria-current="page"{% endif %} href="{{ url_for('usuarios_activos.index') }}">
           <span class="sidebar-link__eyebrow">Monitoreo</span>
           <strong>Usuarios activos</strong>
         </a>
-        <a class="sidebar-link {% if endpoint == 'reporte_agentes.reporte_agentes' %}is-active{% endif %}" href="{{ url_for('reporte_agentes.reporte_agentes') }}">
+        <a class="sidebar-link {% if endpoint == 'reporte_agentes.reporte_agentes' %}is-active{% endif %}"{% if endpoint == 'reporte_agentes.reporte_agentes' %} aria-current="page"{% endif %} href="{{ url_for('reporte_agentes.reporte_agentes') }}">
           <span class="sidebar-link__eyebrow">Reporte</span>
           <strong>Reporte de agentes</strong>
         </a>
-        <a class="sidebar-link {% if endpoint.startswith('turnos_trabajo.') %}is-active{% endif %}" href="{{ url_for('turnos_trabajo.turnos_trabajo') }}">
+        <a class="sidebar-link {% if endpoint.startswith('turnos_trabajo.') %}is-active{% endif %}"{% if endpoint.startswith('turnos_trabajo.') %} aria-current="page"{% endif %} href="{{ url_for('turnos_trabajo.turnos_trabajo') }}">
           <span class="sidebar-link__eyebrow">Equipo</span>
           <strong>Turnos de trabajo</strong>
         </a>
-        <a class="sidebar-link {% if endpoint == 'comparar_csv.comparar_csv' %}is-active{% endif %}" href="{{ url_for('comparar_csv.comparar_csv') }}">
+        <a class="sidebar-link {% if endpoint == 'comparar_csv.comparar_csv' %}is-active{% endif %}"{% if endpoint == 'comparar_csv.comparar_csv' %} aria-current="page"{% endif %} href="{{ url_for('comparar_csv.comparar_csv') }}">
           <span class="sidebar-link__eyebrow">Análisis</span>
           <strong>Comparar CSV</strong>
         </a>
-        <a class="sidebar-link {% if endpoint == 'auditoria_csat.auditoria_csat' %}is-active{% endif %}" href="{{ url_for('auditoria_csat.auditoria_csat') }}">
+        <a class="sidebar-link {% if endpoint == 'auditoria_csat.auditoria_csat' %}is-active{% endif %}"{% if endpoint == 'auditoria_csat.auditoria_csat' %} aria-current="page"{% endif %} href="{{ url_for('auditoria_csat.auditoria_csat') }}">
           <span class="sidebar-link__eyebrow">Calidad</span>
           <strong>Auditoría CSAT</strong>
         </a>
-        <a class="sidebar-link {% if endpoint == 'informe_semanal_cs.informe_semanal_cs' %}is-active{% endif %}" href="{{ url_for('informe_semanal_cs.informe_semanal_cs') }}">
+        <a class="sidebar-link {% if endpoint == 'informe_semanal_cs.informe_semanal_cs' %}is-active{% endif %}"{% if endpoint == 'informe_semanal_cs.informe_semanal_cs' %} aria-current="page"{% endif %} href="{{ url_for('informe_semanal_cs.informe_semanal_cs') }}">
           <span class="sidebar-link__eyebrow">Informe</span>
           <strong>Informe Semanal CS</strong>
         </a>
-        <a class="sidebar-link {% if endpoint == 'auditoria_salientes.auditoria_salientes' %}is-active{% endif %}" href="{{ url_for('auditoria_salientes.auditoria_salientes') }}">
+        <a class="sidebar-link {% if endpoint == 'auditoria_salientes.auditoria_salientes' %}is-active{% endif %}"{% if endpoint == 'auditoria_salientes.auditoria_salientes' %} aria-current="page"{% endif %} href="{{ url_for('auditoria_salientes.auditoria_salientes') }}">
           <span class="sidebar-link__eyebrow">Cumplimiento</span>
           <strong>Auditoría de salientes</strong>
         </a>
-        <a class="sidebar-link {% if endpoint == 'usuarios_a_sheets.usuarios_a_sheets' %}is-active{% endif %}" href="{{ url_for('usuarios_a_sheets.usuarios_a_sheets') }}">
+        <a class="sidebar-link {% if endpoint == 'usuarios_a_sheets.usuarios_a_sheets' %}is-active{% endif %}"{% if endpoint == 'usuarios_a_sheets.usuarios_a_sheets' %} aria-current="page"{% endif %} href="{{ url_for('usuarios_a_sheets.usuarios_a_sheets') }}">
           <span class="sidebar-link__eyebrow">Exportación</span>
           <strong>Usuarios a Sheets</strong>
         </a>
-        <a class="sidebar-link {% if endpoint == 'break_admin.break_admin' %}is-active{% endif %}" href="{{ url_for('break_admin.break_admin') }}">
+        <a class="sidebar-link {% if endpoint == 'break_admin.break_admin' %}is-active{% endif %}"{% if endpoint == 'break_admin.break_admin' %} aria-current="page"{% endif %} href="{{ url_for('break_admin.break_admin') }}">
           <span class="sidebar-link__eyebrow">Administración</span>
           <strong>Breaks reservables</strong>
         </a>
@@ -107,7 +110,7 @@
         </div>
       </header>
 
-      <main class="wrap app-main">
+      <main class="wrap app-main" id="contenido-principal" tabindex="-1">
         {% block content %}{% endblock %}
       </main>
     </div>

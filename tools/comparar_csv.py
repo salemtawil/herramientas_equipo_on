@@ -8,6 +8,7 @@ import pandas as pd
 from flask import Blueprint, Response, render_template, request
 
 from utils.archivos import leer_csv_subido
+from utils.errores import mensaje_error_publico
 from utils.transformaciones import (
     convertir_a_numero,
     limpiar_texto,
@@ -431,7 +432,7 @@ def comparar_csv():
 
         except Exception as e:
             logger.exception("Error procesando comparar_csv con accion=%s", accion)
-            advertencia = f"No se pudo procesar el archivo: {e}"
+            advertencia = mensaje_error_publico(e, "No se pudo procesar el archivo")
 
     return render_template(
         "comparar_csv.html",

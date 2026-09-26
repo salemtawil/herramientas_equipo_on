@@ -4,6 +4,7 @@ import pandas as pd
 from flask import Blueprint, render_template, request
 
 from utils.archivos import leer_csv_subido
+from utils.errores import mensaje_error_publico
 from utils.chatwoot_reportes import obtener_dataframe_reporte_chatwoot
 from utils.config_ranking import obtener_pesos_turno
 from utils.transformaciones import (
@@ -339,7 +340,6 @@ def reporte_agentes():
     tabla_general = None
     secciones_turnos = []
     tabla_resumen_turnos = None
-    lista_agentes = []
     agentes_sin_asignar = []
     turnos_config = cargar_turnos_fijos()
 
@@ -418,7 +418,7 @@ def reporte_agentes():
 
         except Exception as e:
             logger.exception("Error procesando reporte_agentes")
-            advertencia = f"No se pudo procesar el reporte: {e}"
+            advertencia = mensaje_error_publico(e, "No se pudo procesar el reporte")
 
     return render_template(
         "reporte_agentes.html",

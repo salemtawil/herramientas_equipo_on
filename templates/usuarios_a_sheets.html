@@ -56,12 +56,12 @@
     >
       <div class="row-2">
         <div>
-          <label class="small">Archivo CSV</label>
-          <input type="file" name="archivo" accept=".csv">
+          <label class="small" for="sheets-archivo-csv">Archivo CSV</label>
+          <input type="file" id="sheets-archivo-csv" name="archivo" accept=".csv">
         </div>
         <div>
-          <label class="small">Sistema</label>
-          <select name="sistema">
+          <label class="small" for="sheets-sistema">Sistema</label>
+          <select id="sheets-sistema" name="sistema">
             {% for system_key, system_data in sistemas_perfil.items() %}
               <option value="{{ system_key }}" {% if sistema_seleccionado == system_key %}selected{% endif %}>{{ system_data.label }}</option>
             {% endfor %}

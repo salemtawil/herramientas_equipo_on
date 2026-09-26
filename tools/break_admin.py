@@ -3,6 +3,7 @@ from datetime import date
 
 from flask import Blueprint, flash, redirect, render_template, request, url_for
 
+from utils.errores import mensaje_error_publico
 from utils.break_admin_store import (
     BreakAdminConfigError,
     BreakAdminError,
@@ -100,11 +101,11 @@ def ejecutar_accion(handler):
         return construir_redirect(fecha=fecha, shift_id=shift_id)
     except BreakAdminError as exc:
         logger.exception("Error de break_admin")
-        flash(str(exc), "warning")
+        flash(mensaje_error_publico(exc, "No se pudo completar la acción en la base de datos de breaks"), "warning")
         return construir_redirect(fecha=fecha, shift_id=shift_id)
     except Exception as exc:
         logger.exception("Error inesperado de break_admin")
-        flash(f"No se pudo completar la acción: {exc}", "warning")
+        flash(mensaje_error_publico(exc, "No se pudo completar la acción"), "warning")
         return construir_redirect(fecha=fecha, shift_id=shift_id)
 
 
@@ -134,10 +135,10 @@ def break_admin():
         contexto["config_error"] = str(exc)
     except BreakAdminError as exc:
         logger.exception("Error cargando break_admin")
-        contexto["config_error"] = str(exc)
+        contexto["config_error"] = mensaje_error_publico(exc, "No se pudo consultar la base de datos de breaks")
     except Exception as exc:
         logger.exception("Error inesperado cargando break_admin")
-        contexto["config_error"] = f"No se pudo cargar la vista de breaks: {exc}"
+        contexto["config_error"] = mensaje_error_publico(exc, "No se pudo cargar la vista de breaks")
 
     return render_template("break_admin.html", **contexto)
 

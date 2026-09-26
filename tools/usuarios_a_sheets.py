@@ -11,6 +11,7 @@ from flask import Blueprint, Response, current_app, render_template, request
 
 from utils.archivos import _leer_csv_desde_bytes
 from utils.archivos import leer_bytes_archivo_csv
+from utils.errores import mensaje_error_publico
 from utils.estado_temporal import cargar_estado_temporal
 from utils.estado_temporal import guardar_estado_temporal
 from utils.estado_temporal import limpiar_estados_temporales_expirados
@@ -627,9 +628,13 @@ def enviar_a_apps_script(df, nombre_hoja):
             "La creación de la hoja tardó demasiado en responder. "
             "Es posible que Google Sheets sí se haya creado en tu carpeta. "
             "Revisa Drive y, si necesitas, vuelve a intentarlo."
-        )
+        ) from None
     except requests.exceptions.RequestException as e:
-        raise RuntimeError(f"No se pudo conectar con Apps Script: {e}")
+        # No se registra str(e): incluye la URL del webhook de Apps Script.
+        logger.warning("Fallo de conexión con Apps Script (%s)", type(e).__name__)
+        raise RuntimeError(
+            "No se pudo conectar con Apps Script. Verifica la configuración del webhook e inténtalo de nuevo."
+        ) from None
 
     if respuesta.status_code != 200:
         raise RuntimeError(
@@ -753,7 +758,7 @@ def usuarios_a_sheets():
 
         except Exception as e:
             logger.exception("Error procesando usuarios_a_sheets con accion=%s", accion)
-            advertencia = f"No se pudo procesar el archivo: {e}"
+            advertencia = mensaje_error_publico(e, "No se pudo procesar el archivo")
             if payload_cache:
                 try:
                     df_final, resumen, regiones_sin_tz, sistema_seleccionado = cargar_desde_payload(payload_cache)

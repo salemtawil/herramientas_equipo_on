@@ -53,8 +53,8 @@
     <form method="post" action="{{ url_for('turnos_trabajo.importar_agentes') }}" enctype="multipart/form-data" data-processing-message="Importando agentes y actualizando la lista...">
       <div class="row-2">
         <div>
-          <label class="small">Archivo CSV</label>
-          <input type="file" name="archivo" accept=".csv">
+          <label class="small" for="turnos-archivo-csv">Archivo CSV</label>
+          <input type="file" id="turnos-archivo-csv" name="archivo" accept=".csv">
         </div>
         <div class="acciones-columna">
           <label class="small">&nbsp;</label>

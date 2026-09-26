@@ -9,24 +9,25 @@
     <div class="page-section-title">
       <div>
         <h1>Usuarios activos</h1>
-        <p>Consulta el estado consolidado de cada sistema y actualiza los datos sin salir de la vista.</p>
+        <p>Al abrir se muestra el último snapshot disponible. Los sistemas externos solo se consultan cuando pulsas «Actualizar datos».</p>
         <p id="general-updated">Última actualización general (ET): {{ updated_at_inicial or "-" }}</p>
       </div>
       <div class="page-actions">
         <button type="button" id="actualizar-btn" class="btn secondary" onclick="actualizarDatos()">Actualizar datos</button>
+        <p id="actualizar-feedback" class="small action-feedback" role="status" aria-live="polite"></p>
       </div>
     </div>
 
     <div class="dashboard-highlight-grid top-space">
       <article class="dashboard-highlight-card dashboard-highlight-card--primary">
         <span class="dashboard-highlight-card__eyebrow">Snapshot</span>
-        <strong>Estado útil al abrir</strong>
-        <p>La vista parte del último snapshot disponible y luego se refresca sobre los endpoints actuales.</p>
+        <strong>Último estado guardado</strong>
+        <p>Al abrir, la vista muestra el último snapshot disponible. Si todavía no existe, muestra el estado inicial de cada sistema.</p>
       </article>
       <article class="dashboard-highlight-card">
         <span class="dashboard-highlight-card__eyebrow">Operación</span>
-        <strong>Actualización manual controlada</strong>
-        <p>Los sistemas se vuelven a consultar desde esta misma pantalla sin cambiar el flujo del usuario.</p>
+        <strong>Actualización manual</strong>
+        <p>Abrir la página no consulta los sistemas externos. Solo se consultan al pulsar «Actualizar datos».</p>
       </article>
     </div>
   </section>
@@ -281,7 +282,6 @@
 
 {% block scripts %}
 <script>
-const usuariosActivosApiUrl = {{ url_for('usuarios_activos.api')|tojson }};
 const usuariosActivosActualizarUrl = {{ url_for('usuarios_activos.actualizar')|tojson }};
 window.__USUARIOS_ACTIVOS_INITIAL_STATE__ = {{ {"data": estado_inicial, "updated_at": updated_at_inicial, "source": source_inicial}|tojson }};
 
@@ -694,6 +694,7 @@ function renderDynamicSystems(items) {
 }
 
 function renderData(items, updatedAt) {
+  ultimoEstadoRenderizado = { items, updatedAt };
   promoteSystemMeta();
   const compinche = items.find(item => item.system === "Compinche");
   const paripe = items.find(item => item.system === "Paripe");
@@ -768,21 +769,15 @@ function renderData(items, updatedAt) {
   renderDynamicSystems(items);
 }
 
-async function consultarEstado() {
-  try {
-    const response = await fetch(usuariosActivosApiUrl);
-    const result = await response.json();
-
-    if (result.success) {
-      renderData(result.data, result.updated_at);
-    }
-  } catch (error) {
-    console.error("Error consultando estado:", error);
-  }
-}
+let actualizacionEnCurso = false;
+let ultimoEstadoRenderizado = null;
 
 async function actualizarDatos() {
+  if (actualizacionEnCurso) return;
+  actualizacionEnCurso = true;
   const button = document.getElementById("actualizar-btn");
+  const feedback = document.getElementById("actualizar-feedback");
+  if (feedback) feedback.textContent = "Consultando los sistemas externos...";
 
   document.querySelectorAll(".system-card").forEach(card => {
     const id = card.id.replace(/^card-/, "");
@@ -809,14 +804,22 @@ async function actualizarDatos() {
 
     if (result.success) {
       renderData(result.data, result.updated_at);
+      if (feedback) feedback.textContent = "Datos actualizados.";
+    } else {
+      throw new Error("Respuesta sin éxito");
     }
   } catch (error) {
     console.error("Error actualizando:", error);
+    if (ultimoEstadoRenderizado) {
+      renderData(ultimoEstadoRenderizado.items, ultimoEstadoRenderizado.updatedAt);
+    }
+    if (feedback) feedback.textContent = "No se pudieron actualizar los datos. Se mantiene el último snapshot; inténtalo de nuevo.";
   } finally {
     if (button) {
       button.disabled = false;
       button.textContent = "Actualizar datos";
     }
+    actualizacionEnCurso = false;
   }
 }
 
@@ -856,6 +859,5 @@ if (window.__USUARIOS_ACTIVOS_INITIAL_STATE__) {
   );
 }
 
-window.setTimeout(actualizarDatos, 0);
 </script>
 {% endblock %}

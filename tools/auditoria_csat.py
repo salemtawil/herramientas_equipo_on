@@ -13,6 +13,7 @@ from flask import Blueprint, Response, render_template, request
 
 from utils.archivos import _leer_csv_desde_bytes
 from utils.archivos import leer_bytes_archivo_csv
+from utils.errores import mensaje_error_publico
 from utils.estado_temporal import cargar_json_temporal
 from utils.estado_temporal import guardar_json_temporal
 from utils.estado_temporal import limpiar_estados_temporales_expirados
@@ -769,7 +770,7 @@ def auditar_estado_con_ia(estado):
             )
         else:
             logger.exception("Error auditando lote CSAT con IA")
-            advertencias.append(f"No se pudo auditar el lote con IA: {exc}")
+            advertencias.append(mensaje_error_publico(exc, "No se pudo auditar el lote con IA"))
     except requests.exceptions.ConnectionError:
         if config["provider"] == "ollama":
             advertencias.append(
@@ -780,7 +781,7 @@ def auditar_estado_con_ia(estado):
             advertencias.append("No se pudo conectar con el proveedor de IA.")
     except Exception as exc:
         logger.exception("Error auditando lote CSAT con IA")
-        advertencias.append(f"No se pudo auditar el lote con IA: {exc}")
+        advertencias.append(mensaje_error_publico(exc, "No se pudo auditar el lote con IA"))
 
     return auditadas, advertencias
 
@@ -1290,7 +1291,7 @@ def auditoria_csat():
                     advertencia = "El análisis solicitado ya no está disponible. Carga el CSV de nuevo."
     except Exception as exc:
         logger.exception("Error procesando auditoria_csat")
-        advertencia = f"No se pudo procesar la auditoría CSAT: {exc}"
+        advertencia = mensaje_error_publico(exc, "No se pudo procesar la auditoría CSAT")
 
     return render_template(
         "auditoria_csat.html",

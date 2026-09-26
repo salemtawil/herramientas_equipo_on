@@ -93,7 +93,7 @@
     <section class="card report-output-panel">
       <div class="page-section-title">
         <div>
-          <h2>Resultado editable</h2>
+          <h2 id="informe-resultado-titulo">Resultado editable</h2>
           <p class="small">Revisa, ajusta y copia el informe final.</p>
         </div>
         {% if fuente_generacion %}
@@ -103,6 +103,7 @@
 
       <textarea
         id="informe-generado"
+        aria-labelledby="informe-resultado-titulo"
         class="report-editor"
         rows="30"
         placeholder="El informe aparecerá aquí después de generar."

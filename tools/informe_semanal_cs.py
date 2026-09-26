@@ -7,6 +7,7 @@ import requests
 from flask import Blueprint, render_template, request
 
 from utils.archivos import formatear_tamano_bytes
+from utils.errores import mensaje_error_publico
 
 informe_semanal_cs_bp = Blueprint("informe_semanal_cs", __name__)
 logger = logging.getLogger(__name__)
@@ -184,7 +185,8 @@ def extract_text_from_files(files):
                 textos.append(texto)
             warnings.extend(file_warnings)
         except Exception as exc:
-            warnings.append(f"{file_storage.filename}: no se pudo leer el archivo ({exc}).")
+            logger.warning("No se pudo leer el archivo %s", file_storage.filename, exc_info=True)
+            warnings.append(mensaje_error_publico(exc, f"{file_storage.filename}: no se pudo leer el archivo"))
     return "\n".join(textos).strip(), warnings
 
 
@@ -514,7 +516,7 @@ def informe_semanal_cs():
             mensaje = "Informe generado. Puedes editarlo, copiarlo o descargarlo."
         except Exception as exc:
             logger.exception("Error generando informe semanal CS")
-            advertencia = f"No se pudo generar el informe: {exc}"
+            advertencia = mensaje_error_publico(exc, "No se pudo generar el informe")
 
     return render_template(
         "informe_semanal_cs.html",

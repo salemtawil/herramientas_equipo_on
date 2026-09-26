@@ -41,7 +41,6 @@ def usar_supabase():
 
 
 def obtener_estado_almacenamiento():
-    global _STORAGE_WARNING
     if usar_supabase():
         if _STORAGE_WARNING:
             return {

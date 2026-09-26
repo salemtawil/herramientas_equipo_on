@@ -2,6 +2,7 @@ import logging
 
 from flask import Blueprint, flash, redirect, render_template, request, url_for
 
+from utils.errores import mensaje_error_publico
 from utils.turnos_trabajo_store import (
     cargar_estado,
     construir_tablero,
@@ -65,7 +66,7 @@ def importar_agentes():
         )
     except Exception as exc:
         logger.exception("Error importando agents.csv")
-        flash(f"No se pudo importar el CSV: {exc}", "warning")
+        flash(mensaje_error_publico(exc, "No se pudo importar el CSV"), "warning")
 
     return redirect(url_for("turnos_trabajo.turnos_trabajo"))
 
@@ -80,7 +81,7 @@ def mover_masivo():
         flash(f"{cambios} cambios de turno guardados.", "success")
     except Exception as exc:
         logger.exception("Error moviendo agentes en lote")
-        flash(f"No se pudieron guardar los cambios masivos: {exc}", "warning")
+        flash(mensaje_error_publico(exc, "No se pudieron guardar los cambios masivos"), "warning")
 
     return redirect(url_for("turnos_trabajo.turnos_trabajo"))
 
@@ -97,7 +98,7 @@ def limpiar_asignaciones():
         flash(f"{cambios} agentes fueron movidos a Sin turno.", "success")
     except Exception as exc:
         logger.exception("Error limpiando asignaciones de turnos")
-        flash(f"No se pudieron limpiar las asignaciones: {exc}", "warning")
+        flash(mensaje_error_publico(exc, "No se pudieron limpiar las asignaciones"), "warning")
 
     return redirect(url_for("turnos_trabajo.turnos_trabajo"))
 
@@ -114,7 +115,7 @@ def vaciar_lista_agentes():
         flash(f"Lista limpiada: {eliminados} agentes eliminados. Ahora puedes importar el CSV limpio.", "success")
     except Exception as exc:
         logger.exception("Error vaciando agentes de turnos")
-        flash(f"No se pudo vaciar la lista de agentes: {exc}", "warning")
+        flash(mensaje_error_publico(exc, "No se pudo vaciar la lista de agentes"), "warning")
 
     return redirect(url_for("turnos_trabajo.turnos_trabajo"))
 
@@ -129,7 +130,7 @@ def mover():
         flash("Agente movido correctamente.", "success")
     except Exception as exc:
         logger.exception("Error moviendo agente")
-        flash(f"No se pudo mover el agente: {exc}", "warning")
+        flash(mensaje_error_publico(exc, "No se pudo mover el agente"), "warning")
 
     return redirect(url_for("turnos_trabajo.turnos_trabajo"))
 
@@ -143,6 +144,6 @@ def cambiar_estado_agente(agent_id):
         flash("Estado del agente actualizado.", "success")
     except Exception as exc:
         logger.exception("Error actualizando agente")
-        flash(f"No se pudo actualizar el agente: {exc}", "warning")
+        flash(mensaje_error_publico(exc, "No se pudo actualizar el agente"), "warning")
 
     return redirect(url_for("turnos_trabajo.turnos_trabajo"))

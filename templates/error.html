@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block title %}{{ titulo }}{% endblock %}
+{% block page_name %}{{ titulo }}{% endblock %}
+
+{% block content %}
+<div class="page-stack">
+  <section class="card">
+    <h1>{{ titulo }}</h1>
+    <div class="warning top-space" role="alert">{{ mensaje }}</div>
+    <p class="top-space">
+      <a class="btn" href="{{ url_for('inicio') }}">Ir al panel principal</a>
+    </p>
+  </section>
+</div>
+{% endblock %}

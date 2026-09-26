@@ -2,6 +2,15 @@
 
 App Flask con utilidades internas para procesar CSVs, consultar usuarios activos, auditar reportes y administrar breaks reservables.
 
+## Decisión de arquitectura: aplicación pública
+
+La aplicación es pública por decisión definitiva (2026-09-26): cualquier persona que conozca o descubra la URL puede acceder y usar todas sus herramientas, incluidas las que modifican datos, crean Google Sheets o consumen APIs de pago.
+
+- No hay autenticación, login, roles ni permisos, y no se usa Vercel Authentication. Es una decisión aceptada, no un pendiente.
+- No hay protección CSRF basada en sesiones.
+- La URL no es privada ni está protegida. `noindex`, `robots.txt`, comprobar la cabecera `Origin` o usar una URL difícil de adivinar pueden reducir tráfico accidental, pero **no son control de acceso**.
+- Por eso las medidas de protección se centran en limitar el abuso y el coste (tamaños, tiempos, cuotas, confirmaciones, registros sin secretos y alertas de consumo), no en impedir el acceso.
+
 ## Correr localmente
 
 1. Crea y activa un entorno virtual.
@@ -23,9 +32,19 @@ La app levanta en modo local con la `FLASK_SECRET_KEY` por defecto de desarrollo
 
 ## Pruebas
 
+El único comando oficial es pytest:
+
 ```bash
-python -m unittest discover -s tests -v
+pip install pytest
+python -m pytest
 ```
+
+Funciona desde la raíz o desde cualquier otro directorio (`python -m pytest ruta/al/repo/tests`).
+
+- `tests/conftest.py` aísla la suite: no carga el `.env` real, elimina las variables de integraciones y todas las variables `*_PROXY`, usa un store de turnos temporal (nunca `data/turnos_trabajo.json`) y bloquea toda conexión de red que no sea `localhost`. Un test que intente salir a la red falla indicando su nombre.
+- **No uses `python -m unittest` directamente**: omite `conftest.py`, así que no hay aislamiento y puede leer el `.env` local, contactar servicios reales y escribir en `data/turnos_trabajo.json`.
+- Las pruebas de navegador (`test_usuarios_activos_navegador.py`, `test_navegacion_responsive.py`) usan Playwright, que es opcional y no está en `requirements.txt`. Si no está instalado se omiten. Para activarlas: `pip install playwright` y `python -m playwright install chromium`.
+- Para no generar `__pycache__`, se puede ejecutar con `PYTHONDONTWRITEBYTECODE=1`.
 
 ## Variables de entorno importantes
 
@@ -58,6 +77,7 @@ Opcionales según funcionalidad:
 - `AWS_SECRET_ACCESS_KEY`
 - `AWS_DEFAULT_REGION`
 - `LOG_LEVEL`
+- `MAX_CONTENT_LENGTH` (bytes; por defecto `52428800` = 50 MB)
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `OPENAI_API_KEY`
@@ -114,6 +134,14 @@ Antes de desplegar:
    - `CHATWOOT_ACCOUNT_ID`
    - `CHATWOOT_API_ACCESS_TOKEN`
    - `CHATWOOT_TIMEZONE` (por defecto `America/Caracas`)
+
+## Persistencia en Vercel
+
+En Vercel el sistema de archivos solo es escribible en `/tmp`, que es propio de cada instancia y se pierde al reciclarla.
+
+- `turnos_trabajo` usa Supabase si `TURNOS_TRABAJO_STORAGE=supabase`, o si esa variable no existe y están `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY`. Con `TURNOS_TRABAJO_STORAGE=local`, o sin esas dos variables, guarda en `/tmp/turnos_trabajo.json` y la pantalla muestra «Local». Si Supabase está configurado pero falla, guarda en `/tmp` y muestra «Temporal».
+- `break_admin` exige `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY`; sin ellas muestra un error de configuración y no guarda nada.
+- El snapshot de `usuarios_activos` y los análisis temporales de `auditoria_csat`, `auditoria_salientes` y `usuarios_a_sheets` viven en el directorio temporal del runtime. En una instancia nueva, `usuarios_activos` muestra el estado inicial hasta que alguien pulse «Actualizar datos».
 
 ## Conectar IA para Informe Semanal CS
 
@@ -184,3 +212,9 @@ OLLAMA_WEEKLY_REPORT_MODEL=qwen2.5:7b
 - Límite actual del CSV ya leído: `25 MB`.
 - En auditoría de salientes, el navegador comprime automáticamente CSV grandes antes de enviarlos a Vercel. También se aceptan archivos `.csv.gz`.
 - Si el archivo descomprimido supera ese tamaño, la app devuelve un error funcional antes de intentar procesarlo.
+
+## Límite total de subida
+
+- `MAX_CONTENT_LENGTH` limita el tamaño total de cada petición (archivos + campos del formulario). Valor por defecto: `52428800` bytes (50 MB), suficiente para los límites por archivo de CSV (25 MB) e Informe Semanal CS (40 MB).
+- Si se supera, Flask responde `413` con un mensaje en español: una página de error en las vistas HTML y `{"success": false, "error": "..."}` en las rutas JSON.
+- En Vercel la plataforma aplica además su propio límite de cuerpo de petición (unos 4,5 MB en funciones serverless), que se aplica antes de llegar a Flask; por eso la auditoría de salientes comprime los CSV en el navegador.

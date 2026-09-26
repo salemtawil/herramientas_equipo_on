@@ -9,6 +9,7 @@ from flask import Blueprint, Response, current_app, render_template, request
 
 from utils.archivos import _leer_csv_desde_bytes
 from utils.archivos import leer_bytes_archivo_csv
+from utils.errores import mensaje_error_publico
 from utils.turnos import cargar_turnos_fijos
 from utils.turnos import obtener_turno
 from utils.estado_temporal import cargar_estado_temporal
@@ -1248,7 +1249,7 @@ def auditoria_salientes():
 
         except Exception as e:
             logger.exception("Error procesando auditoria_salientes")
-            advertencia = f"No se pudo procesar el archivo: {e}"
+            advertencia = mensaje_error_publico(e, "No se pudo procesar el archivo")
 
     return render_template(
         "auditoria_salientes.html",
