@@ -70,7 +70,7 @@
       <span class="small">Reorganización</span>
     </summary>
 
-    <form method="post" action="{{ url_for('turnos_trabajo.limpiar_asignaciones') }}" class="top-space" data-processing-message="Moviendo agentes a Sin turno...">
+    <form method="post" action="{{ url_for('turnos_trabajo.limpiar_asignaciones') }}" class="top-space" data-processing-message="Moviendo agentes a Sin turno..." data-confirm="Todos los agentes quedarán en «Sin turno». Tendrás que reasignarlos uno por uno o con un CSV." data-confirm-accept="Limpiar turnos">
       <div class="row-2">
         <div>
           <label class="small" for="confirmar-limpieza">Mover todos a Sin turno</label>
@@ -84,7 +84,7 @@
       </div>
     </form>
 
-    <form method="post" action="{{ url_for('turnos_trabajo.vaciar_lista_agentes') }}" class="top-space" data-processing-message="Vaciando lista de agentes...">
+    <form method="post" action="{{ url_for('turnos_trabajo.vaciar_lista_agentes') }}" class="top-space" data-processing-message="Vaciando lista de agentes..." data-confirm="Se eliminarán todos los agentes del tablero. Solo podrás recuperarlos importando de nuevo el CSV." data-confirm-accept="Vaciar agentes">
       <div class="row-2">
         <div>
           <label class="small" for="confirmar-vaciado">Vaciar lista de agentes</label>

@@ -139,9 +139,37 @@ Antes de desplegar:
 
 En Vercel el sistema de archivos solo es escribible en `/tmp`, que es propio de cada instancia y se pierde al reciclarla.
 
-- `turnos_trabajo` usa Supabase si `TURNOS_TRABAJO_STORAGE=supabase`, o si esa variable no existe y están `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY`. Con `TURNOS_TRABAJO_STORAGE=local`, o sin esas dos variables, guarda en `/tmp/turnos_trabajo.json` y la pantalla muestra «Local». Si Supabase está configurado pero falla, guarda en `/tmp` y muestra «Temporal».
+- `turnos_trabajo` usa Supabase si `TURNOS_TRABAJO_STORAGE=supabase`, o si esa variable no existe y están `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY`. Con `TURNOS_TRABAJO_STORAGE=local`, o sin esas dos variables, guarda en `/tmp/turnos_trabajo.json`: fuera de Vercel la pantalla muestra «Local»; en Vercel muestra «Almacenamiento temporal» y un aviso. Si Supabase está configurado pero falla, guarda en `/tmp`, muestra «Almacenamiento temporal» y un aviso de que Supabase no respondió.
 - `break_admin` exige `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY`; sin ellas muestra un error de configuración y no guarda nada.
 - El snapshot de `usuarios_activos` y los análisis temporales de `auditoria_csat`, `auditoria_salientes` y `usuarios_a_sheets` viven en el directorio temporal del runtime. En una instancia nueva, `usuarios_activos` muestra el estado inicial hasta que alguien pulse «Actualizar datos».
+
+## Endurecimiento de la app pública (lote 5a)
+
+Estas medidas reducen riesgos accidentales y de navegador. **No son control de acceso**: la app sigue siendo pública.
+
+- Cabeceras en todas las respuestas: `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `X-Frame-Options: SAMEORIGIN` y un `Permissions-Policy` que desactiva cámara, micrófono, geolocalización, pagos, USB y similares (la app no usa ninguno).
+- `X-Robots-Tag: noindex, nofollow, noarchive` en HTML, JSON y descargas, `<meta name="robots">` en las plantillas y `/robots.txt` con `Disallow: /`. Solo piden a los buscadores que no indexen; cualquiera con la URL puede entrar igual.
+- `Content-Security-Policy-Report-Only`: solo observa, no bloquea nada y no envía reportes a ningún servidor. Hoy registraría los `<script>` en línea de las plantillas, los `onclick`/`onload` de Usuarios activos y los `style=""` que dibujan barras en Reporte de agentes y Auditoría CSAT. Hay que moverlos a `static/` antes de pasar a una CSP que bloquee.
+- No se envía HSTS: antes hay que confirmar que el dominio definitivo y todos sus subdominios sirven solo HTTPS.
+- Caché: HTML, JSON y descargas llevan `Cache-Control: no-store`. `styles.css` y `app.js` pedidos con su versión actual (`?v=`, ver `ASSET_VERSIONS` en `app.py`) llevan `public, max-age=31536000, immutable` y `Vercel-CDN-Cache-Control: public, max-age=86400`; cualquier otra versión, o un archivo estático sin versión, lleva `no-cache`. En Vercel `/static/` lo sirve la misma función de Flask (por `vercel.json`), así que estas cabeceras son las que aplican. **Al cambiar `styles.css` o `app.js`, sube su número en `ASSET_VERSIONS`.**
+- Confirmación explícita (diálogo accesible; sin JavaScript el formulario se envía como antes) para eliminar una reserva, desactivar turnos y horarios de breaks, limpiar asignaciones, vaciar agentes y crear un Google Sheet. Limpiar y vaciar siguen exigiendo escribir `SI`/`BORRAR`.
+- Los formularios `POST` bloquean el doble envío mientras la petición está en curso; conservan el nombre y valor del botón pulsado y, en las descargas, se liberan a los pocos segundos.
+- `/usuarios-activos/compinche/promo-diagnostico` solo acepta `POST` (un `GET` devuelve `405` sin llamar a servicios externos). La respuesta JSON no cambió.
+- Almacenamiento de turnos: al arrancar se registra el modo (`local`, `temporal`, `supabase` o `fallback`) sin URL, claves ni texto de excepciones. En Panel principal, Turnos de trabajo y Reporte de agentes aparece un aviso si en Vercel se guarda en `/tmp` porque Supabase no está configurado, o si Supabase falló y se usó `/tmp`.
+
+### Límites: situación actual y propuesta (pendiente de aprobación)
+
+No se cambió ningún límite. En Vercel el cuerpo de cada petición está limitado a 4,5 MB (respuesta `413 FUNCTION_PAYLOAD_TOO_LARGE` de la plataforma, antes de llegar a Flask).
+
+| Límite | Máximo actual | Uso esperado | Propuesta | Impacto | Variable | Respuesta HTTP |
+| --- | --- | --- | --- | --- | --- | --- |
+| Cuerpo total de la petición | 50 MB en Flask; 4,5 MB efectivos en Vercel | CSV de pocos MB | 5 MB | Local se comporta igual que Vercel | `MAX_CONTENT_LENGTH` | 413 (HTML o JSON) |
+| Campos de formulario sin archivo | 8 MB | Textos del informe y estados firmados | Sin cambio | — | `MAX_FORM_MEMORY_SIZE` | 413 |
+| CSV descomprimido | 25 MB | < 5 MB | Sin cambio | — | (constante en `utils/archivos.py`) | Error en pantalla |
+| Archivos de Informe Semanal CS | 40 MB por archivo, sin límite de cantidad | 1–3 archivos | 4 MB en total y 5 archivos | Menos coste de IA por envío | nueva, a definir | 413 / error en pantalla |
+| Casos de CSAT auditados con IA | 10 por pulsación | 5–10 | Sin cambio; considerar tope diario | Coste de OpenAI | `OPENAI_CSAT_MAX_CASES` | Mensaje en pantalla |
+| Rango de fechas de Chatwoot | Sin máximo | 1–7 días | 31 días | Evita consultas largas | nueva, a definir | Error en pantalla |
+| Duración de la función | 300 s (Hobby y Pro por defecto) | < 60 s | Sin cambio | — | `vercel.json` | 504 de Vercel |
 
 ## Conectar IA para Informe Semanal CS
 

@@ -29,7 +29,7 @@ def test_script_de_cabecera_marca_js_antes_de_cargar_estilos():
     html = app.test_client().get("/").get_data(as_text=True)
     head = html[: html.index("</head>")]
     assert head.index('classList.add("js")') < head.index("styles.css")
-    assert "styles.css?v=21" in head
+    assert "styles.css?v=22" in head
 
 
 def test_todas_las_rutas_principales_mantienen_la_navegacion():
@@ -117,19 +117,28 @@ def test_movil_sin_javascript_la_navegacion_sigue_visible(navegador, servidor):
         contexto.close()
 
 
-def test_escritorio_menu_visible_y_colapsable(navegador, servidor):
+def test_escritorio_menu_visible_y_colapsable_a_riel_de_iconos(navegador, servidor):
     contexto, page = _abrir(navegador, servidor, 1440)
     try:
         boton = page.locator("[data-sidebar-toggle]")
         nav = page.locator("#app-sidebar-nav")
         assert nav.is_visible()
+        ancho_inicial = page.evaluate("document.getElementById('app-sidebar').getBoundingClientRect().width")
         boton.click()
-        assert nav.is_hidden()
         assert boton.get_attribute("aria-expanded") == "false"
+        assert boton.get_attribute("aria-label") == "Expandir menú"
         assert boton.is_visible()
-        boton.click()
+        # Contraído queda un riel de iconos: los enlaces siguen accesibles por teclado y con nombre.
         assert nav.is_visible()
+        ancho = page.evaluate("document.getElementById('app-sidebar').getBoundingClientRect().width")
+        assert ancho < 100 < ancho_inicial
+        activo = page.locator('.sidebar-link[aria-current="page"]')
+        assert activo.get_attribute("title") == "Comparar CSV"
+        assert activo.inner_text().strip() == "Comparar CSV"
+        assert _sin_desbordamiento(page)
+        boton.click()
         assert boton.get_attribute("aria-expanded") == "true"
+        assert page.evaluate("document.getElementById('app-sidebar').getBoundingClientRect().width") == ancho_inicial
     finally:
         contexto.close()
 

@@ -1,113 +1,94 @@
 {% extends "base.html" %}
+{% from "_iconos.html" import icono %}
 
 {% block title %}Panel principal{% endblock %}
 {% block page_name %}Panel principal{% endblock %}
 
 {% block content %}
-<div class="page-stack">
-  <section class="card page-hero">
-    <div class="page-section-title">
-      <div>
-        <h1>Panel principal</h1>
-        <p>
-          Aquí puedes abrir cada herramienta operativa desde un layout común.
-          Todas las vistas comparten el mismo sistema visual, tema global, sidebar y navegación consistente.
-        </p>
+{% set grupos = grupos_navegacion() %}
+{% set total = namespace(n=0) %}
+{% for g in grupos %}{% set total.n = total.n + g["items"]|length %}{% endfor %}
+<div class="page-stack home-page">
+  <section class="home-hero" aria-labelledby="home-title">
+    <div class="home-hero__copy">
+      <p class="eyebrow">Consola operativa · Equipo de soporte</p>
+      <h1 id="home-title">Todo el trabajo del equipo, en un solo panel</h1>
+      <p class="home-hero__lead">Monitorea los sistemas, genera reportes, audita la calidad y organiza al equipo desde herramientas conectadas entre sí.</p>
+      <div class="home-hero__actions">
+        <a class="btn" href="{{ url_for('usuarios_activos.index') }}">{{ icono("actividad") }}<span>Ver usuarios activos</span></a>
+        <a class="btn secondary" href="{{ url_for('reporte_agentes.reporte_agentes') }}">{{ icono("reporte") }}<span>Reporte de agentes</span></a>
       </div>
-      <span class="hero-badge">Vista general</span>
     </div>
-    <div class="dashboard-highlight-grid top-space">
-      <article class="dashboard-highlight-card dashboard-highlight-card--primary">
-        <span class="dashboard-highlight-card__eyebrow">Operación</span>
-        <strong>Monitoreo centralizado</strong>
-        <p>Usuarios activos, auditorías y reportes dentro de una misma base visual.</p>
-      </article>
-      <article class="dashboard-highlight-card">
-        <span class="dashboard-highlight-card__eyebrow">Datos</span>
-        <strong>Herramientas server-rendered</strong>
-        <p>Flujos directos, formularios claros y tablas consistentes para CSV, paneles y exportes.</p>
-      </article>
+
+    <dl class="home-hero__stats" aria-label="Resumen de la consola">
+      <div class="stat-tile">
+        <dt>Herramientas</dt>
+        <dd>{{ total.n }}</dd>
+      </div>
+      <div class="stat-tile">
+        <dt>Áreas</dt>
+        <dd>{{ grupos|length }}</dd>
+      </div>
+      <div class="stat-tile stat-tile--wide">
+        <dt>Acceso</dt>
+        <dd class="stat-tile__text"><span class="status-dot status-dot--warn" aria-hidden="true"></span>Público</dd>
+      </div>
+    </dl>
+  </section>
+
+  <section class="home-section" aria-labelledby="home-principales">
+    <div class="section-heading">
+      <p class="eyebrow">Uso diario</p>
+      <h2 id="home-principales">Herramientas principales</h2>
+    </div>
+    <div class="feature-grid">
+      {% for grupo in grupos %}
+        {% for h in grupo["items"] if h.destacada %}
+          <a class="feature-tile feature-tile--{{ h.icono }}" href="{{ url_for(h.endpoint) }}">
+            <span class="feature-tile__top">
+              <span class="tool-icon">{{ icono(h.icono) }}</span>
+              <span class="chip">{{ h.grupo }}</span>
+            </span>
+            <span class="feature-tile__title">{{ h.titulo }}</span>
+            <span class="feature-tile__text">{{ h.descripcion }}</span>
+            <span class="feature-tile__visual" aria-hidden="true">
+              <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+            </span>
+            <span class="feature-tile__cta">Abrir {{ icono("flecha") }}</span>
+          </a>
+        {% endfor %}
+      {% endfor %}
     </div>
   </section>
 
-  <section class="card">
-    <div class="page-section-title">
-      <h2>Herramientas disponibles</h2>
-      <span class="small">Accesos principales</span>
+  <section class="home-section" aria-labelledby="home-areas">
+    <div class="section-heading">
+      <p class="eyebrow">Por función</p>
+      <h2 id="home-areas">Todas las herramientas</h2>
     </div>
-
-    <div class="tool-grid">
-      <article class="subherramienta subherramienta-acento subherramienta-acento--reportes">
-        <div>
-          <h3>Reporte de agentes</h3>
-          <p>Carga un CSV y genera el reporte general por agente, turnos, resumen y ranking.</p>
-        </div>
-        <a class="btn" href="{{ url_for('reporte_agentes.reporte_agentes') }}">Abrir herramienta</a>
-      </article>
-
-      <article class="subherramienta subherramienta-acento subherramienta-acento--activos">
-        <div>
-          <h3>Turnos de trabajo</h3>
-          <p>Administra integrantes por turno, importa agentes nuevos y mueve personas sin editar código.</p>
-        </div>
-        <a class="btn" href="{{ url_for('turnos_trabajo.turnos_trabajo') }}">Abrir herramienta</a>
-      </article>
-
-      <article class="subherramienta subherramienta-destacada subherramienta-acento subherramienta-acento--comparativa">
-        <div>
-          <h3>Comparar CSV</h3>
-          <p>Compara un CSV contra el reporte base y visualiza diferencias en llamadas, salientes, minutos y perdidas.</p>
-        </div>
-        <a class="btn secondary" href="{{ url_for('comparar_csv.comparar_csv') }}">Abrir herramienta</a>
-      </article>
-
-      <article class="subherramienta subherramienta-acento subherramienta-acento--comparativa">
-        <div>
-          <h3>Auditoría de salientes</h3>
-          <p>Carga el historial de llamadas y valida casos por agente, número y ventana de 10 minutos.</p>
-        </div>
-        <a class="btn secondary" href="{{ url_for('auditoria_salientes.auditoria_salientes') }}">Abrir herramienta</a>
-      </article>
-
-      <article class="subherramienta subherramienta-acento subherramienta-acento--reportes">
-        <div>
-          <h3>Auditoría CSAT</h3>
-          <p>Sube el CSV de valoraciones, audita cada caso y descarga tanto el CSV corregido como un reporte listo para IA.</p>
-        </div>
-        <a class="btn" href="{{ url_for('auditoria_csat.auditoria_csat') }}">Abrir herramienta</a>
-      </article>
-
-      <article class="subherramienta subherramienta-acento subherramienta-acento--reportes">
-        <div>
-          <h3>Informe Semanal CS</h3>
-          <p>Pega la bitácora semanal, suma contexto operativo y genera el informe ejecutivo final listo para copiar.</p>
-        </div>
-        <a class="btn" href="{{ url_for('informe_semanal_cs.informe_semanal_cs') }}">Abrir herramienta</a>
-      </article>
-
-      <article class="subherramienta subherramienta-acento subherramienta-acento--sheets">
-        <div>
-          <h3>Usuarios a Google Sheets</h3>
-          <p>Limpia una lista de usuarios desde CSV, elimina duplicados y la deja lista para descargar o crear en Google Sheets.</p>
-        </div>
-        <a class="btn" href="{{ url_for('usuarios_a_sheets.usuarios_a_sheets') }}">Abrir herramienta</a>
-      </article>
-
-      <article class="subherramienta subherramienta-acento subherramienta-acento--activos">
-        <div>
-          <h3>Usuarios activos</h3>
-          <p>Consulta usuarios activos de distintos sistemas en un solo lugar.</p>
-        </div>
-        <a class="btn secondary" href="{{ url_for('usuarios_activos.index') }}">Abrir herramienta</a>
-      </article>
-
-      <article class="subherramienta subherramienta-acento subherramienta-acento--sheets">
-        <div>
-          <h3>Admin de breaks</h3>
-          <p>Gestiona turnos, horarios, cupos y reservas de breaks sobre la base compartida en Supabase.</p>
-        </div>
-        <a class="btn" href="{{ url_for('break_admin.break_admin') }}">Abrir herramienta</a>
-      </article>
+    <div class="area-grid">
+      {% for grupo in grupos %}
+        <article class="area-panel" aria-labelledby="area-{{ loop.index }}">
+          <header class="area-panel__head">
+            <h3 id="area-{{ loop.index }}">{{ grupo.nombre }}</h3>
+            <span class="area-panel__count">{{ grupo["items"]|length }}</span>
+          </header>
+          <ul class="tool-list">
+            {% for h in grupo["items"] %}
+              <li>
+                <a class="tool-row" href="{{ url_for(h.endpoint) }}">
+                  <span class="tool-icon">{{ icono(h.icono) }}</span>
+                  <span class="tool-row__text">
+                    <strong>{{ h.titulo }}</strong>
+                    <span>{{ h.descripcion }}</span>
+                  </span>
+                  {{ icono("flecha", "tool-row__arrow") }}
+                </a>
+              </li>
+            {% endfor %}
+          </ul>
+        </article>
+      {% endfor %}
     </div>
   </section>
 </div>

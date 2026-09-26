@@ -55,7 +55,8 @@ def actualizar():
         "source": estado.get("source", "snapshot"),
     })
 
-@usuarios_activos_bp.route("/compinche/promo-diagnostico")
+# POST: llama a Compinche con credenciales; un GET (p. ej. de un rastreador) no debe dispararlo.
+@usuarios_activos_bp.route("/compinche/promo-diagnostico", methods=["POST"])
 def compinche_promo_diagnostico():
     try:
         diagnostico = obtener_diagnostico_promo_compinche()

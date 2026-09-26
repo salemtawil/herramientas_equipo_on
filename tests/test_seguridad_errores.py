@@ -106,7 +106,7 @@ class ErroresSinDetalleInternoTests(unittest.TestCase):
             "tools.usuarios_activos.obtener_diagnostico_promo_compinche",
             side_effect=RuntimeError("token=eyJ-secreto"),
         ):
-            respuesta = app.test_client().get("/usuarios-activos/compinche/promo-diagnostico")
+            respuesta = app.test_client().post("/usuarios-activos/compinche/promo-diagnostico")
         self.assertEqual(500, respuesta.status_code)
         data = respuesta.get_json()
         self.assertEqual({"success", "error"}, set(data))

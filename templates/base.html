@@ -3,28 +3,45 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}Herramientas{% endblock %}</title>
+  <meta name="robots" content="noindex, nofollow, noarchive">
+  <title>{% block title %}Herramientas{% endblock %} · Consola Equipo</title>
   <script>
     document.documentElement.classList.add("js");
     try {
+      var temaGuardado = localStorage.getItem("theme");
+      if (temaGuardado === "dark" || temaGuardado === "light") {
+        document.documentElement.setAttribute("data-theme", temaGuardado);
+      } else if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+        document.documentElement.setAttribute("data-theme", "dark");
+      }
       if (localStorage.getItem("sidebarCollapsed") === "true") {
         document.documentElement.classList.add("has-sidebar-collapsed");
       }
     } catch (error) {}
   </script>
-  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v='21') }}">
-  <script src="{{ url_for('static', filename='app.js', v='6') }}" defer></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v=asset_version('styles.css')) }}">
+  <script src="{{ url_for('static', filename='app.js', v=asset_version('app.js')) }}" defer></script>
   {% block head_extra %}{% endblock %}
 </head>
 <body>
+  {% from "_iconos.html" import icono %}
   <a class="skip-link" href="#contenido-principal">Saltar al contenido</a>
   {% set endpoint = request.endpoint or '' %}
+  {% set herramienta_actual = herramienta_activa(endpoint) %}
   <div class="app-shell" data-sidebar-shell>
     <aside class="app-sidebar" id="app-sidebar">
       <div class="app-sidebar__header">
         <div class="app-sidebar__intro">
-          <a class="app-brand" href="{{ url_for('inicio') }}">Herramientas Equipo</a>
-          <p class="app-subtitle">Admin server-rendered con patrones compartidos, tablas consistentes y tema global.</p>
+          <a class="app-brand" href="{{ url_for('inicio') }}">
+            <span class="app-brand__mark" aria-hidden="true">
+              <svg viewBox="0 0 32 32" width="32" height="32" focusable="false"><path d="M16 2.5 28 9.5v13L16 29.5 4 22.5v-13z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M10 16h4l2-4 2 8 2-4h2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </span>
+            <span class="app-brand__text">
+              <span class="app-brand__name">Herramientas Equipo</span>
+              <span class="app-brand__tag">Consola operativa</span>
+            </span>
+          </a>
+          <p class="app-subtitle">Herramientas del equipo de soporte: monitoreo, reportes, auditorías y operación diaria.</p>
         </div>
         <button
           type="button"
@@ -32,8 +49,8 @@
           data-sidebar-toggle
           aria-controls="app-sidebar-nav"
           aria-expanded="true"
-          aria-label="Ocultar menú"
-          title="Ocultar menú"
+          aria-label="Contraer menú"
+          title="Contraer menú"
         >
           <span aria-hidden="true"></span>
           <span class="sidebar-icon-toggle__label">Menú</span>
@@ -41,57 +58,33 @@
       </div>
 
       <nav class="app-sidebar__nav" id="app-sidebar-nav" aria-label="Navegación principal">
-        <a class="sidebar-link {% if endpoint == 'inicio' %}is-active{% endif %}"{% if endpoint == 'inicio' %} aria-current="page"{% endif %} href="{{ url_for('inicio') }}">
-          <span class="sidebar-link__eyebrow">Inicio</span>
+        <a class="sidebar-link {% if endpoint == 'inicio' %}is-active{% endif %}"{% if endpoint == 'inicio' %} aria-current="page"{% endif %} href="{{ url_for('inicio') }}" title="Panel principal">
+          {{ icono("inicio", "sidebar-link__icon") }}
           <strong>Panel principal</strong>
         </a>
-        <a class="sidebar-link {% if endpoint == 'usuarios_activos.index' %}is-active{% endif %}"{% if endpoint == 'usuarios_activos.index' %} aria-current="page"{% endif %} href="{{ url_for('usuarios_activos.index') }}">
-          <span class="sidebar-link__eyebrow">Monitoreo</span>
-          <strong>Usuarios activos</strong>
-        </a>
-        <a class="sidebar-link {% if endpoint == 'reporte_agentes.reporte_agentes' %}is-active{% endif %}"{% if endpoint == 'reporte_agentes.reporte_agentes' %} aria-current="page"{% endif %} href="{{ url_for('reporte_agentes.reporte_agentes') }}">
-          <span class="sidebar-link__eyebrow">Reporte</span>
-          <strong>Reporte de agentes</strong>
-        </a>
-        <a class="sidebar-link {% if endpoint.startswith('turnos_trabajo.') %}is-active{% endif %}"{% if endpoint.startswith('turnos_trabajo.') %} aria-current="page"{% endif %} href="{{ url_for('turnos_trabajo.turnos_trabajo') }}">
-          <span class="sidebar-link__eyebrow">Equipo</span>
-          <strong>Turnos de trabajo</strong>
-        </a>
-        <a class="sidebar-link {% if endpoint == 'comparar_csv.comparar_csv' %}is-active{% endif %}"{% if endpoint == 'comparar_csv.comparar_csv' %} aria-current="page"{% endif %} href="{{ url_for('comparar_csv.comparar_csv') }}">
-          <span class="sidebar-link__eyebrow">Análisis</span>
-          <strong>Comparar CSV</strong>
-        </a>
-        <a class="sidebar-link {% if endpoint == 'auditoria_csat.auditoria_csat' %}is-active{% endif %}"{% if endpoint == 'auditoria_csat.auditoria_csat' %} aria-current="page"{% endif %} href="{{ url_for('auditoria_csat.auditoria_csat') }}">
-          <span class="sidebar-link__eyebrow">Calidad</span>
-          <strong>Auditoría CSAT</strong>
-        </a>
-        <a class="sidebar-link {% if endpoint == 'informe_semanal_cs.informe_semanal_cs' %}is-active{% endif %}"{% if endpoint == 'informe_semanal_cs.informe_semanal_cs' %} aria-current="page"{% endif %} href="{{ url_for('informe_semanal_cs.informe_semanal_cs') }}">
-          <span class="sidebar-link__eyebrow">Informe</span>
-          <strong>Informe Semanal CS</strong>
-        </a>
-        <a class="sidebar-link {% if endpoint == 'auditoria_salientes.auditoria_salientes' %}is-active{% endif %}"{% if endpoint == 'auditoria_salientes.auditoria_salientes' %} aria-current="page"{% endif %} href="{{ url_for('auditoria_salientes.auditoria_salientes') }}">
-          <span class="sidebar-link__eyebrow">Cumplimiento</span>
-          <strong>Auditoría de salientes</strong>
-        </a>
-        <a class="sidebar-link {% if endpoint == 'usuarios_a_sheets.usuarios_a_sheets' %}is-active{% endif %}"{% if endpoint == 'usuarios_a_sheets.usuarios_a_sheets' %} aria-current="page"{% endif %} href="{{ url_for('usuarios_a_sheets.usuarios_a_sheets') }}">
-          <span class="sidebar-link__eyebrow">Exportación</span>
-          <strong>Usuarios a Sheets</strong>
-        </a>
-        <a class="sidebar-link {% if endpoint == 'break_admin.break_admin' %}is-active{% endif %}"{% if endpoint == 'break_admin.break_admin' %} aria-current="page"{% endif %} href="{{ url_for('break_admin.break_admin') }}">
-          <span class="sidebar-link__eyebrow">Administración</span>
-          <strong>Breaks reservables</strong>
-        </a>
+        {% for grupo in grupos_navegacion() %}
+          <p class="sidebar-group" id="nav-grupo-{{ loop.index }}">{{ grupo.nombre }}</p>
+          {% for item in grupo["items"] %}
+            {% set activo = herramienta_actual and herramienta_actual.endpoint == item.endpoint %}
+            <a class="sidebar-link {% if activo %}is-active{% endif %}"{% if activo %} aria-current="page"{% endif %} href="{{ url_for(item.endpoint) }}" title="{{ item.titulo }}">
+              {{ icono(item.icono, "sidebar-link__icon") }}
+              <strong>{{ item.titulo }}</strong>
+            </a>
+          {% endfor %}
+        {% endfor %}
       </nav>
 
       <div class="app-sidebar__footer">
-        <p class="small">Navegación estable, microcopy unificado y acceso rápido a las vistas principales.</p>
+        <p class="sidebar-note"><span class="status-dot" aria-hidden="true"></span>Aplicación pública: cualquiera con la URL puede usarla.</p>
       </div>
     </aside>
 
     <div class="app-content-shell">
       <header class="app-topbar">
         <div class="app-topbar__brand">
-          <p class="app-topbar__eyebrow">Admin compartido</p>
+          <p class="app-topbar__eyebrow">
+            <span>Consola</span>{% if herramienta_actual %}<span aria-hidden="true">/</span><span>{{ herramienta_actual.grupo }}</span>{% endif %}
+          </p>
           <p class="app-topbar__current">{% block page_name %}Herramientas{% endblock %}</p>
         </div>
 
@@ -103,12 +96,22 @@
               data-back-button
               data-fallback="{{ url_for('inicio') }}"
             >
-              Volver
+              {{ icono("volver") }}<span>Volver</span>
             </button>
           {% endif %}
-          <button type="button" class="btn btn-ghost" data-theme-toggle>Modo oscuro</button>
+          <button type="button" class="btn btn-ghost" data-theme-toggle>
+            {{ icono("tema") }}<span class="theme-toggle__label">Modo oscuro</span>
+          </button>
         </div>
       </header>
+
+      {% set almacenamiento = estado_almacenamiento_visible() %}
+      {% if almacenamiento %}
+        <div class="storage-banner storage-banner--{{ almacenamiento.mode }}" role="status">
+          {{ icono("alerta", "storage-banner__icon") }}
+          <p><strong>{{ almacenamiento.label }}:</strong> {{ almacenamiento.detail }}</p>
+        </div>
+      {% endif %}
 
       <main class="wrap app-main" id="contenido-principal" tabindex="-1">
         {% block content %}{% endblock %}
@@ -125,6 +128,18 @@
       </p>
     </div>
   </div>
+
+  <dialog class="confirm-dialog" id="confirm-dialog" aria-labelledby="confirm-dialog-title" aria-describedby="confirm-dialog-text">
+    <form method="dialog" class="confirm-dialog__body">
+      <p class="confirm-dialog__eyebrow">Confirmación</p>
+      <h2 id="confirm-dialog-title">¿Continuar con esta acción?</h2>
+      <p id="confirm-dialog-text"></p>
+      <div class="confirm-dialog__actions">
+        <button type="submit" value="cancelar" class="btn secondary" data-confirm-cancel>Cancelar</button>
+        <button type="submit" value="confirmar" class="btn danger" data-confirm-accept>Confirmar</button>
+      </div>
+    </form>
+  </dialog>
 
   {% block scripts %}{% endblock %}
 </body>

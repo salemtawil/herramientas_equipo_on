@@ -1,5 +1,6 @@
 import csv
 import json
+import logging
 import os
 import uuid
 from datetime import datetime
@@ -14,6 +15,7 @@ SUPABASE_STATE_ID = "main"
 SIN_TURNO_ID = "sin-turno"
 SIN_TURNO_LABEL = "Sin turno"
 _STORAGE_WARNING = ""
+logger = logging.getLogger(__name__)
 
 
 class TurnosTrabajoStorageError(Exception):
@@ -40,25 +42,69 @@ def usar_supabase():
     return bool(os.getenv("SUPABASE_URL") and os.getenv("SUPABASE_SERVICE_ROLE_KEY"))
 
 
+def en_entorno_serverless():
+    """True en Vercel, donde el disco local es temporal y propio de cada instancia."""
+    return bool(os.getenv("VERCEL") or os.getenv("VERCEL_ENV"))
+
+
 def obtener_estado_almacenamiento():
+    """Modo de almacenamiento para mostrar en la interfaz.
+
+    Nunca incluye URLs, claves ni el texto de excepciones: solo mensajes propios.
+    Modos: ``supabase`` (compartido), ``fallback`` (Supabase falló y se usa un
+    archivo temporal), ``temporal`` (servidor sin Supabase: archivo efímero) y
+    ``local`` (archivo del equipo en desarrollo).
+    """
     if usar_supabase():
         if _STORAGE_WARNING:
             return {
                 "mode": "fallback",
-                "label": "Temporal",
-                "detail": _STORAGE_WARNING,
+                "label": "Almacenamiento temporal",
+                "detail": "Supabase no respondió. Los cambios de turnos se están guardando en un "
+                "archivo temporal de este servidor y pueden perderse.",
+                "persistente": False,
             }
         return {
             "mode": "supabase",
             "label": "Compartido",
             "detail": "Los cambios se guardan en Supabase y son visibles para otros admins.",
+            "persistente": True,
+        }
+
+    if en_entorno_serverless():
+        return {
+            "mode": "temporal",
+            "label": "Almacenamiento temporal",
+            "detail": "Supabase no está configurado. Los cambios de turnos se guardan en un archivo "
+            "temporal de esta instancia y se perderán cuando se recicle.",
+            "persistente": False,
         }
 
     return {
         "mode": "local",
         "label": "Local",
-        "detail": "Los cambios se guardan solo en este entorno.",
+        "detail": "Los cambios se guardan en el archivo local de este equipo.",
+        "persistente": True,
     }
+
+
+def registrar_modo_almacenamiento():
+    """Deja en el log el modo activo, sin rutas, URLs ni claves."""
+    estado = obtener_estado_almacenamiento()
+    nivel = logging.INFO if estado["persistente"] else logging.WARNING
+    logger.log(nivel, "Almacenamiento de turnos: modo=%s persistente=%s", estado["mode"], estado["persistente"])
+    return estado
+
+
+def _registrar_fallo_supabase(exc, operacion):
+    global _STORAGE_WARNING
+    _STORAGE_WARNING = str(exc)
+    causa = type(exc.__cause__).__name__ if exc.__cause__ else type(exc).__name__
+    logger.warning(
+        "Almacenamiento de turnos: Supabase falló al %s (%s); se usa un archivo temporal.",
+        operacion,
+        causa,
+    )
 
 
 def _crear_supabase_client():
@@ -206,7 +252,7 @@ def cargar_estado():
             _STORAGE_WARNING = ""
             return estado
         except TurnosTrabajoStorageError as exc:
-            _STORAGE_WARNING = str(exc)
+            _registrar_fallo_supabase(exc, "leer")
 
     return cargar_estado_archivo()
 
@@ -231,7 +277,7 @@ def guardar_estado(estado):
             _STORAGE_WARNING = ""
             return
         except TurnosTrabajoStorageError as exc:
-            _STORAGE_WARNING = str(exc)
+            _registrar_fallo_supabase(exc, "guardar")
 
     guardar_estado_archivo(estado)
 

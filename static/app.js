@@ -16,7 +16,14 @@
   function applyTheme(theme) {
     document.documentElement.setAttribute("data-theme", theme);
     document.querySelectorAll("[data-theme-toggle]").forEach((button) => {
-      button.textContent = theme === "dark" ? "Modo claro" : "Modo oscuro";
+      const label = theme === "dark" ? "Modo claro" : "Modo oscuro";
+      const text = button.querySelector(".theme-toggle__label");
+      if (text) {
+        text.textContent = label;
+      } else {
+        button.textContent = label;
+      }
+      button.setAttribute("aria-pressed", theme === "dark" ? "true" : "false");
     });
   }
 
@@ -71,7 +78,7 @@
     document.documentElement.classList.toggle("has-sidebar-collapsed", collapsed);
 
     if (!isMobileNav()) {
-      setToggleLabels(!collapsed, "Mostrar menú", "Ocultar menú", "Menú", "Menú");
+      setToggleLabels(!collapsed, "Expandir menú", "Contraer menú", "Menú", "Menú");
     }
   }
 
@@ -215,20 +222,146 @@
     overlay.setAttribute("aria-hidden", "true");
   }
 
+  // Los controles se deshabilitan en el siguiente tick: el navegador ya construyó
+  // los datos del envío (incluido name/value del botón pulsado), así que no se pierden.
   function disableFormControls(form, submitter) {
     window.setTimeout(() => {
       const elements = form.querySelectorAll("button, input, select, textarea");
       elements.forEach((element) => {
         if (submitter && element === submitter) return;
-        element.disabled = true;
+        if (!element.disabled) {
+          element.disabled = true;
+          element.dataset.guardDisabled = "true";
+        }
       });
     }, 0);
+  }
+
+  function isDownloadSubmit(form, submitter) {
+    if (form.hasAttribute("data-download")) return true;
+    if (!submitter) return false;
+    if (submitter.hasAttribute("data-download")) return true;
+    return String(submitter.value || "").startsWith("descargar");
+  }
+
+  function releaseForm(form) {
+    delete form.dataset.submitting;
+    form.removeAttribute("aria-busy");
+    form.querySelectorAll("[data-guard-disabled]").forEach((element) => {
+      element.disabled = false;
+      delete element.dataset.guardDisabled;
+    });
+    form.querySelectorAll("[data-original-label]").forEach((element) => {
+      element.textContent = element.dataset.originalLabel;
+      delete element.dataset.originalLabel;
+    });
+  }
+
+  // Evita envíos dobles en formularios POST. Las descargas no navegan, así que el
+  // formulario se libera a los pocos segundos para permitir otra descarga.
+  function initDoubleSubmitGuard() {
+    document.addEventListener("submit", (event) => {
+      const form = event.target;
+      if (!(form instanceof HTMLFormElement) || event.defaultPrevented) return;
+      if ((form.getAttribute("method") || "get").toLowerCase() !== "post") return;
+      if (form.hasAttribute("data-allow-resubmit")) return;
+
+      if (form.dataset.submitting === "true") {
+        event.preventDefault();
+        return;
+      }
+
+      const submitter = event.submitter || null;
+      form.dataset.submitting = "true";
+      form.setAttribute("aria-busy", "true");
+      window.setTimeout(() => {
+        if (submitter && !submitter.disabled) {
+          submitter.disabled = true;
+          submitter.dataset.guardDisabled = "true";
+        }
+      }, 0);
+
+      if (isDownloadSubmit(form, submitter)) {
+        window.setTimeout(() => releaseForm(form), 2500);
+      }
+    });
+
+    // Al volver con el botón «Atrás» el navegador puede restaurar la página congelada.
+    window.addEventListener("pageshow", (event) => {
+      if (!event.persisted) return;
+      document.querySelectorAll("form[data-submitting]").forEach(releaseForm);
+      hideProcessingOverlay();
+    });
+  }
+
+  // Confirmación explícita para acciones irreversibles (data-confirm en el formulario
+  // o en el botón). Sin JavaScript el formulario se envía sin este paso.
+  function initConfirmations() {
+    const dialog = document.getElementById("confirm-dialog");
+    let pending = null;
+
+    function ask(form, submitter, message, acceptLabel) {
+      if (!dialog || typeof dialog.showModal !== "function") {
+        return window.confirm(message);
+      }
+      pending = { form, submitter, opener: submitter || document.activeElement };
+      dialog.querySelector("#confirm-dialog-text").textContent = message;
+      const accept = dialog.querySelector("[data-confirm-accept]");
+      accept.textContent = acceptLabel || "Confirmar";
+      dialog.returnValue = "";
+      dialog.showModal();
+      dialog.querySelector("[data-confirm-cancel]").focus();
+      return null;
+    }
+
+    if (dialog) {
+      dialog.addEventListener("close", () => {
+        const current = pending;
+        pending = null;
+        if (!current) return;
+        if (dialog.returnValue === "confirmar") {
+          current.form.dataset.confirmed = "true";
+          if (typeof current.form.requestSubmit === "function") {
+            current.form.requestSubmit(current.submitter || undefined);
+          } else {
+            current.form.submit();
+          }
+        } else if (current.opener && typeof current.opener.focus === "function") {
+          current.opener.focus();
+        }
+      });
+    }
+
+    document.addEventListener(
+      "submit",
+      (event) => {
+        const form = event.target;
+        if (!(form instanceof HTMLFormElement)) return;
+        const submitter = event.submitter || null;
+        const source = submitter && submitter.hasAttribute("data-confirm") ? submitter : form;
+        const message = source.getAttribute("data-confirm");
+        if (!message) return;
+
+        if (form.dataset.confirmed === "true") {
+          delete form.dataset.confirmed;
+          return;
+        }
+
+        const answer = ask(form, submitter, message, source.getAttribute("data-confirm-accept"));
+        if (answer === true) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      },
+      true
+    );
   }
 
   function initProcessingForms() {
     document.querySelectorAll("form[data-processing-message]").forEach((form) => {
       form.addEventListener("submit", (event) => {
+        if (event.defaultPrevented) return;
         const submitter = event.submitter || null;
+        if (isDownloadSubmit(form, submitter)) return;
         const buttonMessage = submitter ? submitter.getAttribute("data-processing-message") : "";
         const formMessage = form.getAttribute("data-processing-message") || "";
         const message = buttonMessage || formMessage;
@@ -236,6 +369,7 @@
         if (!message) return;
 
         if (submitter && submitter.dataset.loadingLabel) {
+          submitter.dataset.originalLabel = submitter.textContent;
           submitter.textContent = submitter.dataset.loadingLabel;
         }
 
@@ -307,7 +441,9 @@
     initSidebarToggle();
     initBackButtons();
     initSortableTables();
+    initConfirmations();
     initCompressedUploadForms();
     initProcessingForms();
+    initDoubleSubmitGuard();
   });
 })();
