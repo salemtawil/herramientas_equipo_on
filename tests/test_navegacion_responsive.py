@@ -29,7 +29,7 @@ def test_script_de_cabecera_marca_js_antes_de_cargar_estilos():
     html = app.test_client().get("/").get_data(as_text=True)
     head = html[: html.index("</head>")]
     assert head.index('classList.add("js")') < head.index("styles.css")
-    assert "styles.css?v=22" in head
+    assert "styles.css?v=23" in head
 
 
 def test_todas_las_rutas_principales_mantienen_la_navegacion():

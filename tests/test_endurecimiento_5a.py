@@ -60,7 +60,7 @@ def test_estatico_con_version_vigente_tiene_cache_larga(cliente):
 
 
 def test_estatico_con_version_antigua_o_sin_version_revalida(cliente):
-    for url in ("/static/styles.css?v=21", "/static/styles.css", "/static/system-logos/compinche_48.svg"):
+    for url in ("/static/styles.css?v=21", "/static/styles.css?v=22", "/static/styles.css", "/static/system-logos/compinche_48.svg"):
         respuesta = cliente.get(url)
         assert respuesta.headers["Cache-Control"] == "no-cache", url
         respuesta.close()
@@ -70,8 +70,9 @@ def test_html_referencia_las_versiones_vigentes(cliente):
     html = cliente.get("/").get_data(as_text=True)
     assert f"styles.css?v={ASSET_VERSIONS['styles.css']}" in html
     assert f"app.js?v={ASSET_VERSIONS['app.js']}" in html
-    assert ASSET_VERSIONS["styles.css"] == "22"
+    assert ASSET_VERSIONS["styles.css"] == "23"
     assert "styles.css?v=21" not in html
+    assert "styles.css?v=22" not in html
 
 
 def test_exportacion_no_se_cachea(cliente):
