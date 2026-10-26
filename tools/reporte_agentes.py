@@ -1,5 +1,6 @@
 import json
 import logging
+import math
 import pandas as pd
 from flask import Blueprint, render_template, request
 
@@ -235,6 +236,47 @@ def construir_ranking_agentes(df_final):
     return ranking, top_5_mejores, top_5_peores
 
 
+def _valor_exportable(valor):
+    """Convierte valores de pandas/numpy a tipos JSON simples."""
+    if valor is None:
+        return ""
+    if hasattr(valor, "item"):
+        valor = valor.item()
+    if isinstance(valor, float):
+        if math.isnan(valor):
+            return ""
+        return int(valor) if valor.is_integer() else round(valor, 2)
+    return valor
+
+
+def _tabla_exportable(df, columnas, total):
+    return {
+        "columnas": columnas,
+        "filas": [[_valor_exportable(v) for v in fila] for fila in df[columnas].itertuples(index=False)],
+        "total": [_valor_exportable(total.get(c, "")) for c in columnas] if total else [],
+    }
+
+
+def construir_datos_exportacion(df_final, resumen, df_resumen_turnos, totales_resumen_turnos, turnos_config):
+    """Datos completos (sin el recorte de la vista previa) para descargar el reporte."""
+    columnas_resumen = list(df_resumen_turnos.columns)
+    columnas_turno = [c for c in COLUMNAS_VISIBLES if c != "Turno"]
+    turnos = []
+    for turno in list(turnos_config.keys()) + ["Sin asignar"]:
+        bloque = df_final[df_final["Turno"] == turno][columnas_turno]
+        if bloque.empty:
+            continue
+        turnos.append({
+            "nombre": turno,
+            **_tabla_exportable(bloque, columnas_turno, construir_fila_totales(bloque, columnas_turno)),
+        })
+    return {
+        "resumen": [[nombre, _valor_exportable(valor)] for nombre, valor in resumen.items()],
+        "resumen_turnos": _tabla_exportable(df_resumen_turnos, columnas_resumen, totales_resumen_turnos),
+        "turnos": turnos,
+    }
+
+
 def construir_contexto_reporte(df, turnos_config):
     registrar_agentes_desde_dataframe(df)
     turnos_config = cargar_turnos_fijos()
@@ -313,7 +355,12 @@ def construir_contexto_reporte(df, turnos_config):
 
     agentes_sin_asignar = [ag for ag in lista_agentes if ag not in agentes_configurados]
 
+    datos_exportacion = construir_datos_exportacion(
+        df_final, resumen, df_resumen_turnos, totales_resumen_turnos, turnos_config
+    )
+
     return {
+        "datos_exportacion": datos_exportacion,
         "resumen": resumen,
         "tabla_general": tabla_general,
         "secciones_turnos": secciones_turnos,
@@ -352,6 +399,7 @@ def reporte_agentes():
     ranking_completo_json = "[]"
     turnos_ranking_disponibles = []
     metadata_fuente = None
+    datos_exportacion = None
     fecha_chatwoot = request.form.get("fecha_chatwoot", "")
     fecha_fin_chatwoot = request.form.get("fecha_fin_chatwoot", "")
     hora_inicio_chatwoot = request.form.get("hora_inicio_chatwoot", "")
@@ -405,6 +453,18 @@ def reporte_agentes():
             ranking_completo = contexto["ranking_completo"]
             ranking_completo_json = contexto["ranking_completo_json"]
             turnos_ranking_disponibles = contexto["turnos_ranking_disponibles"]
+            datos_exportacion = contexto["datos_exportacion"]
+
+            if accion == "buscar_chatwoot":
+                datos_exportacion["periodo"] = (
+                    f"{metadata_fuente['inicio_local']} - {metadata_fuente['fin_local']}"
+                )
+                datos_exportacion["fuente"] = f"Chatwoot ({metadata_fuente.get('timezone', '')})".replace(" ()", "")
+                datos_exportacion["fecha_archivo"] = metadata_fuente.get("fecha_fin") or metadata_fuente.get("fecha") or ""
+            else:
+                datos_exportacion["periodo"] = ""
+                datos_exportacion["fuente"] = f"CSV {archivo.filename}"
+                datos_exportacion["fecha_archivo"] = ""
 
             if accion == "buscar_chatwoot":
                 mensaje = (
@@ -439,6 +499,7 @@ def reporte_agentes():
         ranking_completo_json=ranking_completo_json,
         turnos_ranking_disponibles=turnos_ranking_disponibles,
         metadata_fuente=metadata_fuente,
+        datos_exportacion=datos_exportacion,
         fecha_chatwoot=fecha_chatwoot,
         fecha_fin_chatwoot=fecha_fin_chatwoot,
         hora_inicio_chatwoot=hora_inicio_chatwoot,

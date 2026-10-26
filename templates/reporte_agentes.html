@@ -173,6 +173,25 @@
     </div>
   </details>
 
+  {% if datos_exportacion %}
+  <section class="card reporte-descarga" aria-labelledby="reporte-descarga-titulo">
+    <div class="page-section-title">
+      <div>
+        <h2 id="reporte-descarga-titulo">Descargar reporte</h2>
+        <p class="small">Un solo archivo con el resumen general, el resumen por turno y el detalle de cada turno{% if datos_exportacion.periodo %} ({{ datos_exportacion.periodo }}){% endif %}.</p>
+      </div>
+      <span class="hero-badge hero-badge-soft">{{ datos_exportacion.turnos|length }} turnos</span>
+    </div>
+    <div class="acciones-barra">
+      <button type="button" class="btn" data-exportar-reporte="docx">Word (.docx)</button>
+      <button type="button" class="btn secondary" data-exportar-reporte="pdf">PDF</button>
+      <button type="button" class="btn secondary" data-exportar-reporte="txt">Texto (.txt)</button>
+      <p class="small action-feedback" id="reporte-descarga-estado" aria-live="polite"></p>
+    </div>
+    <script type="application/json" id="reporte-datos-exportacion" data-estilos-impresion="{{ url_for('static', filename='reporte_impresion.css', v=asset_version('reporte_impresion.css')) }}">{{ datos_exportacion|tojson }}</script>
+  </section>
+  {% endif %}
+
   {% if resumen %}
   <details class="card seccion-desplegable">
     <summary class="titulo-desplegable">
@@ -411,6 +430,9 @@
 {% endblock %}
 
 {% block scripts %}
+{% if datos_exportacion %}
+<script src="{{ url_for('static', filename='reporte_exportar.js', v=asset_version('reporte_exportar.js')) }}" defer></script>
+{% endif %}
 <script>
 document.addEventListener("DOMContentLoaded", function () {
   const chatwootForm = document.querySelector("[data-chatwoot-report-form]");

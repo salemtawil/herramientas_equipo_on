@@ -1,0 +1,71 @@
+/* Hoja para imprimir o guardar como PDF el reporte de agentes. */
+@page {
+  size: letter;
+  margin: 16mm 14mm;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  color: #1a2433;
+  font: 10pt/1.4 "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+h1 {
+  margin: 0 0 4pt;
+  color: #07111f;
+  font-size: 20pt;
+}
+
+.meta {
+  margin: 0 0 12pt;
+  color: #4f5e6e;
+}
+
+h2 {
+  margin: 16pt 0 6pt;
+  color: #0a6d5f;
+  font-size: 13pt;
+  break-after: avoid;
+}
+
+table {
+  /* Un poco menos del 100 % para que el borde derecho no quede recortado. */
+  width: calc(100% - 1pt);
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+th,
+td {
+  padding: 3pt 6pt;
+  border: 0.75pt solid #c2ccd5;
+  text-align: left;
+}
+
+th {
+  background: #dce9e6;
+  color: #07111f;
+}
+
+thead {
+  display: table-header-group;
+}
+
+tr {
+  break-inside: avoid;
+}
+
+tfoot td {
+  background: #f1f4f7;
+  font-weight: 700;
+}
+
+.num {
+  text-align: right;
+}
