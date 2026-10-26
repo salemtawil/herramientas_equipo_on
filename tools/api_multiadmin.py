@@ -536,7 +536,7 @@ def _mensaje_error_multiadmin_directo(error):
     if "refresh token has expired" in mensaje_normalizado:
         return (
             "El refresh token de Multiadmin expiró. Genera tokens nuevos con "
-            "tools/generar_env_multiadmin_tokens.py, actualiza Vercel y haz redeploy."
+            "tools/renovar_tokens_multiadmin.bat, actualiza Vercel y haz redeploy."
         )
     if "403" in mensaje or "401" in mensaje:
         return (

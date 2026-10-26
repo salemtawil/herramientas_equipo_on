@@ -1,31 +1,161 @@
+"""Renueva los tokens de Multiadmin (Cognito) para la app y para Vercel.
+
+Uso normal: doble clic en ``tools/renovar_tokens_multiadmin.bat``.
+
+Qué hace, en orden:
+1. Intenta renovar con el refresh token guardado (no pide usuario, contraseña ni SMS).
+2. Si el refresh token ya no sirve, inicia sesión con el usuario y la contraseña
+   guardados en ``.env.multiadmin.local`` (archivo local, fuera de Git). La primera
+   vez los pide y ofrece guardarlos. Si Cognito exige un código SMS, lo pide.
+3. Escribe ``.env.vercel.multiadmin.tokens``, actualiza los tokens en ``.env`` y
+   copia al portapapeles las variables que hay que pegar en Vercel.
+
+Solo usa la biblioteca estándar de Python: no necesita boto3, requests ni
+credenciales de AWS. Nunca muestra tokens ni contraseñas en pantalla.
+"""
+
+import argparse
 import base64
 from datetime import datetime
 from datetime import timezone
-import getpass
 import hashlib
 import hmac
 import json
 import os
+from pathlib import Path
 import secrets
-
-import boto3
-from botocore import UNSIGNED
-from botocore.config import Config
-from botocore.exceptions import ClientError
-import requests
+import subprocess
+import sys
+import urllib.error
+import urllib.request
 
 
-API_BASE_URL = os.getenv(
-    "MULTIADMIN_API_BASE_URL",
-    "https://7b9q0ttttb.execute-api.us-east-1.amazonaws.com",
+RAIZ = Path(__file__).resolve().parent.parent
+ARCHIVO_CREDENCIALES = RAIZ / ".env.multiadmin.local"
+ARCHIVO_TOKENS = RAIZ / ".env.vercel.multiadmin.tokens"
+ARCHIVO_ENV = RAIZ / ".env"
+
+DEFAULTS = {
+    "MULTIADMIN_API_BASE_URL": "https://7b9q0ttttb.execute-api.us-east-1.amazonaws.com",
+    "MULTIADMIN_CLIENT_ID": "24nnt1psojm5aqotu1ckj9jk9g",
+    "MULTIADMIN_USER_POOL_ID": "us-east-1_ViIazRdoA",
+    "MULTIADMIN_USERS_SINCE_EXPIRATION": "1746057600000",
+    "AWS_DEFAULT_REGION": "us-east-1",
+}
+
+# Variables que hay que copiar a Vercel (Production) después de renovar.
+VARIABLES_VERCEL = (
+    "MULTIADMIN_ID_TOKEN",
+    "MULTIADMIN_REFRESH_TOKEN",
 )
-CLIENT_ID = os.getenv("MULTIADMIN_CLIENT_ID", "24nnt1psojm5aqotu1ckj9jk9g")
-CLIENT_SECRET = os.getenv("MULTIADMIN_CLIENT_SECRET", "")
-USER_POOL_ID = os.getenv("MULTIADMIN_USER_POOL_ID", "us-east-1_ViIazRdoA")
-REGION = os.getenv("AWS_DEFAULT_REGION", "us-east-1")
-SINCE_EXPIRATION = os.getenv("MULTIADMIN_USERS_SINCE_EXPIRATION", "1746057600000")
-OUTPUT_FILE = ".env.vercel.multiadmin.tokens"
-POOL_NAME = USER_POOL_ID.split("_", 1)[1] if "_" in USER_POOL_ID else USER_POOL_ID
+
+
+class ErrorCognito(Exception):
+    def __init__(self, codigo, mensaje):
+        super().__init__(f"{codigo}: {mensaje}")
+        self.codigo = codigo
+        self.mensaje = mensaje
+
+
+# ---------------------------------------------------------------------------
+# Archivos .env
+# ---------------------------------------------------------------------------
+
+
+def leer_env(ruta):
+    valores = {}
+    if not ruta.exists():
+        return valores
+    for linea in ruta.read_text(encoding="utf-8-sig").splitlines():
+        linea = linea.strip()
+        if not linea or linea.startswith("#") or "=" not in linea:
+            continue
+        clave, valor = linea.split("=", 1)
+        valor = valor.strip().strip('"').strip("'")
+        if valor:
+            valores[clave.strip()] = valor
+    return valores
+
+
+def actualizar_env(ruta, nuevos):
+    """Reemplaza o añade variables conservando el resto del archivo y sus saltos de línea."""
+    if ruta.exists():
+        crudo = ruta.read_bytes().decode("utf-8-sig")
+        salto = "\r\n" if "\r\n" in crudo else "\n"
+        lineas = crudo.splitlines()
+    else:
+        salto, lineas = "\n", []
+    pendientes = dict(nuevos)
+    for i, linea in enumerate(lineas):
+        clave = linea.split("=", 1)[0].strip()
+        if "=" in linea and not linea.lstrip().startswith("#") and clave in pendientes:
+            lineas[i] = f"{clave}={pendientes.pop(clave)}"
+    lineas.extend(f"{clave}={valor}" for clave, valor in pendientes.items())
+    ruta.write_bytes((salto.join(lineas) + salto).encode("utf-8"))
+
+
+def configuracion():
+    """Combina valores por defecto, .env, archivo de tokens, credenciales locales y entorno."""
+    config = dict(DEFAULTS)
+    for ruta in (ARCHIVO_ENV, ARCHIVO_TOKENS, ARCHIVO_CREDENCIALES):
+        config.update(leer_env(ruta))
+    for clave in list(DEFAULTS) + ["MULTIADMIN_USERNAME", "MULTIADMIN_PASSWORD",
+                                   "MULTIADMIN_CLIENT_SECRET", "MULTIADMIN_REFRESH_TOKEN"]:
+        if os.getenv(clave):
+            config[clave] = os.getenv(clave).strip()
+    return config
+
+
+# ---------------------------------------------------------------------------
+# Cognito por HTTPS (sin boto3 ni credenciales de AWS)
+# ---------------------------------------------------------------------------
+
+
+def cognito(config, accion, cuerpo):
+    region = config["AWS_DEFAULT_REGION"]
+    peticion = urllib.request.Request(
+        f"https://cognito-idp.{region}.amazonaws.com/",
+        data=json.dumps(cuerpo).encode("utf-8"),
+        headers={
+            "Content-Type": "application/x-amz-json-1.1",
+            "X-Amz-Target": f"AWSCognitoIdentityProviderService.{accion}",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(peticion, timeout=30) as respuesta:
+            return json.loads(respuesta.read().decode("utf-8"))
+    except urllib.error.HTTPError as error:
+        try:
+            datos = json.loads(error.read().decode("utf-8"))
+        except ValueError:
+            datos = {}
+        codigo = str(datos.get("__type", f"HTTP {error.code}")).split("#")[-1]
+        raise ErrorCognito(codigo, datos.get("message") or datos.get("Message") or "") from None
+    except urllib.error.URLError as error:
+        raise ErrorCognito("SinConexion", str(error.reason)) from None
+
+
+def secret_hash(config, usuario):
+    secreto = config.get("MULTIADMIN_CLIENT_SECRET", "")
+    if not secreto:
+        return None
+    digest = hmac.new(
+        secreto.encode("utf-8"),
+        f"{usuario}{config['MULTIADMIN_CLIENT_ID']}".encode("utf-8"),
+        hashlib.sha256,
+    ).digest()
+    return base64.b64encode(digest).decode("utf-8")
+
+
+def con_secret_hash(config, parametros, usuario):
+    valor = secret_hash(config, usuario)
+    if valor:
+        parametros["SECRET_HASH"] = valor
+    return parametros
+
+
+# --- SRP (cuando el cliente de Cognito no admite contraseña directa) -------
 
 N_HEX = (
     "FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD1"
@@ -49,326 +179,333 @@ N = int(N_HEX, 16)
 G = 2
 
 
-def secret_hash(username):
-    if not CLIENT_SECRET:
-        return None
-    digest = hmac.new(
-        CLIENT_SECRET.encode("utf-8"),
-        f"{username}{CLIENT_ID}".encode("utf-8"),
-        hashlib.sha256,
-    ).digest()
-    return base64.b64encode(digest).decode("utf-8")
+def _hex_hash(valor_hex):
+    return hashlib.sha256(bytearray.fromhex(valor_hex)).hexdigest()
 
 
-def agregar_secret_hash(params, username):
-    hash_value = secret_hash(username)
-    if hash_value:
-        params["SECRET_HASH"] = hash_value
-    return params
+def _pad_hex(valor):
+    if isinstance(valor, int):
+        valor = f"{valor:x}"
+    if len(valor) % 2 == 1:
+        valor = f"0{valor}"
+    if valor[0] in "89ABCDEFabcdef":
+        valor = f"00{valor}"
+    return valor
 
 
-def auth_parameters(username, password):
-    return agregar_secret_hash(
-        {
-            "USERNAME": username,
-            "PASSWORD": password,
-        },
-        username,
-    )
-
-
-def hex_hash(hex_value):
-    return hashlib.sha256(bytearray.fromhex(hex_value)).hexdigest()
-
-
-def hex_to_long(hex_value):
-    return int(hex_value, 16)
-
-
-def long_to_hex(value):
-    return f"{value:x}"
-
-
-def pad_hex(value):
-    if isinstance(value, int):
-        value = long_to_hex(value)
-    if len(value) % 2 == 1:
-        value = f"0{value}"
-    if "89ABCDEFabcdef".find(value[0]) != -1:
-        value = f"00{value}"
-    return value
-
-
-def hash_sha256(value):
-    if isinstance(value, str):
-        value = value.encode("utf-8")
-    return hashlib.sha256(value).hexdigest()
-
-
-def compute_hkdf(ikm, salt):
+def _hkdf(ikm, salt):
     prk = hmac.new(salt, ikm, hashlib.sha256).digest()
-    info_bits = bytearray("Caldera Derived Key", "utf-8") + bytearray(chr(1), "utf-8")
-    return hmac.new(prk, info_bits, hashlib.sha256).digest()[:16]
+    info = bytearray("Caldera Derived Key", "utf-8") + bytearray(chr(1), "utf-8")
+    return hmac.new(prk, info, hashlib.sha256).digest()[:16]
 
 
-def cognito_timestamp():
-    now = datetime.now(timezone.utc)
-    weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-    months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-    return (
-        f"{weekdays[now.weekday()]} {months[now.month - 1]} {now.day} "
-        f"{now:%H:%M:%S} UTC {now.year}"
-    )
+def _marca_tiempo_cognito():
+    ahora = datetime.now(timezone.utc)
+    dias = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    meses = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    return f"{dias[ahora.weekday()]} {meses[ahora.month - 1]} {ahora.day} {ahora:%H:%M:%S} UTC {ahora.year}"
 
 
-class CognitoSrp:
-    def __init__(self, username, password):
-        self.username = username
+class Srp:
+    def __init__(self, config, usuario, password):
+        pool = config["MULTIADMIN_USER_POOL_ID"]
+        self.pool = pool.split("_", 1)[1] if "_" in pool else pool
+        self.usuario = usuario
         self.password = password
         self.a = secrets.randbits(1024) % N
         self.A = pow(G, self.a, N)
-        self.k = hex_to_long(hex_hash(pad_hex(N) + pad_hex(G)))
+        self.k = int(_hex_hash(_pad_hex(N) + _pad_hex(G)), 16)
 
-    def get_auth_params(self):
-        return agregar_secret_hash(
-            {
-                "USERNAME": self.username,
-                "SRP_A": long_to_hex(self.A),
-            },
-            self.username,
-        )
+    def parametros_inicio(self, config):
+        return con_secret_hash(config, {"USERNAME": self.usuario, "SRP_A": f"{self.A:x}"}, self.usuario)
 
-    def get_password_verifier_params(self, challenge):
-        username_for_srp = challenge["USER_ID_FOR_SRP"]
-        salt_hex = challenge["SALT"]
-        srp_b_hex = challenge["SRP_B"]
-        secret_block = base64.b64decode(challenge["SECRET_BLOCK"])
-
-        B = hex_to_long(srp_b_hex)
+    def respuesta(self, config, desafio):
+        usuario_srp = desafio["USER_ID_FOR_SRP"]
+        B = int(desafio["SRP_B"], 16)
         if B % N == 0:
-            raise RuntimeError("Respuesta SRP invalida: SRP_B modulo N es cero.")
-
-        u = hex_to_long(hex_hash(pad_hex(self.A) + pad_hex(B)))
+            raise RuntimeError("Respuesta SRP inválida de Cognito.")
+        u = int(_hex_hash(_pad_hex(self.A) + _pad_hex(B)), 16)
         if u == 0:
-            raise RuntimeError("Respuesta SRP invalida: U es cero.")
-
-        username_password = f"{POOL_NAME}{username_for_srp}:{self.password}"
-        username_password_hash = hash_sha256(username_password)
-        x = hex_to_long(hex_hash(pad_hex(salt_hex) + username_password_hash))
-        g_mod_pow_xn = pow(G, x, N)
-        int_value2 = (B - self.k * g_mod_pow_xn) % N
-        s_value = pow(int_value2, self.a + u * x, N)
-        hkdf = compute_hkdf(
-            bytearray.fromhex(pad_hex(s_value)),
-            bytearray.fromhex(pad_hex(u)),
-        )
-
-        timestamp = cognito_timestamp()
-        message = bytearray(POOL_NAME, "utf-8")
-        message += bytearray(username_for_srp, "utf-8")
-        message += bytearray(secret_block)
-        message += bytearray(timestamp, "utf-8")
-        signature = base64.b64encode(
-            hmac.new(hkdf, message, hashlib.sha256).digest()
-        ).decode("utf-8")
-
-        return agregar_secret_hash(
-            {
-                "USERNAME": username_for_srp,
-                "PASSWORD_CLAIM_SECRET_BLOCK": challenge["SECRET_BLOCK"],
-                "TIMESTAMP": timestamp,
-                "PASSWORD_CLAIM_SIGNATURE": signature,
-            },
-            username_for_srp,
-        )
+            raise RuntimeError("Respuesta SRP inválida de Cognito.")
+        x = int(_hex_hash(_pad_hex(desafio["SALT"]) + hashlib.sha256(
+            f"{self.pool}{usuario_srp}:{self.password}".encode("utf-8")).hexdigest()), 16)
+        s = pow((B - self.k * pow(G, x, N)) % N, self.a + u * x, N)
+        clave = _hkdf(bytearray.fromhex(_pad_hex(s)), bytearray.fromhex(_pad_hex(u)))
+        marca = _marca_tiempo_cognito()
+        mensaje = (bytearray(self.pool, "utf-8") + bytearray(usuario_srp, "utf-8")
+                   + bytearray(base64.b64decode(desafio["SECRET_BLOCK"])) + bytearray(marca, "utf-8"))
+        firma = base64.b64encode(hmac.new(clave, mensaje, hashlib.sha256).digest()).decode("utf-8")
+        return con_secret_hash(config, {
+            "USERNAME": usuario_srp,
+            "PASSWORD_CLAIM_SECRET_BLOCK": desafio["SECRET_BLOCK"],
+            "TIMESTAMP": marca,
+            "PASSWORD_CLAIM_SIGNATURE": firma,
+        }, usuario_srp)
 
 
-def challenge_parameters(username, response):
-    challenge_name = response.get("ChallengeName")
-    cognito_username = response.get("ChallengeParameters", {}).get(
-        "USER_ID_FOR_SRP",
-        username,
-    )
-
-    params = {"USERNAME": cognito_username}
-    if challenge_name == "SMS_MFA":
-        params["SMS_MFA_CODE"] = input("Codigo SMS Multiadmin: ").strip()
-    elif challenge_name == "SOFTWARE_TOKEN_MFA":
-        params["SOFTWARE_TOKEN_MFA_CODE"] = input("Codigo MFA Multiadmin: ").strip()
-    elif challenge_name == "CUSTOM_CHALLENGE":
-        params["ANSWER"] = input("Codigo de verificacion Multiadmin: ").strip()
-    else:
-        raise RuntimeError(f"Desafio de login no soportado: {challenge_name}")
-
-    return agregar_secret_hash(params, cognito_username)
+# ---------------------------------------------------------------------------
+# Flujos de autenticación
+# ---------------------------------------------------------------------------
 
 
-def decode_payload(token):
-    payload = token.split(".")[1]
-    payload += "=" * (-len(payload) % 4)
-    return json.loads(base64.urlsafe_b64decode(payload.encode("utf-8")).decode("utf-8"))
+def renovar_con_refresh(config):
+    refresh = config.get("MULTIADMIN_REFRESH_TOKEN", "")
+    if not refresh:
+        return None
+    parametros = {"REFRESH_TOKEN": refresh}
+    usuario = config.get("MULTIADMIN_USERNAME", "")
+    if usuario:
+        parametros["USERNAME"] = usuario
+        con_secret_hash(config, parametros, usuario)
+    respuesta = cognito(config, "InitiateAuth", {
+        "ClientId": config["MULTIADMIN_CLIENT_ID"],
+        "AuthFlow": "REFRESH_TOKEN_AUTH",
+        "AuthParameters": parametros,
+    })
+    resultado = respuesta["AuthenticationResult"]
+    # Cognito no devuelve un refresh token nuevo al renovar: se conserva el actual.
+    resultado.setdefault("RefreshToken", refresh)
+    return resultado
 
 
-def expires_at(token):
-    payload = decode_payload(token)
-    exp = payload.get("exp")
-    if not exp:
-        return "desconocido"
-    return datetime.fromtimestamp(exp, tz=timezone.utc).isoformat()
+def pedir_codigo(nombre_desafio):
+    textos = {
+        "SMS_MFA": "Código que llegó por SMS",
+        "SOFTWARE_TOKEN_MFA": "Código de la app autenticadora",
+        "CUSTOM_CHALLENGE": "Código de verificación",
+        "EMAIL_OTP": "Código que llegó por correo",
+    }
+    if nombre_desafio not in textos:
+        raise RuntimeError(f"Cognito pidió un paso que esta herramienta no sabe resolver: {nombre_desafio}.")
+    return input(f"{textos[nombre_desafio]}: ").strip()
 
 
-def login(username, password):
-    client = boto3.client(
-        "cognito-idp",
-        region_name=REGION,
-        config=Config(signature_version=UNSIGNED),
-    )
+def iniciar_sesion(config, usuario, password):
+    cliente = config["MULTIADMIN_CLIENT_ID"]
+    srp = None
     try:
-        response = client.initiate_auth(
-            ClientId=CLIENT_ID,
-            AuthFlow="USER_PASSWORD_AUTH",
-            AuthParameters=auth_parameters(username, password),
-        )
-        srp = None
-    except ClientError as error:
-        code = error.response.get("Error", {}).get("Code")
-        message = error.response.get("Error", {}).get("Message", "")
-        if code != "InvalidParameterException" or "USER_PASSWORD_AUTH" not in message:
+        respuesta = cognito(config, "InitiateAuth", {
+            "ClientId": cliente,
+            "AuthFlow": "USER_PASSWORD_AUTH",
+            "AuthParameters": con_secret_hash(config, {"USERNAME": usuario, "PASSWORD": password}, usuario),
+        })
+    except ErrorCognito as error:
+        if error.codigo != "InvalidParameterException" or "USER_PASSWORD_AUTH" not in error.mensaje:
             raise
+        srp = Srp(config, usuario, password)
+        respuesta = cognito(config, "InitiateAuth", {
+            "ClientId": cliente,
+            "AuthFlow": "USER_SRP_AUTH",
+            "AuthParameters": srp.parametros_inicio(config),
+        })
 
-        print("El cliente no permite password directo. Probando login SRP...")
-        srp = CognitoSrp(username, password)
-        response = client.initiate_auth(
-            ClientId=CLIENT_ID,
-            AuthFlow="USER_SRP_AUTH",
-            AuthParameters=srp.get_auth_params(),
-        )
-
-    while "ChallengeName" in response:
-        challenge_name = response["ChallengeName"]
-        if challenge_name == "PASSWORD_VERIFIER":
-            if srp is None:
-                raise RuntimeError("Cognito pidio PASSWORD_VERIFIER sin flujo SRP activo.")
-            challenge_responses = srp.get_password_verifier_params(
-                response["ChallengeParameters"]
-            )
+    while "ChallengeName" in respuesta:
+        nombre = respuesta["ChallengeName"]
+        datos = respuesta.get("ChallengeParameters", {})
+        if nombre == "PASSWORD_VERIFIER":
+            respuestas = srp.respuesta(config, datos)
+        elif nombre == "NEW_PASSWORD_REQUIRED":
+            raise RuntimeError("Multiadmin exige cambiar la contraseña. Cámbiala en admin.camarada.io y vuelve a ejecutar.")
         else:
-            challenge_responses = challenge_parameters(username, response)
+            usuario_cognito = datos.get("USER_ID_FOR_SRP", usuario)
+            campo = {"SMS_MFA": "SMS_MFA_CODE", "SOFTWARE_TOKEN_MFA": "SOFTWARE_TOKEN_MFA_CODE",
+                     "EMAIL_OTP": "EMAIL_OTP_CODE"}.get(nombre, "ANSWER")
+            respuestas = con_secret_hash(config, {"USERNAME": usuario_cognito, campo: pedir_codigo(nombre)},
+                                         usuario_cognito)
+        peticion = {"ClientId": cliente, "ChallengeName": nombre, "ChallengeResponses": respuestas}
+        if respuesta.get("Session"):
+            peticion["Session"] = respuesta["Session"]
+        respuesta = cognito(config, "RespondToAuthChallenge", peticion)
 
-        challenge_request = {
-            "ClientId": CLIENT_ID,
-            "ChallengeName": challenge_name,
-            "ChallengeResponses": challenge_responses,
-        }
-        if response.get("Session"):
-            challenge_request["Session"] = response["Session"]
-
-        response = client.respond_to_auth_challenge(**challenge_request)
-
-    if "AuthenticationResult" not in response:
-        keys = ", ".join(response.keys())
-        raise RuntimeError(f"Cognito no devolvio tokens. Campos recibidos: {keys}")
-
-    return response["AuthenticationResult"]
+    if "AuthenticationResult" not in respuesta:
+        raise RuntimeError("Cognito no devolvió tokens.")
+    return respuesta["AuthenticationResult"]
 
 
-def request_json(path, id_token):
-    url = f"{API_BASE_URL.rstrip('/')}/{path.lstrip('/')}"
-    response = requests.get(
-        url,
-        headers={
-            "accept": "application/json",
-            "authorization": f"Bearer {id_token}",
-            "origin": "https://admin.camarada.io",
-            "referer": "https://admin.camarada.io/",
-            "user-agent": "Mozilla/5.0",
-        },
-        timeout=30,
+def explicar_error(error):
+    textos = {
+        "NotAuthorizedException": "Usuario o contraseña incorrectos, o la sesión ya no es válida.",
+        "UserNotFoundException": "Ese usuario no existe en Multiadmin. Revisa el teléfono/usuario guardado.",
+        "UserNotConfirmedException": "El usuario de Multiadmin no está confirmado.",
+        "PasswordResetRequiredException": "Multiadmin exige restablecer la contraseña.",
+        "CodeMismatchException": "El código de verificación no es correcto.",
+        "ExpiredCodeException": "El código de verificación expiró. Vuelve a ejecutar.",
+        "TooManyRequestsException": "Demasiados intentos. Espera unos minutos.",
+        "LimitExceededException": "Demasiados intentos. Espera unos minutos.",
+        "SinConexion": "No hay conexión con Cognito (revisa internet, VPN o proxy).",
+    }
+    base = textos.get(error.codigo, f"Cognito rechazó la petición ({error.codigo}).")
+    if "SECRET_HASH" in error.mensaje:
+        base = ("El cliente de Cognito exige un secreto. Agrega MULTIADMIN_CLIENT_SECRET a "
+                ".env.multiadmin.local y vuelve a ejecutar.")
+    return base
+
+
+# ---------------------------------------------------------------------------
+# Credenciales locales
+# ---------------------------------------------------------------------------
+
+
+def credenciales(config, preguntar):
+    usuario = config.get("MULTIADMIN_USERNAME", "")
+    password = config.get("MULTIADMIN_PASSWORD", "")
+    if usuario and password and not preguntar:
+        return usuario, password
+    print()
+    print("Inicio de sesión en Multiadmin")
+    usuario = input(f"Teléfono o usuario{f' [{usuario}]' if usuario else ''}: ").strip() or usuario
+    password = input("Contraseña: ").strip()
+    if not usuario or not password:
+        raise SystemExit("Faltan usuario o contraseña.")
+    guardar = input("¿Guardar usuario y contraseña en este equipo para no volver a pedirlos? [S/n]: ").strip().lower()
+    if guardar in ("", "s", "si", "sí", "y", "yes"):
+        actualizar_env(ARCHIVO_CREDENCIALES, {"MULTIADMIN_USERNAME": usuario, "MULTIADMIN_PASSWORD": password})
+        print(f"Guardadas en {ARCHIVO_CREDENCIALES.name} (solo en este equipo; Git lo ignora).")
+    return usuario, password
+
+
+# ---------------------------------------------------------------------------
+# Salida
+# ---------------------------------------------------------------------------
+
+
+def expira(token):
+    try:
+        carga = token.split(".")[1]
+        carga += "=" * (-len(carga) % 4)
+        exp = json.loads(base64.urlsafe_b64decode(carga))["exp"]
+        return datetime.fromtimestamp(exp, tz=timezone.utc).astimezone()
+    except Exception:
+        return None
+
+
+def guardar_tokens(config, usuario, auth):
+    id_token = auth["IdToken"]
+    refresh = auth.get("RefreshToken", "")
+    fecha = expira(id_token)
+    contenido = f"""# Tokens frescos de Multiadmin para Vercel.
+# Archivo local sensible. No subir a Git.
+# Generado: {datetime.now().astimezone():%Y-%m-%d %H:%M}
+# ID token expira: {fecha:%Y-%m-%d %H:%M %Z} (la app lo renueva sola con el refresh token)
+
+MULTIADMIN_API_BASE_URL={config['MULTIADMIN_API_BASE_URL']}
+MULTIADMIN_CLIENT_ID={config['MULTIADMIN_CLIENT_ID']}
+MULTIADMIN_USER_POOL_ID={config['MULTIADMIN_USER_POOL_ID']}
+MULTIADMIN_USERS_SINCE_EXPIRATION={config['MULTIADMIN_USERS_SINCE_EXPIRATION']}
+AWS_DEFAULT_REGION={config['AWS_DEFAULT_REGION']}
+
+MULTIADMIN_USERNAME={usuario}
+MULTIADMIN_ID_TOKEN={id_token}
+MULTIADMIN_REFRESH_TOKEN={refresh}
+MULTIADMIN_CLIENT_SECRET={config.get('MULTIADMIN_CLIENT_SECRET', '')}
+""" if fecha else ""
+    if not contenido:
+        raise RuntimeError("Cognito devolvió un ID token que no se puede leer.")
+    ARCHIVO_TOKENS.write_text(contenido, encoding="utf-8")
+    if ARCHIVO_ENV.exists():
+        actualizar_env(ARCHIVO_ENV, {"MULTIADMIN_ID_TOKEN": id_token, "MULTIADMIN_REFRESH_TOKEN": refresh})
+    return fecha
+
+
+def copiar_para_vercel(auth):
+    texto = "\n".join([
+        f"MULTIADMIN_ID_TOKEN={auth['IdToken']}",
+        f"MULTIADMIN_REFRESH_TOKEN={auth.get('RefreshToken', '')}",
+    ]) + "\n"
+    try:
+        if sys.platform.startswith("win"):
+            subprocess.run("clip", input=texto.encode("utf-16-le"), check=True, shell=True)
+        elif sys.platform == "darwin":
+            subprocess.run(["pbcopy"], input=texto.encode("utf-8"), check=True)
+        else:
+            return False
+        return True
+    except Exception:
+        return False
+
+
+def validar(config, id_token):
+    base = config["MULTIADMIN_API_BASE_URL"].rstrip("/")
+    peticion = urllib.request.Request(
+        f"{base}/projects/chispita/users?sinceExpiration={config['MULTIADMIN_USERS_SINCE_EXPIRATION']}",
+        headers={"accept": "application/json", "authorization": f"Bearer {id_token}",
+                 "origin": "https://admin.camarada.io", "referer": "https://admin.camarada.io/",
+                 "user-agent": "Mozilla/5.0"},
     )
-    response.raise_for_status()
-    return response.json()
+    with urllib.request.urlopen(peticion, timeout=30) as respuesta:
+        datos = json.loads(respuesta.read().decode("utf-8"))
+    if isinstance(datos, dict):
+        datos = next((v for k, v in datos.items() if k in ("Items", "items", "data", "result")), datos)
+    return len(datos) if isinstance(datos, list) else 0
 
 
-def count_items(data):
-    if isinstance(data, list):
-        return len(data)
-    if isinstance(data, dict):
-        for key in ("Items", "items", "data", "result"):
-            value = data.get(key)
-            if isinstance(value, list):
-                return len(value)
+def main(argv=None):
+    opciones = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    opciones.add_argument("--iniciar-sesion", action="store_true",
+                          help="No usar el refresh token: iniciar sesión con usuario y contraseña.")
+    opciones.add_argument("--cambiar-credenciales", action="store_true",
+                          help="Volver a pedir usuario y contraseña y guardarlos.")
+    opciones.add_argument("--sin-validar", action="store_true",
+                          help="No comprobar los tokens contra la API de Chispita.")
+    args = opciones.parse_args(argv)
+
+    config = configuracion()
+    usuario = config.get("MULTIADMIN_USERNAME", "")
+    auth = None
+
+    if not args.iniciar_sesion and not args.cambiar_credenciales and config.get("MULTIADMIN_REFRESH_TOKEN"):
+        print("Renovando con el refresh token guardado...")
+        try:
+            auth = renovar_con_refresh(config)
+            print("Renovado sin pedir contraseña.")
+        except ErrorCognito as error:
+            if error.codigo == "SinConexion":
+                raise SystemExit(explicar_error(error))
+            print("El refresh token venció o ya no es válido. Hay que iniciar sesión.")
+
+    if auth is None:
+        preguntar = args.cambiar_credenciales
+        for intento in range(2):
+            usuario, password = credenciales(config, preguntar=preguntar)
+            try:
+                auth = iniciar_sesion(config, usuario, password)
+                break
+            except ErrorCognito as error:
+                credenciales_malas = error.codigo in ("NotAuthorizedException", "UserNotFoundException")
+                if credenciales_malas and intento == 0:
+                    print(f"No se pudo iniciar sesión: {explicar_error(error)}")
+                    print("Vuelve a escribir el usuario y la contraseña.")
+                    preguntar = True
+                    continue
+                raise SystemExit(f"No se pudo iniciar sesión: {explicar_error(error)}")
+        if not auth.get("RefreshToken"):
+            raise SystemExit("Cognito no devolvió refresh token; la app no podría renovarse sola.")
+
+    fecha = guardar_tokens(config, usuario, auth)
+    print()
+    print("Tokens listos.")
+    print(f"  - {ARCHIVO_TOKENS.name} actualizado")
+    if ARCHIVO_ENV.exists():
+        print("  - .env actualizado (app local)")
+    print(f"  - El ID token vence {fecha:%d/%m/%Y %H:%M}; la app lo renueva sola mientras el refresh token siga vigente.")
+
+    if not args.sin_validar:
+        try:
+            print(f"  - Comprobado contra Chispita: {validar(config, auth['IdToken'])} usuarios recibidos.")
+        except Exception as error:
+            print(f"  - Aviso: no se pudo comprobar contra Chispita ({type(error).__name__}).")
+
+    print()
+    if copiar_para_vercel(auth):
+        print("Copiadas al portapapeles las 2 variables para Vercel (MULTIADMIN_ID_TOKEN y MULTIADMIN_REFRESH_TOKEN).")
+    else:
+        print(f"Copia MULTIADMIN_ID_TOKEN y MULTIADMIN_REFRESH_TOKEN desde {ARCHIVO_TOKENS.name}.")
+    print("En Vercel: Settings > Environment Variables (Production), pégalas y haz Redeploy.")
     return 0
 
 
-def write_env(username, auth):
-    id_token = auth["IdToken"]
-    refresh_token = auth.get("RefreshToken", "")
-    access_token = auth.get("AccessToken", "")
-    content = f"""# Tokens frescos de Multiadmin para Vercel.
-# Archivo local sensible. No subir a Git.
-# ID token expira en UTC: {expires_at(id_token)}
-# El refresh token permite renovar sin iniciar sesion ni pedir SMS.
-
-MULTIADMIN_API_BASE_URL={API_BASE_URL}
-MULTIADMIN_CLIENT_ID={CLIENT_ID}
-MULTIADMIN_USER_POOL_ID={USER_POOL_ID}
-MULTIADMIN_USERS_SINCE_EXPIRATION={SINCE_EXPIRATION}
-AWS_DEFAULT_REGION={REGION}
-
-MULTIADMIN_USERNAME={username}
-MULTIADMIN_PASSWORD=
-MULTIADMIN_ID_TOKEN={id_token}
-MULTIADMIN_REFRESH_TOKEN={refresh_token}
-MULTIADMIN_PROVISIONED_TOKEN=
-MULTIADMIN_CLIENT_SECRET={CLIENT_SECRET}
-
-# No es necesario para Vercel en este flujo, pero queda como referencia local.
-MULTIADMIN_ACCESS_TOKEN={access_token}
-"""
-    with open(OUTPUT_FILE, "w", encoding="utf-8") as file:
-        file.write(content)
-
-
-def main():
-    username = input("Telefono o usuario Multiadmin: ").strip()
-    password = getpass.getpass("Password Multiadmin: ")
-    if not username or not password:
-        raise SystemExit("Faltan usuario o password.")
-
-    try:
-        auth = login(username, password)
-    except ClientError as error:
-        error_info = error.response.get("Error", {})
-        raise SystemExit(
-            f"Login rechazado por Cognito: {error_info.get('Code')} - "
-            f"{error_info.get('Message')}"
-        ) from error
-
-    if not auth.get("RefreshToken"):
-        raise SystemExit(
-            "Login correcto, pero Cognito no devolvio RefreshToken. "
-            "No sirve para Vercel porque el ID token expira rapido."
-        )
-
-    write_env(username, auth)
-
-    print("Login correcto.")
-    print(f"Archivo generado: {OUTPUT_FILE}")
-    print("Validando endpoints de Chispita...")
-
-    try:
-        users = request_json(f"/projects/chispita/users?sinceExpiration={SINCE_EXPIRATION}", auth["IdToken"])
-        spark = request_json("/projects/chispita/offers/won?period=today&app=spark", auth["IdToken"])
-        instacart = request_json("/projects/chispita/offers/won?period=today&app=instacart", auth["IdToken"])
-    except requests.RequestException as error:
-        print(f"Advertencia: tokens generados, pero la validacion fallo: {error}")
-    else:
-        print(f"Chispita usuarios recibidos: {count_items(users)}")
-        print(f"Ofertas Spark recibidas: {count_items(spark)}")
-        print(f"Ofertas Instacart recibidas: {count_items(instacart)}")
-
-    print("Copia esas variables a Vercel Production y haz Redeploy.")
-
-
 if __name__ == "__main__":
-    main()
+    try:
+        sys.exit(main())
+    except KeyboardInterrupt:
+        sys.exit("\nCancelado.")

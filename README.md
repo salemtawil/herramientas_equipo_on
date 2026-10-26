@@ -135,6 +135,17 @@ Antes de desplegar:
    - `CHATWOOT_API_ACCESS_TOKEN`
    - `CHATWOOT_TIMEZONE` (por defecto `America/Caracas`)
 
+## Renovar tokens de Multiadmin
+
+Cuando Usuarios activos avisa que el refresh token de Multiadmin expiró:
+
+1. Doble clic en `tools/renovar_tokens_multiadmin.bat`.
+2. Primero intenta renovar con el refresh token guardado, sin pedir nada. Si ya venció, pide el teléfono/usuario y la contraseña de Multiadmin una sola vez y ofrece guardarlos en `.env.multiadmin.local` (solo en tu equipo; Git lo ignora). Si Multiadmin envía un código por SMS, también lo pide.
+3. Actualiza `.env` y `.env.vercel.multiadmin.tokens` y copia al portapapeles `MULTIADMIN_ID_TOKEN` y `MULTIADMIN_REFRESH_TOKEN`.
+4. Pégalas en Vercel (Settings > Environment Variables, Production) y haz Redeploy.
+
+Solo usa la biblioteca estándar de Python (no necesita boto3 ni credenciales de AWS). Opciones: `--cambiar-credenciales`, `--iniciar-sesion` (no usar el refresh token) y `--sin-validar`.
+
 ## Persistencia en Vercel
 
 En Vercel el sistema de archivos solo es escribible en `/tmp`, que es propio de cada instancia y se pierde al reciclarla.
