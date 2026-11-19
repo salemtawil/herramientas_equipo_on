@@ -1,0 +1,310 @@
+import random
+from datetime import date, datetime, timedelta, timezone
+
+from utils import auditoria_chats_motor as motor
+from utils.auditoria_chats_store import MemoriaAuditoriaStore
+from utils.ia_chat import IARateLimitError
+
+CLAVES = ["saludo", "comprension", "exactitud", "resolucion", "tono", "tiempos", "cierre"]
+BASE_TS = int(datetime(2026, 11, 10, 14, 0, tzinfo=timezone.utc).timestamp())
+CONFIG_IA = {"base_url": "https://ia.test/v1", "model": "modelo-prueba", "api_key": "k", "activa": True}
+
+
+def _resultado(nota=4, satisfaccion="satisfecho", confianza="alta"):
+    return {
+        "criterios": {clave: nota for clave in CLAVES},
+        "nota_global": nota,
+        "satisfaccion_cliente": satisfaccion,
+        "resuelto": "si",
+        "resumen": "Bien.",
+        "fortalezas": [],
+        "mejoras": [],
+        "evidencias": [],
+        "confianza": confianza,
+    }
+
+
+def _mensajes(con_agente=True):
+    mensajes = [{"id": 1, "message_type": 0, "content": "Hola", "created_at": BASE_TS}]
+    if con_agente:
+        mensajes.append({"id": 2, "message_type": 1, "content": "Buenos días", "created_at": BASE_TS + 60})
+    return mensajes
+
+
+class ChatwootFalso:
+    def __init__(self, conversaciones, sin_agente=()):
+        self.conversaciones = conversaciones  # {agente_id: [conversation_id, ...]}
+        self.sin_agente = set(sin_agente)
+        self.lecturas = []
+
+    def conversaciones_de_agente(self, agente_id, since, until, page=1):
+        ids = self.conversaciones.get(agente_id, [])
+        pagina = ids[(page - 1) * 25 : page * 25]
+        return [{"id": cid, "created_at": BASE_TS + i} for i, cid in enumerate(pagina)]
+
+    def mensajes_de_conversacion(self, conversation_id, max_paginas=5):
+        self.lecturas.append(conversation_id)
+        return _mensajes(con_agente=conversation_id not in self.sin_agente)
+
+    def url_conversacion(self, conversation_id):
+        return f"https://chat.test/c/{conversation_id}"
+
+
+AGENTES = [{"id": 1, "nombre": "Ana Pérez", "turno": "Mañana"}, {"id": 2, "nombre": "Luis Gómez", "turno": "Tarde"}]
+
+
+def _crear(store, chats_por_agente=3, agentes=AGENTES):
+    return motor.crear_lote(
+        store,
+        since=date(2026, 11, 9),
+        until=date(2026, 11, 15),
+        alcance="todos",
+        detalle={},
+        chats_por_agente=chats_por_agente,
+        agentes=agentes,
+        config_ia=CONFIG_IA,
+    )
+
+
+def _ia_ok(monkeypatch, resultado=None):
+    monkeypatch.setattr(motor, "completar_json", lambda mensajes, config, **k: resultado or _resultado())
+
+
+def _correr(store, lote_id, chatwoot, rng=None, maximo=200):
+    pasos = []
+    for _ in range(maximo):
+        paso = motor.ejecutar_paso(store, lote_id, chatwoot, CONFIG_IA, rng=rng or random.Random(0))
+        pasos.append(paso)
+        if paso["accion"] in ("fin", "espera", "configuracion") or paso["estado"] == "limite_diario":
+            break
+    return pasos
+
+
+def test_rango_semana_anterior():
+    assert motor.rango_semana_anterior(date(2026, 11, 19), "America/Caracas") == (date(2026, 11, 9), date(2026, 11, 15))
+    assert motor.rango_semana_anterior(date(2026, 11, 16), "America/Caracas") == (date(2026, 11, 9), date(2026, 11, 15))
+
+
+def test_resolver_agentes_por_turno_y_aviso_sin_cruce():
+    agentes_chatwoot = [{"id": 1, "name": "Ana Perez"}, {"id": 2, "name": "Luis Gómez"}, {"id": 3, "name": "Eva"}]
+    turnos = {"Mañana": ["Ana Pérez", "Nadie Existe"], "Tarde": ["Luis Gómez"]}
+    agentes, avisos = motor.resolver_agentes("turno", {"turno": "Mañana"}, agentes_chatwoot, turnos)
+    assert agentes == [{"id": 1, "nombre": "Ana Perez", "turno": "Mañana"}]
+    assert avisos == ["Nadie Existe"]
+
+    todos, _ = motor.resolver_agentes("todos", {}, agentes_chatwoot, turnos)
+    assert [a["id"] for a in todos] == [1, 2, 3]
+    assert todos[2]["turno"] is None
+
+    elegidos, _ = motor.resolver_agentes("agentes", {"agentes": ["2"]}, agentes_chatwoot, turnos)
+    assert elegidos == [{"id": 2, "nombre": "Luis Gómez", "turno": "Tarde"}]
+
+
+def test_crear_lote_limita_chats_y_guarda_datos():
+    store = MemoriaAuditoriaStore()
+    lote = _crear(store, chats_por_agente=50)
+    assert lote["chats_por_agente"] == 20
+    assert lote["estado"] == "muestreando"
+    assert lote["modelo"] == "modelo-prueba"
+    assert lote["pauta_version"] == "1"
+    assert lote["since"] < lote["until"]
+
+
+def test_lote_completo_dos_agentes(monkeypatch):
+    _ia_ok(monkeypatch)
+    store = MemoriaAuditoriaStore()
+    lote = _crear(store)
+    chatwoot = ChatwootFalso({1: [11, 12, 13, 14], 2: [21, 22, 23, 24]})
+    pasos = _correr(store, lote["id"], chatwoot)
+
+    assert pasos[-1]["accion"] == "fin"
+    chats = store.listar_chats(lote["id"])
+    assert len(chats) == 6
+    assert all(c["estado"] == "auditado" for c in chats)
+    assert all(not c.get("transcripcion_tmp") for c in chats)
+    assert store.obtener_lote(lote["id"])["estado"] == "completado"
+    assert pasos[-1]["progreso"] == {"total": 6, "auditados": 6, "errores": 0, "pendientes": 0}
+
+
+def test_muestreo_excluye_ya_auditados_y_sin_mensajes_de_agente(monkeypatch):
+    _ia_ok(monkeypatch)
+    store = MemoriaAuditoriaStore()
+    previo = _crear(store, agentes=AGENTES[:1])
+    store.insertar_chats([{"batch_id": previo["id"], "conversation_id": 11, "agente_id": 1, "estado": "auditado"}])
+    lote = _crear(store, chats_por_agente=2, agentes=AGENTES[:1])
+    chatwoot = ChatwootFalso({1: [11, 12, 13, 14]}, sin_agente={12})
+    _correr(store, lote["id"], chatwoot)
+
+    chats = store.listar_chats(lote["id"])
+    auditados = sorted(c["conversation_id"] for c in chats if c["estado"] == "auditado")
+    assert auditados == [13, 14]
+    assert 11 not in [c["conversation_id"] for c in chats]
+    assert [c["estado"] for c in chats if c["conversation_id"] == 12] == ["descartado"]
+
+
+def test_agente_con_menos_chats_que_n(monkeypatch):
+    _ia_ok(monkeypatch)
+    store = MemoriaAuditoriaStore()
+    lote = _crear(store, chats_por_agente=5)
+    pasos = _correr(store, lote["id"], ChatwootFalso({1: [11], 2: []}))
+    assert pasos[-1]["accion"] == "fin"
+    assert pasos[-1]["progreso"]["total"] == 1
+    muestreados = store.obtener_lote(lote["id"])["agentes_muestreados"]
+    assert {m["id"]: m["elegidos"] for m in muestreados} == {1: 1, 2: 0}
+
+
+def test_json_invalido_reintenta_una_vez_y_luego_error(monkeypatch):
+    llamadas = []
+
+    def ia_mala(mensajes, config, **k):
+        llamadas.append(1)
+        return {"nota_global": 9}
+
+    monkeypatch.setattr(motor, "completar_json", ia_mala)
+    store = MemoriaAuditoriaStore()
+    lote = _crear(store, chats_por_agente=1, agentes=AGENTES[:1])
+    pasos = _correr(store, lote["id"], ChatwootFalso({1: [11]}))
+
+    chat = store.listar_chats(lote["id"])[0]
+    assert len(llamadas) == 2
+    assert chat["estado"] == "error"
+    assert chat["por_revisar"] is True
+    assert chat["ia_error"]
+    assert not chat.get("transcripcion_tmp")
+    assert store.obtener_lote(lote["id"])["estado"] == "con_errores"
+    assert pasos[-1]["progreso"]["errores"] == 1
+
+
+def test_429_minuto_devuelve_espera_y_no_pierde_fila(monkeypatch):
+    def ia_limitada(mensajes, config, **k):
+        raise IARateLimitError("minuto", esperar_segundos=9, diario=False)
+
+    monkeypatch.setattr(motor, "completar_json", ia_limitada)
+    store = MemoriaAuditoriaStore()
+    lote = _crear(store, chats_por_agente=1, agentes=AGENTES[:1])
+    pasos = _correr(store, lote["id"], ChatwootFalso({1: [11]}))
+
+    assert pasos[-1]["accion"] == "espera"
+    assert pasos[-1]["esperar_segundos"] == 9
+    chat = store.listar_chats(lote["id"])[0]
+    assert chat["estado"] == "leido"
+    assert chat["transcripcion_tmp"]
+
+
+def test_429_diario_pone_lote_en_limite_diario_y_se_retoma(monkeypatch):
+    def ia_sin_cupo(mensajes, config, **k):
+        raise IARateLimitError("día", esperar_segundos=3600, diario=True)
+
+    monkeypatch.setattr(motor, "completar_json", ia_sin_cupo)
+    store = MemoriaAuditoriaStore()
+    lote = _crear(store, chats_por_agente=1, agentes=AGENTES[:1])
+    chatwoot = ChatwootFalso({1: [11]})
+    pasos = _correr(store, lote["id"], chatwoot)
+    assert pasos[-1]["estado"] == "limite_diario"
+    assert pasos[-1]["esperar_segundos"] == 0
+
+    _ia_ok(monkeypatch)
+    pasos = _correr(store, lote["id"], chatwoot)
+    assert pasos[-1]["accion"] == "fin"
+    assert store.listar_chats(lote["id"])[0]["estado"] == "auditado"
+
+
+def test_ia_desactivada_no_toca_filas_leidas():
+    store = MemoriaAuditoriaStore()
+    lote = _crear(store, chats_por_agente=1, agentes=AGENTES[:1])
+    chatwoot = ChatwootFalso({1: [11]})
+    sin_ia = dict(CONFIG_IA, api_key="", activa=False)
+    paso = None
+    for _ in range(10):
+        paso = motor.ejecutar_paso(store, lote["id"], chatwoot, sin_ia, rng=random.Random(0))
+        if paso["accion"] == "configuracion":
+            break
+    assert paso["accion"] == "configuracion"
+    assert "AUDITORIA_CHATS_AI_API_KEY" in paso["mensaje"]
+    assert store.listar_chats(lote["id"])[0]["estado"] == "leido"
+
+
+def test_muestra_control_10_por_ciento_minimo_uno(monkeypatch):
+    _ia_ok(monkeypatch)
+    store = MemoriaAuditoriaStore()
+    lote = _crear(store, chats_por_agente=5)
+    _correr(store, lote["id"], ChatwootFalso({1: list(range(100, 110)), 2: list(range(200, 210))}), rng=random.Random(1))
+    chats = store.listar_chats(lote["id"])
+    control = [c for c in chats if c.get("motivo_revision") == "control"]
+    assert len(chats) == 10
+    assert len(control) == 1
+    assert all(c["por_revisar"] for c in control)
+
+
+def test_marcados_no_entran_en_control(monkeypatch):
+    _ia_ok(monkeypatch, _resultado(nota=2, satisfaccion="insatisfecho"))
+    store = MemoriaAuditoriaStore()
+    lote = _crear(store, chats_por_agente=2, agentes=AGENTES[:1])
+    _correr(store, lote["id"], ChatwootFalso({1: [11, 12]}))
+    motivos = [c.get("motivo_revision") for c in store.listar_chats(lote["id"])]
+    assert motivos == ["marcado", "marcado"]
+
+
+def test_fila_procesando_abandonada_se_recupera(monkeypatch):
+    _ia_ok(monkeypatch)
+    store = MemoriaAuditoriaStore()
+    lote = _crear(store, chats_por_agente=1, agentes=AGENTES[:1])
+    chatwoot = ChatwootFalso({1: [11]})
+    motor.ejecutar_paso(store, lote["id"], chatwoot, CONFIG_IA, rng=random.Random(0))  # muestreo
+    chat = store.listar_chats(lote["id"])[0]
+    hace_5_min = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat()
+    store.chats[chat["id"]].update(estado="procesando", updated_at=hace_5_min)
+
+    pasos = _correr(store, lote["id"], chatwoot)
+    assert pasos[-1]["accion"] == "fin"
+    assert store.obtener_chat(chat["id"])["estado"] == "auditado"
+
+
+def test_nota_efectiva_y_resumen():
+    assert motor.nota_efectiva({"ia_nota": 3, "nota_final": None}) == 3
+    assert motor.nota_efectiva({"ia_nota": 3, "nota_final": 5}) == 5
+    chats = [
+        {"agente_id": 1, "agente_nombre": "Ana", "estado": "revisado", "ia_nota": 2, "nota_final": 4,
+         "ia_satisfaccion": "insatisfecho", "satisfaccion_final": "satisfecho", "por_revisar": True},
+        {"agente_id": 1, "agente_nombre": "Ana", "estado": "auditado", "ia_nota": 4, "nota_final": None,
+         "ia_satisfaccion": "neutral", "por_revisar": False},
+        {"agente_id": 1, "agente_nombre": "Ana", "estado": "descartado"},
+    ]
+    resumen = motor.resumen_por_agente(chats)
+    assert resumen == [
+        {"agente_id": 1, "agente_nombre": "Ana", "chats": 2, "nota_ia_media": 3.0, "nota_efectiva_media": 4.0,
+         "pct_satisfechos": 50.0, "por_revisar": 0, "revisados": 1, "errores": 0}
+    ]
+
+
+def test_historial_semanal():
+    chats = [
+        {"agente_id": 1, "agente_nombre": "Ana", "estado": "auditado", "ia_nota": 4,
+         "conversacion_fecha": "2026-11-10T14:00:00+00:00"},
+        {"agente_id": 1, "agente_nombre": "Ana", "estado": "revisado", "ia_nota": 2, "nota_final": 3,
+         "conversacion_fecha": "2026-11-12T14:00:00+00:00"},
+        {"agente_id": 1, "agente_nombre": "Ana", "estado": "auditado", "ia_nota": 5,
+         "conversacion_fecha": "2026-11-17T14:00:00+00:00"},
+    ]
+    filas = motor.historial_semanal(chats, "America/Caracas")
+    assert filas == [
+        {"agente_id": 1, "agente_nombre": "Ana", "semana": "2026-11-09", "chats": 2,
+         "nota_efectiva_media": 3.5, "pct_revisado": 50.0},
+        {"agente_id": 1, "agente_nombre": "Ana", "semana": "2026-11-16", "chats": 1,
+         "nota_efectiva_media": 5.0, "pct_revisado": 0.0},
+    ]
+
+
+def test_filas_csv():
+    lote = {"id": "l1"}
+    chats = [
+        {"conversation_id": 11, "agente_nombre": "Ana", "turno": "Mañana", "conversacion_fecha": "2026-11-10T14:00:00+00:00",
+         "estado": "auditado", "ia_nota": 4, "ia_satisfaccion": "satisfecho",
+         "ia_resultado": dict(_resultado(), resumen="Bien hecho"), "nota_final": None},
+        {"conversation_id": 12, "estado": "descartado"},
+    ]
+    columnas, filas = motor.filas_csv(lote, chats, url_conversacion=lambda cid: f"https://c/{cid}")
+    assert columnas[:3] == ["Conversación", "Enlace", "Agente"]
+    assert len(filas) == 1
+    assert filas[0][0] == 11 and filas[0][1] == "https://c/11"
+    assert "Bien hecho" in filas[0]

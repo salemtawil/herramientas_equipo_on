@@ -14,6 +14,7 @@ create table if not exists public.chat_audit_batches (
   chats_por_agente integer not null default 10 check (chats_por_agente between 1 and 20),
   agentes jsonb not null default '[]'::jsonb,
   agentes_muestreados jsonb not null default '[]'::jsonb,
+  reservas jsonb not null default '{}'::jsonb,
   estado text not null default 'muestreando'
     check (estado in ('muestreando', 'auditando', 'limite_diario', 'completado', 'con_errores')),
   modelo text not null default '',
@@ -29,7 +30,7 @@ create table if not exists public.chat_audits (
   turno text,
   conversacion_fecha timestamptz,
   estado text not null default 'pendiente'
-    check (estado in ('pendiente', 'procesando', 'leido', 'auditado', 'error', 'revisado')),
+    check (estado in ('pendiente', 'procesando', 'leido', 'auditado', 'error', 'revisado', 'descartado')),
   intentos integer not null default 0,
   transcripcion_tmp text,
   ia_resultado jsonb,
