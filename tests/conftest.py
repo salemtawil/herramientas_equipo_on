@@ -44,6 +44,7 @@ if str(REPO_ROOT) not in sys.path:
 
 PREFIJOS_DE_CONFIGURACION_REAL = (
     "APPS_SCRIPT_",
+    "AUDITORIA_CHATS_",
     "AWS_",
     "CHATWOOT_",
     "COMPINCHE_",

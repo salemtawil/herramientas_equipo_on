@@ -91,6 +91,9 @@ Opcionales según funcionalidad:
 - `OLLAMA_BASE_URL`
 - `OLLAMA_CSAT_MODEL`
 - `OLLAMA_WEEKLY_REPORT_MODEL`
+- `AUDITORIA_CHATS_AI_BASE_URL` (por defecto `https://api.groq.com/openai/v1`)
+- `AUDITORIA_CHATS_AI_MODEL` (por defecto `openai/gpt-oss-120b`)
+- `AUDITORIA_CHATS_AI_API_KEY` (sin clave, la auditoría con IA queda desactivada)
 - `CHATWOOT_BASE_URL`
 - `CHATWOOT_ACCOUNT_ID`
 - `CHATWOOT_API_ACCESS_TOKEN`
