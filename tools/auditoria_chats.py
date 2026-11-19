@@ -62,7 +62,7 @@ def _parsear_fecha(valor):
 
 def _fecha_lote(epoch):
     try:
-        return datetime.fromtimestamp(int(epoch)).strftime("%d/%m/%Y")
+        return datetime.fromtimestamp(int(epoch), _obtener_timezone(_timezone())).strftime("%d/%m/%Y")
     except (TypeError, ValueError, OSError):
         return ""
 
@@ -96,7 +96,8 @@ def index():
         except AuditoriaChatsError as exc:
             avisos.append(mensaje_error_publico(exc, "No se pudieron leer los lotes guardados"))
 
-    inicio, fin = motor.rango_semana_anterior(date.today(), _timezone())
+    hoy_local = datetime.now(_obtener_timezone(_timezone())).date()
+    inicio, fin = motor.rango_semana_anterior(hoy_local, _timezone())
     return render_template(
         "auditoria_chats.html",
         agentes=agentes,

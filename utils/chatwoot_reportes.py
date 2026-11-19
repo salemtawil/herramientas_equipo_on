@@ -454,9 +454,14 @@ class ChatwootClient:
             raise RuntimeError(f"Chatwoot no devolvio JSON. URL: {url}.") from exc
 
     def conversaciones_de_agente(self, agente_id, since, until, page=1):
+        """Página cruda del filtro de Chatwoot, ampliada un día por cada lado.
+
+        El filtro de fechas de Chatwoot es estricto y compara por día en UTC, así que
+        se pide de más y el recorte exacto por epoch lo hace quien llama.
+        """
         tz = _obtener_timezone(_timezone())
-        desde = datetime.fromtimestamp(int(since), tz).date()
-        hasta = datetime.fromtimestamp(int(until), tz).date() + timedelta(days=1)
+        desde = datetime.fromtimestamp(int(since), tz).date() - timedelta(days=1)
+        hasta = datetime.fromtimestamp(int(until), tz).date() + timedelta(days=2)
         payload = {
             "payload": [
                 {
@@ -486,11 +491,7 @@ class ChatwootClient:
         conversaciones = _normalizar_lista_respuesta(respuesta)
         if not conversaciones and isinstance(respuesta, dict) and isinstance(respuesta.get("data"), dict):
             conversaciones = _normalizar_lista_respuesta(respuesta["data"])
-        return [
-            conversacion
-            for conversacion in conversaciones
-            if int(since) <= int(conversacion.get("created_at") or 0) <= int(until)
-        ]
+        return conversaciones
 
     def mensajes_de_conversacion(self, conversation_id, max_paginas=5):
         mensajes = {}

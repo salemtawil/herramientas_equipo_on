@@ -48,6 +48,16 @@ class SupabaseAuditoriaStore:
             ) from exc
         return getattr(response, "data", None) or []
 
+    def _todas(self, construir_query, tamano=1000):
+        """Lee todas las filas paginando: PostgREST devuelve como máximo 1000 por consulta."""
+        filas, desde = [], 0
+        while True:
+            pagina = self._execute(construir_query().range(desde, desde + tamano - 1))
+            filas.extend(pagina)
+            if len(pagina) < tamano:
+                return filas
+            desde += tamano
+
     def _uno(self, query):
         data = self._execute(query)
         return data[0] if data else None
@@ -117,13 +127,17 @@ class SupabaseAuditoriaStore:
         return self._uno(self.client.table(TABLA_CHATS).select("*").eq("id", chat_id).limit(1))
 
     def listar_chats(self, lote_id):
-        return self._execute(
-            self.client.table(TABLA_CHATS).select("*").eq("batch_id", lote_id).order("created_at")
+        return self._todas(
+            lambda: self.client.table(TABLA_CHATS).select("*").eq("batch_id", lote_id).order("created_at").order("id")
         )
 
     def chats_para_historial(self, desde_iso):
-        return self._execute(
-            self.client.table(TABLA_CHATS).select("*").gte("conversacion_fecha", desde_iso).order("conversacion_fecha")
+        return self._todas(
+            lambda: self.client.table(TABLA_CHATS)
+            .select("*")
+            .gte("conversacion_fecha", desde_iso)
+            .order("conversacion_fecha")
+            .order("id")
         )
 
 

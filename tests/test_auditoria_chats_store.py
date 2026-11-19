@@ -145,3 +145,52 @@ def test_supabase_tomar_siguiente_actualiza_condicionado_al_estado_anterior():
     assert update["valores"]["estado"] == "procesando"
     assert ("id", "c1") in update["filtros"]
     assert ("estado", "pendiente") in update["filtros"]
+
+
+class _ConsultaPaginada:
+    def __init__(self, filas, rangos):
+        self.filas = filas
+        self.rangos = rangos
+        self.desde = 0
+        self.hasta = None
+
+    def select(self, *a):
+        return self
+
+    def eq(self, *a):
+        return self
+
+    def gte(self, *a):
+        return self
+
+    def order(self, *a, **k):
+        return self
+
+    def range(self, desde, hasta):
+        self.rangos.append((desde, hasta))
+        self.desde, self.hasta = desde, hasta
+        return self
+
+    def execute(self):
+        hasta = self.hasta if self.hasta is not None else 999
+        return _Respuesta(self.filas[self.desde : hasta + 1][:1000])
+
+
+class _ClientePaginado:
+    def __init__(self, filas):
+        self.filas = filas
+        self.rangos = []
+
+    def table(self, nombre):
+        return _ConsultaPaginada(self.filas, self.rangos)
+
+
+def test_supabase_listar_chats_pagina_mas_de_1000():
+    cliente = _ClientePaginado([{"id": str(i)} for i in range(1005)])
+    assert len(SupabaseAuditoriaStore(cliente).listar_chats("lote")) == 1005
+    assert cliente.rangos[:2] == [(0, 999), (1000, 1999)]
+
+
+def test_supabase_historial_pagina_mas_de_1000():
+    cliente = _ClientePaginado([{"id": str(i)} for i in range(2400)])
+    assert len(SupabaseAuditoriaStore(cliente).chats_para_historial("2026-01-01")) == 2400

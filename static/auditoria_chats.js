@@ -80,6 +80,7 @@
           });
           if (!respuesta.ok) throw new Error("HTTP " + respuesta.status);
           datos = await respuesta.json();
+          if (!datos || typeof datos !== "object") throw new Error("respuesta vacía");
         } catch (error) {
           textoMensaje.textContent = "No se pudo avanzar el lote (" + error.message + "). Vuelve a intentarlo.";
           terminar(false);

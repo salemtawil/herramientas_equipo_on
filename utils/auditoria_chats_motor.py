@@ -161,13 +161,25 @@ def _fila_chat(lote, agente, conversacion):
     }
 
 
+def _agente_ya_muestreado(store, lote_id, agente_id):
+    actual = store.obtener_lote(lote_id) or {}
+    if any(int(m["id"]) == int(agente_id) for m in actual.get("agentes_muestreados") or []):
+        return True
+    return any(int(c.get("agente_id") or 0) == int(agente_id) for c in store.listar_chats(lote_id))
+
+
 def _muestrear_agente(store, lote, agente, chatwoot, rng):
+    since, until = int(lote["since"]), int(lote["until"])
     conversaciones = []
     for pagina in range(1, MAX_PAGINAS_MUESTREO + 1):
-        resultado = chatwoot.conversaciones_de_agente(agente["id"], lote["since"], lote["until"], page=pagina)
+        resultado = chatwoot.conversaciones_de_agente(agente["id"], since, until, page=pagina)
         if not resultado:
             break
-        conversaciones.extend(resultado)
+        conversaciones.extend(c for c in resultado if since <= int(c.get("created_at") or 0) <= until)
+
+    # Otra pestaña pudo muestrear este agente mientras se listaban sus chats.
+    if _agente_ya_muestreado(store, lote["id"], agente["id"]):
+        return f"{agente.get('nombre')}: ya se eligieron sus chats en otra pestaña."
 
     por_id = {int(c["id"]): c for c in conversaciones if c.get("id") is not None}
     ya_auditadas = store.conversaciones_auditadas(list(por_id))
@@ -178,9 +190,10 @@ def _muestrear_agente(store, lote, agente, chatwoot, rng):
     elegidas, reserva = disponibles[:n], disponibles[n:]
     store.insertar_chats([_fila_chat(lote, agente, c) for c in elegidas])
 
-    reservas = dict(lote.get("reservas") or {})
+    actual = store.obtener_lote(lote["id"]) or lote
+    reservas = dict(actual.get("reservas") or {})
     reservas[str(agente["id"])] = [{"id": int(c["id"]), "created_at": c.get("created_at")} for c in reserva]
-    muestreados = list(lote.get("agentes_muestreados") or [])
+    muestreados = [m for m in actual.get("agentes_muestreados") or [] if int(m["id"]) != int(agente["id"])]
     muestreados.append({"id": agente["id"], "encontrados": len(disponibles), "elegidos": len(elegidas)})
     cambios = {"agentes_muestreados": muestreados, "reservas": reservas}
     if len(muestreados) >= len(lote.get("agentes") or []):
@@ -276,8 +289,9 @@ def _auditar_chat(store, lote_id, config_ia):
 
 
 def _finalizar(store, lote_id, chats, rng):
+    ya_hay_control = any(c.get("motivo_revision") == "control" for c in chats)
     sin_marcar = [c for c in chats if c.get("estado") == "auditado" and not c.get("por_revisar")]
-    if sin_marcar:
+    if sin_marcar and not ya_hay_control:
         cantidad = max(1, round(len(sin_marcar) * PORCENTAJE_CONTROL))
         for chat in rng.sample(sin_marcar, cantidad):
             store.actualizar_chat(chat["id"], {"por_revisar": True, "motivo_revision": "control"})
@@ -313,21 +327,23 @@ def ejecutar_paso(store, lote_id, chatwoot, config_ia, rng=None):
     if lote.get("estado") == "muestreando":
         store.actualizar_lote(lote_id, {"estado": "auditando"})
 
-    chats = store.listar_chats(lote_id)
-    hay_leidos = any(c.get("estado") == "leido" for c in chats)
-    if hay_leidos and config_ia.get("activa"):
-        return _auditar_chat(store, lote_id, config_ia)
+    if config_ia.get("activa"):
+        # Otra pestaña puede llevarse el último chat leído: entonces se sigue con la lectura.
+        respuesta = _auditar_chat(store, lote_id, config_ia)
+        if respuesta:
+            return respuesta
 
     respuesta = _leer_chat(store, lote_id, chatwoot)
     if respuesta:
         return respuesta
 
-    if hay_leidos:
+    chats = store.listar_chats(lote_id)
+    if any(c.get("estado") == "procesando" for c in chats):
+        return _respuesta(store, lote_id, "espera", "Hay un chat en proceso en otra pestaña.", esperar_segundos=5)
+    if any(c.get("estado") == "leido" for c in chats):
         return _respuesta(
             store, lote_id, "configuracion", "Configura AUDITORIA_CHATS_AI_API_KEY para auditar los chats leídos."
         )
-    if any(c.get("estado") == "procesando" for c in chats):
-        return _respuesta(store, lote_id, "espera", "Hay un chat en proceso en otra pestaña.", esperar_segundos=5)
     return _finalizar(store, lote_id, chats, rng)
 
 
@@ -412,6 +428,13 @@ def historial_semanal(chats, tz_name):
     return sorted(filas, key=lambda f: (_normalizar_nombre(f["agente_nombre"]), f["semana"]))
 
 
+def _celda_segura(valor):
+    """Evita que una hoja de cálculo interprete un texto como fórmula."""
+    if isinstance(valor, str) and valor[:1] in ("=", "+", "-", "@", "\t", "\r"):
+        return "'" + valor
+    return valor
+
+
 def filas_csv(lote, chats, url_conversacion=None):
     columnas = [
         "Conversación", "Enlace", "Agente", "Turno", "Fecha", "Estado",
@@ -444,4 +467,4 @@ def filas_csv(lote, chats, url_conversacion=None):
                 resultado.get("resumen", ""),
             ]
         )
-    return columnas, filas
+    return columnas, [[_celda_segura(valor) for valor in fila] for fila in filas]

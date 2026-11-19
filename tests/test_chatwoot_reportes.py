@@ -357,13 +357,17 @@ def test_conversaciones_de_agente_usa_filter_y_filtra_rango():
     with patch("utils.chatwoot_reportes.requests.post", post_falso):
         conversaciones = _cliente_prueba().conversaciones_de_agente(7, since, until, page=2)
 
-    assert [c["id"] for c in conversaciones] == [11, 13]
+    # El filtro de fechas de Chatwoot es estricto y por día: se amplía un día por lado
+    # y el recorte exacto por epoch lo hace el motor.
+    assert [c["id"] for c in conversaciones] == [11, 12, 13]
     assert llamadas[0]["url"] == "https://chat.test/api/v1/accounts/2/conversations/filter"
     assert llamadas[0]["params"] == {"page": 2}
     filtros = llamadas[0]["json"]["payload"]
     assert filtros[0]["attribute_key"] == "assignee_id"
     assert filtros[0]["values"] == [7]
     assert [f["attribute_key"] for f in filtros[1:]] == ["created_at", "created_at"]
+    assert filtros[1]["values"] == ["2025-11-09"]
+    assert filtros[2]["values"] == ["2025-11-18"]
 
 
 def test_mensajes_de_conversacion_pagina_con_before():

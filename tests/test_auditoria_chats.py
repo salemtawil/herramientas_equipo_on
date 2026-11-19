@@ -264,3 +264,9 @@ def test_historial_usa_nota_efectiva(entorno, cliente, monkeypatch):
     assert "Ana Pérez" in html
     assert "3,0" in html  # (2 + 4) / 2
     assert "2025-11-10" in html or "10/11/2025" in html
+
+
+def test_fecha_lote_usa_zona_de_chatwoot(monkeypatch):
+    monkeypatch.setenv("CHATWOOT_TIMEZONE", "Asia/Tokyo")
+    epoch = 1763236800  # 2025-11-15 20:00 UTC = 2025-11-16 05:00 en Tokio
+    assert herramienta._fecha_lote(epoch) == "16/11/2025"

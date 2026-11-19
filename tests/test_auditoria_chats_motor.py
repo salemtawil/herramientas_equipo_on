@@ -308,3 +308,95 @@ def test_filas_csv():
     assert len(filas) == 1
     assert filas[0][0] == 11 and filas[0][1] == "https://c/11"
     assert "Bien hecho" in filas[0]
+
+
+# ---------------------------------------------------------------------------
+# Correcciones de la revisión final
+# ---------------------------------------------------------------------------
+
+
+class StoreConCarrera(MemoriaAuditoriaStore):
+    """Simula que otra pestaña se lleva la fila 'leido' justo antes de tomarla."""
+
+    def __init__(self):
+        super().__init__()
+        self.robar_leido = False
+
+    def tomar_siguiente(self, lote_id, estados, nuevo_estado):
+        if self.robar_leido and estados == ("leido",):
+            self.robar_leido = False
+            for chat in self.chats.values():
+                if chat.get("batch_id") == lote_id and chat.get("estado") == "leido":
+                    chat["estado"] = "procesando"
+            return None
+        return super().tomar_siguiente(lote_id, estados, nuevo_estado)
+
+
+def test_paso_no_devuelve_none_si_otra_pestana_tomo_el_leido(monkeypatch):
+    _ia_ok(monkeypatch)
+    store = StoreConCarrera()
+    lote = _crear(store, chats_por_agente=1, agentes=AGENTES[:1])
+    chatwoot = ChatwootFalso({1: [11]})
+    motor.ejecutar_paso(store, lote["id"], chatwoot, CONFIG_IA, rng=random.Random(0))  # muestreo
+    motor.ejecutar_paso(store, lote["id"], chatwoot, CONFIG_IA, rng=random.Random(0))  # lectura
+    store.robar_leido = True
+    paso = motor.ejecutar_paso(store, lote["id"], chatwoot, CONFIG_IA, rng=random.Random(0))
+    assert isinstance(paso, dict)
+    assert paso["accion"] == "espera"
+
+
+def test_muestreo_no_repite_agente_ya_muestreado_por_otra_pestana():
+    store = MemoriaAuditoriaStore()
+    lote = _crear(store, chats_por_agente=2, agentes=AGENTES[:1])
+    foto_vieja = store.obtener_lote(lote["id"])
+    chatwoot = ChatwootFalso({1: [11, 12, 13, 14, 15, 16]})
+    motor.ejecutar_paso(store, lote["id"], chatwoot, CONFIG_IA, rng=random.Random(0))
+    motor._muestrear_agente(store, foto_vieja, AGENTES[0], chatwoot, random.Random(5))
+    assert len(store.listar_chats(lote["id"])) == 2
+
+
+class ChatwootConBordes(ChatwootFalso):
+    """Página 1 solo con chats fuera del rango; página 2 con chats dentro."""
+
+    def conversaciones_de_agente(self, agente_id, since, until, page=1):
+        if page == 1:
+            return [{"id": 900 + i, "created_at": since - 3600} for i in range(3)]
+        if page == 2:
+            return [{"id": 11, "created_at": since + 60}, {"id": 12, "created_at": until + 60}]
+        return []
+
+
+def test_muestreo_filtra_rango_y_sigue_paginando(monkeypatch):
+    _ia_ok(monkeypatch)
+    store = MemoriaAuditoriaStore()
+    lote = _crear(store, chats_por_agente=5, agentes=AGENTES[:1])
+    motor.ejecutar_paso(store, lote["id"], ChatwootConBordes({}), CONFIG_IA, rng=random.Random(0))
+    assert [c["conversation_id"] for c in store.listar_chats(lote["id"])] == [11]
+
+
+def test_control_no_se_duplica_tras_reintentar(monkeypatch):
+    _ia_ok(monkeypatch)
+    store = MemoriaAuditoriaStore()
+    lote = _crear(store, chats_por_agente=5)
+    chatwoot = ChatwootFalso({1: list(range(100, 110)), 2: list(range(200, 210))})
+    _correr(store, lote["id"], chatwoot, rng=random.Random(1))
+    sin_control = [c for c in store.listar_chats(lote["id"]) if c.get("motivo_revision") != "control"]
+    store.actualizar_chat(sin_control[0]["id"], {"estado": "pendiente", "intentos": 0})
+    store.actualizar_lote(lote["id"], {"estado": "auditando"})
+    _correr(store, lote["id"], chatwoot, rng=random.Random(2))
+    control = [c for c in store.listar_chats(lote["id"]) if c.get("motivo_revision") == "control"]
+    assert len(control) == 1
+
+
+def test_filas_csv_neutraliza_formulas():
+    chats = [
+        {"conversation_id": 11, "agente_nombre": "=cmd", "estado": "revisado", "comentario_revisor": "+SUMA(A1)",
+         "ia_resultado": {"resumen": "@HYPERLINK(\"x\")", "criterios": {}}, "revisor": "-1"},
+    ]
+    _, filas = motor.filas_csv({}, chats)
+    fila = filas[0]
+    assert "'=cmd" in fila
+    assert "'+SUMA(A1)" in fila
+    assert "'@HYPERLINK(\"x\")" in fila
+    assert "'-1" in fila
+    assert fila[0] == 11
