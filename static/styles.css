@@ -4799,7 +4799,7 @@ th {
   display: inline-flex;
 }
 
-.ac-config__valor {
+.metric .ac-config__valor {
   font-size: 1rem;
   overflow-wrap: anywhere;
 }
@@ -4863,6 +4863,9 @@ th {
   border-radius: var(--radius-md);
   background: var(--surface);
   overflow-wrap: anywhere;
+}
+
+.ac-mensaje__texto {
   white-space: pre-wrap;
 }
 

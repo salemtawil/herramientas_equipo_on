@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}Historial · Auditoría de chats{% endblock %}
+{% block page_name %}Auditoría de chats{% endblock %}
+
+{% block content %}
+<div class="page-stack auditoria-chats-page">
+  <section class="card page-hero">
+    <div class="page-section-title">
+      <div>
+        <p class="small"><a href="{{ url_for('auditoria_chats.index') }}">← Auditoría de chats</a></p>
+        <h1>Historial semanal</h1>
+        <p>Nota efectiva media por agente en las últimas {{ semanas_historial }} semanas (la del revisor si existe, si no la de la IA) y porcentaje de chats revisados.</p>
+      </div>
+      <span class="hero-badge hero-badge-soft">{{ agentes|length }} agentes</span>
+    </div>
+    {% if aviso %}<div class="warning top-space">{{ aviso }}</div>{% endif %}
+  </section>
+
+  <section class="card" aria-labelledby="ac-historial-titulo">
+    <div class="page-section-title">
+      <div><h2 id="ac-historial-titulo">Nota por semana</h2></div>
+    </div>
+    {% if agentes %}
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Agente</th>
+              {% for semana in semanas %}<th>Semana del {{ semana }}</th>{% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for nombre, por_semana in agentes %}
+              <tr>
+                <td>{{ nombre }}</td>
+                {% for semana in semanas %}
+                  {% set celda = por_semana.get(semana) %}
+                  <td>
+                    {% if celda %}
+                      <strong>{{ celda.nota_efectiva_media|decimal_es }}</strong>
+                      <span class="small">· {{ celda.chats }} chats · {{ celda.pct_revisado|decimal_es(0) }} % rev.</span>
+                    {% else %}—{% endif %}
+                  </td>
+                {% endfor %}
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="small">Todavía no hay chats auditados en este periodo.</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

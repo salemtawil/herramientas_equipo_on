@@ -157,3 +157,110 @@ def test_no_expone_clave_ia(entorno, cliente):
     html += cliente.get(f"/auditoria-chats/lote/{lote_id}").get_data(as_text=True)
     html += cliente.post(f"/auditoria-chats/lote/{lote_id}/paso", headers={"Accept": "application/json"}).get_data(as_text=True)
     assert "clave-secreta-prueba" not in html
+
+
+# ---------------------------------------------------------------------------
+# Revisión humana, historial, CSV y borrado
+# ---------------------------------------------------------------------------
+
+
+def _lote_procesado(cliente, store):
+    _crear_lote(cliente)
+    lote_id = store.listar_lotes()[0]["id"]
+    for _ in range(30):
+        datos = cliente.post(f"/auditoria-chats/lote/{lote_id}/paso", headers={"Accept": "application/json"}).get_json()
+        if datos["accion"] == "fin":
+            break
+    return lote_id, store.listar_chats(lote_id)
+
+
+def test_ver_chat_muestra_resultado_ia_y_formulario(entorno, cliente):
+    _, chats = _lote_procesado(cliente, entorno)
+    html = cliente.get(f"/auditoria-chats/chat/{chats[0]['id']}").get_data(as_text=True)
+    assert "Atención correcta." in html
+    assert "Hola, necesito ayuda" in html
+    assert "Buenos días, cuéntame" in html
+    assert 'name="nota_final"' in html and 'name="revisor"' in html
+    assert f"https://chat.test/app/accounts/2/conversations/{chats[0]['conversation_id']}" in html
+
+
+def test_lote_muestra_cola_de_revision(entorno, cliente):
+    lote_id, chats = _lote_procesado(cliente, entorno)
+    control = [c for c in chats if c.get("motivo_revision") == "control"]
+    html = cliente.get(f"/auditoria-chats/lote/{lote_id}").get_data(as_text=True)
+    assert len(control) == 1
+    assert f"/auditoria-chats/chat/{control[0]['id']}" in html
+
+
+def test_revisar_guarda_y_redirige_al_siguiente(entorno, cliente):
+    lote_id, chats = _lote_procesado(cliente, entorno)
+    for chat in chats[:2]:
+        entorno.actualizar_chat(chat["id"], {"por_revisar": True, "motivo_revision": "marcado"})
+    respuesta = cliente.post(
+        f"/auditoria-chats/chat/{chats[0]['id']}",
+        data={"revisor": "Sara", "nota_final": "2", "satisfaccion_final": "insatisfecho", "comentario_revisor": "No resolvió"},
+    )
+    revisado = entorno.obtener_chat(chats[0]["id"])
+    assert revisado["estado"] == "revisado"
+    assert revisado["nota_final"] == 2
+    assert revisado["revisor"] == "Sara"
+    assert revisado["revisado_at"]
+    assert respuesta.status_code == 302
+    assert "/auditoria-chats/chat/" in respuesta.headers["Location"]
+    assert chats[0]["id"] not in respuesta.headers["Location"]
+
+
+def test_revisar_rechaza_nota_fuera_de_rango(entorno, cliente):
+    _, chats = _lote_procesado(cliente, entorno)
+    cliente.post(f"/auditoria-chats/chat/{chats[0]['id']}", data={"revisor": "Sara", "nota_final": "9", "satisfaccion_final": "satisfecho"})
+    assert entorno.obtener_chat(chats[0]["id"])["estado"] == "auditado"
+
+
+def test_reintentar_solo_en_error(entorno, cliente):
+    lote_id, chats = _lote_procesado(cliente, entorno)
+    cliente.post(f"/auditoria-chats/chat/{chats[0]['id']}/reintentar")
+    assert entorno.obtener_chat(chats[0]["id"])["estado"] == "auditado"
+
+    entorno.actualizar_chat(chats[1]["id"], {"estado": "error", "ia_error": "x", "intentos": 2})
+    cliente.post(f"/auditoria-chats/chat/{chats[1]['id']}/reintentar")
+    chat = entorno.obtener_chat(chats[1]["id"])
+    assert chat["estado"] == "pendiente" and chat["intentos"] == 0 and chat["ia_error"] is None
+    assert entorno.obtener_lote(lote_id)["estado"] == "auditando"
+
+
+def test_csv_columnas_y_bom(entorno, cliente):
+    lote_id, chats = _lote_procesado(cliente, entorno)
+    respuesta = cliente.get(f"/auditoria-chats/lote/{lote_id}/csv")
+    contenido = respuesta.get_data()
+    assert respuesta.status_code == 200
+    assert contenido.startswith("\ufeff".encode("utf-8"))
+    texto = contenido.decode("utf-8-sig")
+    assert texto.splitlines()[0].startswith("Conversación,Enlace,Agente")
+    assert len(texto.strip().splitlines()) == 1 + len(chats)
+    assert "attachment" in respuesta.headers["Content-Disposition"]
+    assert "auditoria_chats_" in respuesta.headers["Content-Disposition"]
+
+
+def test_borrar_lote_libera_conversaciones(entorno, cliente):
+    lote_id, chats = _lote_procesado(cliente, entorno)
+    respuesta = cliente.post(f"/auditoria-chats/lote/{lote_id}/borrar")
+    assert respuesta.status_code == 302
+    assert entorno.obtener_lote(lote_id) is None
+    assert entorno.conversaciones_auditadas([c["conversation_id"] for c in chats]) == set()
+
+
+def test_borrar_tiene_confirmacion(entorno, cliente):
+    lote_id, _ = _lote_procesado(cliente, entorno)
+    html = cliente.get(f"/auditoria-chats/lote/{lote_id}").get_data(as_text=True)
+    assert re.search(rf'action="/auditoria-chats/lote/{lote_id}/borrar"[^>]*data-confirm=', html)
+
+
+def test_historial_usa_nota_efectiva(entorno, cliente, monkeypatch):
+    lote_id, chats = _lote_procesado(cliente, entorno)
+    monkeypatch.setattr(herramienta, "_desde_historial", lambda: "2000-01-01T00:00:00+00:00")
+    ana = [c for c in chats if c["agente_id"] == 1]
+    entorno.actualizar_chat(ana[0]["id"], {"estado": "revisado", "nota_final": 2})
+    html = cliente.get("/auditoria-chats/historial").get_data(as_text=True)
+    assert "Ana Pérez" in html
+    assert "3,0" in html  # (2 + 4) / 2
+    assert "2025-11-10" in html or "10/11/2025" in html

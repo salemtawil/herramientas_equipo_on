@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+
+{% block title %}Revisar chat #{{ chat.conversation_id }} · Auditoría de chats{% endblock %}
+{% block page_name %}Auditoría de chats{% endblock %}
+
+{% set etiquetas_satisfaccion = {"satisfecho": "Satisfecho", "neutral": "Neutral", "insatisfecho": "Insatisfecho", "no_se_puede_saber": "No se puede saber"} %}
+{% set etiquetas_resuelto = {"si": "Sí", "no": "No", "parcial": "Parcial"} %}
+
+{% block content %}
+<div class="page-stack auditoria-chats-page">
+  <section class="card page-hero">
+    <div class="page-section-title">
+      <div>
+        <p class="small"><a href="{{ url_for('auditoria_chats.ver_lote', lote_id=lote.id) }}">← {{ lote.etiqueta }}</a></p>
+        <h1>Chat #{{ chat.conversation_id }} · {{ chat.agente_nombre }}</h1>
+        <p>{{ chat.turno or "Sin turno" }}{% if chat.motivo_revision == "control" %} · Muestra de control{% elif chat.motivo_revision == "marcado" %} · Marcado por la IA{% endif %}</p>
+      </div>
+      {% if url_chatwoot %}<a class="btn secondary" href="{{ url_chatwoot }}" target="_blank" rel="noopener noreferrer">Abrir en Chatwoot</a>{% endif %}
+    </div>
+    {% with mensajes_flash = get_flashed_messages(with_categories=true) %}
+      {% for categoria, texto in mensajes_flash %}
+        <div class="{% if categoria == 'success' %}success{% else %}warning{% endif %} top-space">{{ texto }}</div>
+      {% endfor %}
+    {% endwith %}
+  </section>
+
+  <div class="ac-revision-grid">
+    <section class="card" aria-labelledby="ac-chat-titulo">
+      <div class="page-section-title">
+        <div><h2 id="ac-chat-titulo">Conversación</h2></div>
+        <span class="hero-badge hero-badge-soft">{{ mensajes|length }} mensajes</span>
+      </div>
+      {% if error_chatwoot %}<div class="warning">{{ error_chatwoot }}</div>{% endif %}
+      {% if mensajes %}
+        <div class="ac-transcripcion">
+          {% for m in mensajes %}
+            <div class="ac-mensaje{% if m.es_agente %} ac-mensaje--agente{% endif %}">
+              <span class="ac-mensaje__autor">{{ m.autor }} · {{ m.hora }}</span>
+              <span class="ac-mensaje__texto">{{ m.texto }}</span>
+            </div>
+          {% endfor %}
+        </div>
+      {% elif not error_chatwoot %}
+        <p class="small">La conversación no tiene mensajes visibles.</p>
+      {% endif %}
+    </section>
+
+    <div class="page-stack">
+      <section class="card" aria-labelledby="ac-ia-titulo">
+        <div class="page-section-title">
+          <div><h2 id="ac-ia-titulo">Auditoría de la IA</h2></div>
+          {% if chat.ia_nota %}<span class="hero-badge">Nota {{ chat.ia_nota }}/5</span>{% endif %}
+        </div>
+        {% if chat.estado == "error" %}
+          <div class="warning">La IA no pudo auditar este chat: {{ chat.ia_error }}</div>
+        {% endif %}
+        {% if resultado %}
+          <p>{{ resultado.resumen }}</p>
+          <div class="grid top-space">
+            <div class="metric"><div class="label">Satisfacción</div><div class="value ac-config__valor">{{ etiquetas_satisfaccion.get(resultado.satisfaccion_cliente, resultado.satisfaccion_cliente) }}</div></div>
+            <div class="metric"><div class="label">Resuelto</div><div class="value ac-config__valor">{{ etiquetas_resuelto.get(resultado.resuelto, resultado.resuelto) }}</div></div>
+            <div class="metric"><div class="label">Confianza</div><div class="value ac-config__valor">{{ resultado.confianza|capitalize }}</div></div>
+          </div>
+          <div class="table-wrap top-space">
+            <table>
+              <thead><tr><th>Criterio</th><th>Nota</th></tr></thead>
+              <tbody>
+                {% for clave, etiqueta in criterios %}
+                  <tr><td>{{ etiqueta }}</td><td>{{ (resultado.criterios or {}).get(clave, "—") }}</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% if resultado.fortalezas %}<h3 class="top-space">Fortalezas</h3><ul>{% for t in resultado.fortalezas %}<li>{{ t }}</li>{% endfor %}</ul>{% endif %}
+          {% if resultado.mejoras %}<h3 class="top-space">Mejoras</h3><ul>{% for t in resultado.mejoras %}<li>{{ t }}</li>{% endfor %}</ul>{% endif %}
+          {% if resultado.evidencias %}<h3 class="top-space">Evidencias</h3><ul>{% for t in resultado.evidencias %}<li>«{{ t }}»</li>{% endfor %}</ul>{% endif %}
+        {% endif %}
+      </section>
+
+      <section class="card" aria-labelledby="ac-revision-titulo">
+        <div class="page-section-title">
+          <div>
+            <h2 id="ac-revision-titulo">Revisión humana</h2>
+            {% if chat.estado == "revisado" %}<p class="small">Revisado por {{ chat.revisor }}. Puedes corregirlo.</p>{% endif %}
+          </div>
+        </div>
+        {% if chat.estado in ("auditado", "error", "revisado") %}
+          <form method="post" action="{{ url_for('auditoria_chats.revisar', chat_id=chat.id) }}">
+            <label class="small" for="ac-revisor">Tu nombre</label>
+            <input type="text" id="ac-revisor" name="revisor" maxlength="80" value="{{ chat.revisor or '' }}" required autocomplete="name" data-ac-revisor>
+            <div class="row-2 top-space">
+              <div>
+                <label class="small" for="ac-nota">Nota final (1–5)</label>
+                <select id="ac-nota" name="nota_final" required>
+                  {% set nota_actual = chat.nota_final or chat.ia_nota %}
+                  {% for n in range(1, 6) %}<option value="{{ n }}"{% if n == nota_actual %} selected{% endif %}>{{ n }}</option>{% endfor %}
+                </select>
+              </div>
+              <div>
+                <label class="small" for="ac-satisfaccion">Satisfacción del cliente</label>
+                <select id="ac-satisfaccion" name="satisfaccion_final" required>
+                  {% set satisfaccion_actual = chat.satisfaccion_final or chat.ia_satisfaccion %}
+                  {% for s in satisfacciones %}<option value="{{ s }}"{% if s == satisfaccion_actual %} selected{% endif %}>{{ etiquetas_satisfaccion.get(s, s) }}</option>{% endfor %}
+                </select>
+              </div>
+            </div>
+            <label class="small top-space" for="ac-comentario">Comentario</label>
+            <textarea id="ac-comentario" name="comentario_revisor" rows="4" maxlength="2000">{{ chat.comentario_revisor or '' }}</textarea>
+            <div class="acciones-barra top-space">
+              <button type="submit">Guardar revisión</button>
+              {% if siguiente %}<a class="btn secondary" href="{{ url_for('auditoria_chats.ver_chat', chat_id=siguiente.id) }}">Saltar al siguiente</a>{% endif %}
+            </div>
+          </form>
+        {% else %}
+          <p class="small">Este chat todavía no se ha auditado.</p>
+        {% endif %}
+      </section>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='auditoria_chats.js', v=asset_version('auditoria_chats.js')) }}" defer></script>
+{% endblock %}

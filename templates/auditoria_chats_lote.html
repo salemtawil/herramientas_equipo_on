@@ -77,6 +77,63 @@
     {% endif %}
   </section>
 
+  <section class="card" aria-labelledby="ac-cola-titulo">
+    <div class="page-section-title">
+      <div>
+        <h2 id="ac-cola-titulo">Cola de revisión</h2>
+        <p class="small">Primero los marcados por la IA (nota ≤ 3, cliente insatisfecho, confianza baja o error) y luego la muestra de control del 10 %.</p>
+      </div>
+      <span class="hero-badge hero-badge-soft">{{ cola|length }}</span>
+    </div>
+    {% if cola %}
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Chat</th><th>Agente</th><th>Motivo</th><th>Nota IA</th><th>Satisfacción IA</th><th>Resumen</th><th></th></tr>
+          </thead>
+          <tbody>
+            {% for chat in cola %}
+              <tr>
+                <td>#{{ chat.conversation_id }}</td>
+                <td>{{ chat.agente_nombre }}</td>
+                <td>{{ "Control" if chat.motivo_revision == "control" else ("Error de IA" if chat.estado == "error" else "Marcado") }}</td>
+                <td>{{ chat.ia_nota or "—" }}</td>
+                <td>{{ (chat.ia_satisfaccion or "—")|replace("_", " ") }}</td>
+                <td>{{ (chat.ia_resultado or {}).get("resumen", chat.ia_error or "") }}</td>
+                <td><a href="{{ url_for('auditoria_chats.ver_chat', chat_id=chat.id) }}">Revisar</a></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="small">No hay chats pendientes de revisión.</p>
+    {% endif %}
+
+    {% if errores %}
+      <h3 class="top-space">Chats con error de IA</h3>
+      <div class="acciones-barra">
+        {% for chat in errores %}
+          <form method="post" action="{{ url_for('auditoria_chats.reintentar', chat_id=chat.id) }}">
+            <button type="submit" class="btn secondary">Reintentar #{{ chat.conversation_id }}</button>
+          </form>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </section>
+
+  <section class="card" aria-labelledby="ac-acciones-titulo">
+    <div class="page-section-title">
+      <div><h2 id="ac-acciones-titulo">Exportar y gestionar</h2></div>
+    </div>
+    <div class="acciones-barra">
+      <a class="btn secondary" href="{{ url_for('auditoria_chats.exportar_csv', lote_id=lote.id) }}">Descargar CSV</a>
+      <form method="post" action="{{ url_for('auditoria_chats.borrar_lote', lote_id=lote.id) }}" data-confirm="Se borrará el lote y todas sus auditorías y revisiones. Sus chats podrán volver a elegirse en otro lote. No se puede deshacer." data-confirm-accept="Borrar lote">
+        <button type="submit" class="btn danger">Borrar lote</button>
+      </form>
+    </div>
+  </section>
+
 </div>
 {% endblock %}
 

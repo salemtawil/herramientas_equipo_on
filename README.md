@@ -215,6 +215,34 @@ OLLAMA_BASE_URL=http://127.0.0.1:11434
 OLLAMA_WEEKLY_REPORT_MODEL=qwen2.5:7b
 ```
 
+## Auditoría de chats
+
+`/auditoria-chats/` toma chats al azar de Chatwoot por agente y rango de fechas, los audita con IA según una pauta fija de 7 criterios (saludo, comprensión, exactitud, resolución, tono, tiempos y cierre) y deja la revisión final a una persona. Los resultados se guardan en Supabase para ver el historial semanal por agente.
+
+Puesta en marcha:
+
+1. Ejecuta `supabase_chat_audits.sql` en el editor SQL de Supabase (crea `chat_audit_batches` y `chat_audits`).
+2. Crea una API key en [console.groq.com](https://console.groq.com) y, en *Data Controls*, activa **Zero Data Retention** para que Groq no conserve el texto de los chats.
+3. Configura en `.env` y en Vercel:
+
+```env
+AUDITORIA_CHATS_AI_API_KEY=tu_api_key_de_groq
+# Opcionales (estos son los valores por defecto):
+AUDITORIA_CHATS_AI_BASE_URL=https://api.groq.com/openai/v1
+AUDITORIA_CHATS_AI_MODEL=openai/gpt-oss-120b
+```
+
+El conector usa la API compatible con OpenAI, así que puedes cambiar de proveedor solo con estas variables: OpenRouter (`https://openrouter.ai/api/v1`), Ollama local (`http://127.0.0.1:11434/v1`), Gemini (`https://generativelanguage.googleapis.com/v1beta/openai`) u OpenAI (`https://api.openai.com/v1`).
+
+Cómo funciona:
+
+- Cada lote se procesa **un paso por petición** (elegir los chats de un agente, leer un chat o auditar un chat), para no superar el tiempo máximo de Vercel. El botón «Procesar lote» repite los pasos; sin JavaScript, «Procesar siguiente» avanza uno por clic. Se puede pausar y retomar.
+- Antes de enviar un chat a la IA se ocultan correos, teléfonos y números largos. La transcripción solo se guarda mientras se procesa y se borra al terminar; para revisar se vuelve a leer en vivo desde Chatwoot.
+- Se marcan para revisión humana los chats con nota ≤ 3, cliente insatisfecho, confianza baja o error de IA, y además un 10 % al azar del resto como control.
+- Con el plan gratuito de Groq (unos 200.000 tokens al día) caben unos 60 chats diarios. Si se agota el cupo, el lote queda en «Límite diario de la IA alcanzado; retoma mañana». Conviene crear lotes por turno o por grupos de agentes.
+- Un chat ya auditado no vuelve a elegirse. Borrar un lote libera sus chats.
+- El filtro usa el agente asignado al final de la conversación: un chat transferido cuenta para quien lo tiene al cierre.
+
 ## Limitaciones conocidas
 
 - `usuarios_a_sheets` y `auditoria_salientes` guardan estado temporal firmado. Si el estado es pequeño, viaja inline; si crece, se apoya en almacenamiento temporal del runtime.

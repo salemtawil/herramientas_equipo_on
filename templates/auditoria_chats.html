@@ -16,16 +16,16 @@
 
     <div class="grid top-space ac-config">
       <div class="metric">
-        <span class="label">Chatwoot</span>
-        <span class="value ac-config__valor">{{ "Conectado" if not error_chatwoot else "Sin conexión" }}</span>
+        <div class="label">Chatwoot</div>
+        <div class="value ac-config__valor">{{ "Conectado" if not error_chatwoot else "Sin conexión" }}</div>
       </div>
       <div class="metric">
-        <span class="label">IA</span>
-        <span class="value ac-config__valor">{{ ia_modelo if ia_activa else "Sin clave" }}</span>
+        <div class="label">IA</div>
+        <div class="value ac-config__valor">{{ ia_modelo if ia_activa else "Sin clave" }}</div>
       </div>
       <div class="metric">
-        <span class="label">Supabase</span>
-        <span class="value ac-config__valor">{{ "Listo" if not error_store else "Sin configurar" }}</span>
+        <div class="label">Supabase</div>
+        <div class="value ac-config__valor">{{ "Listo" if not error_store else "Sin configurar" }}</div>
       </div>
     </div>
 
@@ -50,6 +50,7 @@
         <h2 id="ac-nuevo-titulo">Nuevo lote</h2>
         <p class="small">Con el plan gratuito de Groq caben unos 60 chats por día: audita por turno o por grupos de agentes.</p>
       </div>
+      <a class="btn secondary" href="{{ url_for('auditoria_chats.historial') }}">Historial semanal</a>
     </div>
 
     <form method="post" action="{{ url_for('auditoria_chats.crear') }}" data-processing-message="Creando el lote...">

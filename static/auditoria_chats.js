@@ -118,8 +118,27 @@
     });
   }
 
+  function iniciarRevisor() {
+    const campo = document.querySelector("[data-ac-revisor]");
+    if (!campo) return;
+    const clave = "auditoria-chats-revisor";
+    try {
+      if (!campo.value) campo.value = window.localStorage.getItem(clave) || "";
+    } catch (error) {
+      /* almacenamiento no disponible */
+    }
+    campo.form.addEventListener("submit", () => {
+      try {
+        window.localStorage.setItem(clave, campo.value.trim());
+      } catch (error) {
+        /* almacenamiento no disponible */
+      }
+    });
+  }
+
   document.addEventListener("DOMContentLoaded", () => {
     iniciarAlcance();
     iniciarProcesamiento();
+    iniciarRevisor();
   });
 })();
