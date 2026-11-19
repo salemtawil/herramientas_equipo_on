@@ -443,6 +443,76 @@ class ChatwootClient:
                 f"URL: {url}. Content-Type: {content_type}."
             ) from exc
 
+    def post(self, path, json, params=None):
+        url = f"{self.base_url}{path}"
+        respuesta = requests.post(url, headers=self.headers, json=json, params=params or {}, timeout=self.timeout)
+        if respuesta.status_code >= 400:
+            self._raise_http_error(respuesta, url)
+        try:
+            return respuesta.json()
+        except ValueError as exc:
+            raise RuntimeError(f"Chatwoot no devolvio JSON. URL: {url}.") from exc
+
+    def conversaciones_de_agente(self, agente_id, since, until, page=1):
+        tz = _obtener_timezone(_timezone())
+        desde = datetime.fromtimestamp(int(since), tz).date()
+        hasta = datetime.fromtimestamp(int(until), tz).date() + timedelta(days=1)
+        payload = {
+            "payload": [
+                {
+                    "attribute_key": "assignee_id",
+                    "filter_operator": "equal_to",
+                    "values": [int(agente_id)],
+                    "query_operator": "and",
+                },
+                {
+                    "attribute_key": "created_at",
+                    "filter_operator": "is_greater_than",
+                    "values": [desde.isoformat()],
+                    "query_operator": "and",
+                },
+                {
+                    "attribute_key": "created_at",
+                    "filter_operator": "is_less_than",
+                    "values": [hasta.isoformat()],
+                },
+            ]
+        }
+        respuesta = self.post(
+            f"/api/v1/accounts/{self.account_id}/conversations/filter",
+            json=payload,
+            params={"page": int(page)},
+        )
+        conversaciones = _normalizar_lista_respuesta(respuesta)
+        if not conversaciones and isinstance(respuesta, dict) and isinstance(respuesta.get("data"), dict):
+            conversaciones = _normalizar_lista_respuesta(respuesta["data"])
+        return [
+            conversacion
+            for conversacion in conversaciones
+            if int(since) <= int(conversacion.get("created_at") or 0) <= int(until)
+        ]
+
+    def mensajes_de_conversacion(self, conversation_id, max_paginas=5):
+        mensajes = {}
+        params = {}
+        for _ in range(max_paginas):
+            pagina = _normalizar_lista_respuesta(
+                self.get(
+                    f"/api/v1/accounts/{self.account_id}/conversations/{int(conversation_id)}/messages",
+                    params=dict(params),
+                )
+            )
+            if not pagina:
+                break
+            for mensaje in pagina:
+                if mensaje.get("id") is not None:
+                    mensajes[mensaje["id"]] = mensaje
+            params = {"before": min(m["id"] for m in pagina if m.get("id") is not None)}
+        return sorted(mensajes.values(), key=lambda m: (m.get("created_at") or 0, m.get("id") or 0))
+
+    def url_conversacion(self, conversation_id):
+        return f"{self.base_url}/app/accounts/{self.account_id}/conversations/{int(conversation_id)}"
+
     def _raise_http_error(self, respuesta, url):
         detalle = respuesta.text[:300]
         content_type = respuesta.headers.get("content-type", "")

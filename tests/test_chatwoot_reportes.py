@@ -316,3 +316,74 @@ class ChatwootReportesTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# ---------------------------------------------------------------------------
+# Auditoría de chats: conversaciones y mensajes
+# ---------------------------------------------------------------------------
+
+
+class _RespuestaJson:
+    def __init__(self, data, status_code=200):
+        self._data = data
+        self.status_code = status_code
+        self.text = ""
+        self.headers = {"content-type": "application/json"}
+
+    def json(self):
+        return self._data
+
+
+def _cliente_prueba():
+    return ChatwootClient(base_url="https://chat.test", account_id="2", api_token="token")
+
+
+def test_conversaciones_de_agente_usa_filter_y_filtra_rango():
+    llamadas = []
+    since, until = 1762747200, 1763351999  # 2025-11-10 00:00 a 2025-11-16 23:59 (UTC-4)
+    respuesta = {
+        "meta": {"all_count": 3},
+        "payload": [
+            {"id": 11, "created_at": since + 100},
+            {"id": 12, "created_at": until + 10},
+            {"id": 13, "created_at": until - 100},
+        ],
+    }
+
+    def post_falso(url, headers=None, json=None, params=None, timeout=None):
+        llamadas.append({"url": url, "json": json, "params": params})
+        return _RespuestaJson(respuesta)
+
+    with patch("utils.chatwoot_reportes.requests.post", post_falso):
+        conversaciones = _cliente_prueba().conversaciones_de_agente(7, since, until, page=2)
+
+    assert [c["id"] for c in conversaciones] == [11, 13]
+    assert llamadas[0]["url"] == "https://chat.test/api/v1/accounts/2/conversations/filter"
+    assert llamadas[0]["params"] == {"page": 2}
+    filtros = llamadas[0]["json"]["payload"]
+    assert filtros[0]["attribute_key"] == "assignee_id"
+    assert filtros[0]["values"] == [7]
+    assert [f["attribute_key"] for f in filtros[1:]] == ["created_at", "created_at"]
+
+
+def test_mensajes_de_conversacion_pagina_con_before():
+    paginas = [
+        {"payload": [{"id": 30, "created_at": 3}, {"id": 31, "created_at": 4}]},
+        {"payload": [{"id": 10, "created_at": 1}, {"id": 11, "created_at": 2}]},
+        {"payload": []},
+    ]
+    llamadas = []
+
+    def get_falso(url, headers=None, params=None, timeout=None):
+        llamadas.append(dict(params or {}))
+        return _RespuestaJson(paginas[len(llamadas) - 1])
+
+    with patch("utils.chatwoot_reportes.requests.get", get_falso):
+        mensajes = _cliente_prueba().mensajes_de_conversacion(99)
+
+    assert [m["id"] for m in mensajes] == [10, 11, 30, 31]
+    assert llamadas == [{}, {"before": 30}, {"before": 10}]
+
+
+def test_url_conversacion():
+    assert _cliente_prueba().url_conversacion(5) == "https://chat.test/app/accounts/2/conversations/5"
