@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+
+{% block title %}Auditoría de chats{% endblock %}
+{% block page_name %}Auditoría de chats{% endblock %}
+
+{% block content %}
+<div class="page-stack auditoria-chats-page">
+  <section class="card page-hero">
+    <div class="page-section-title">
+      <div>
+        <h1>Auditoría de chats</h1>
+        <p>Toma chats al azar de cada agente en un rango de fechas, los audita con IA según la pauta y deja la revisión final a una persona.</p>
+      </div>
+      <span class="hero-badge">Calidad</span>
+    </div>
+
+    <div class="grid top-space ac-config">
+      <div class="metric">
+        <span class="label">Chatwoot</span>
+        <span class="value ac-config__valor">{{ "Conectado" if not error_chatwoot else "Sin conexión" }}</span>
+      </div>
+      <div class="metric">
+        <span class="label">IA</span>
+        <span class="value ac-config__valor">{{ ia_modelo if ia_activa else "Sin clave" }}</span>
+      </div>
+      <div class="metric">
+        <span class="label">Supabase</span>
+        <span class="value ac-config__valor">{{ "Listo" if not error_store else "Sin configurar" }}</span>
+      </div>
+    </div>
+
+    {% with mensajes = get_flashed_messages(with_categories=true) %}
+      {% for categoria, texto in mensajes %}
+        <div class="{% if categoria == 'success' %}success{% else %}warning{% endif %} top-space">{{ texto }}</div>
+      {% endfor %}
+    {% endwith %}
+    {% if error_store %}<div class="warning top-space">{{ error_store }} Ejecuta también <code>supabase_chat_audits.sql</code> en Supabase.</div>{% endif %}
+    {% if error_chatwoot %}<div class="warning top-space">{{ error_chatwoot }}</div>{% endif %}
+    {% if not ia_activa %}<div class="warning top-space">Sin AUDITORIA_CHATS_AI_API_KEY los chats se eligen y se leen, pero no se auditan.</div>{% endif %}
+    {% for aviso in avisos %}<div class="warning top-space">{{ aviso }}</div>{% endfor %}
+
+    <div class="contextual-note top-space">
+      <p>El texto de los chats se envía al proveedor de IA configurado; correos, teléfonos y números largos se ocultan antes de enviarlo. La transcripción no se guarda: solo el resultado de la auditoría.</p>
+    </div>
+  </section>
+
+  <section class="card" aria-labelledby="ac-nuevo-titulo">
+    <div class="page-section-title">
+      <div>
+        <h2 id="ac-nuevo-titulo">Nuevo lote</h2>
+        <p class="small">Con el plan gratuito de Groq caben unos 60 chats por día: audita por turno o por grupos de agentes.</p>
+      </div>
+    </div>
+
+    <form method="post" action="{{ url_for('auditoria_chats.crear') }}" data-processing-message="Creando el lote...">
+      <div class="row-2">
+        <div>
+          <label class="small" for="ac-fecha-inicio">Desde</label>
+          <input type="date" id="ac-fecha-inicio" name="fecha_inicio" value="{{ fecha_inicio }}" required>
+        </div>
+        <div>
+          <label class="small" for="ac-fecha-fin">Hasta</label>
+          <input type="date" id="ac-fecha-fin" name="fecha_fin" value="{{ fecha_fin }}" required>
+        </div>
+      </div>
+
+      <div class="row-2 top-space">
+        <div>
+          <label class="small" for="ac-alcance">Alcance</label>
+          <select id="ac-alcance" name="alcance" data-ac-alcance>
+            <option value="turno">Un turno</option>
+            <option value="agentes">Agentes elegidos</option>
+            <option value="todos">Todos los agentes</option>
+          </select>
+        </div>
+        <div>
+          <label class="small" for="ac-chats">Chats por agente (máx. {{ chats_por_agente_max }})</label>
+          <input type="number" id="ac-chats" name="chats_por_agente" min="1" max="{{ chats_por_agente_max }}" value="{{ chats_por_agente }}" required>
+        </div>
+      </div>
+
+      <div class="top-space" data-ac-bloque="turno">
+        <label class="small" for="ac-turno">Turno</label>
+        <select id="ac-turno" name="turno">
+          {% for turno in turnos %}<option value="{{ turno }}">{{ turno }}</option>{% endfor %}
+        </select>
+      </div>
+
+      <fieldset class="top-space ac-agentes" data-ac-bloque="agentes">
+        <legend class="small">Agentes ({{ agentes|length }})</legend>
+        {% if agentes %}
+          <div class="ac-agentes__lista">
+            {% for agente in agentes %}
+              <label class="ac-agente">
+                <input type="checkbox" name="agentes" value="{{ agente.id }}">
+                <span>{{ agente.nombre }}</span>
+                <span class="small">{{ agente.turno or "Sin turno" }}</span>
+              </label>
+            {% endfor %}
+          </div>
+        {% else %}
+          <p class="small">No hay agentes disponibles.</p>
+        {% endif %}
+      </fieldset>
+
+      <div class="top-space acciones-barra">
+        <button type="submit" {% if not puede_crear %}disabled{% endif %}>Crear lote</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="card" aria-labelledby="ac-lotes-titulo">
+    <div class="page-section-title">
+      <div>
+        <h2 id="ac-lotes-titulo">Lotes recientes</h2>
+      </div>
+      <span class="hero-badge hero-badge-soft">{{ lotes|length }}</span>
+    </div>
+    {% if lotes %}
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Lote</th><th>Rango</th><th>Agentes</th><th>Estado</th><th></th></tr>
+          </thead>
+          <tbody>
+            {% for lote in lotes %}
+              <tr>
+                <td>{{ lote.etiqueta }}</td>
+                <td>{{ fecha_lote(lote.since) }} – {{ fecha_lote(lote.until) }}</td>
+                <td>{{ (lote.agentes or [])|length }} × {{ lote.chats_por_agente }}</td>
+                <td>{{ estados_lote.get(lote.estado, lote.estado) }}</td>
+                <td><a href="{{ url_for('auditoria_chats.ver_lote', lote_id=lote.id) }}">Abrir</a></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="small">Todavía no hay lotes.</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='auditoria_chats.js', v=asset_version('auditoria_chats.js')) }}" defer></script>
+{% endblock %}

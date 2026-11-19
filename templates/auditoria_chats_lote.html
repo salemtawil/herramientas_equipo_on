@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block title %}Lote · Auditoría de chats{% endblock %}
+{% block page_name %}Auditoría de chats{% endblock %}
+
+{% block content %}
+<div class="page-stack auditoria-chats-page">
+  <section class="card page-hero">
+    <div class="page-section-title">
+      <div>
+        <p class="small"><a href="{{ url_for('auditoria_chats.index') }}">← Auditoría de chats</a></p>
+        <h1>{{ lote.etiqueta }}</h1>
+        <p>{{ fecha_lote(lote.since) }} – {{ fecha_lote(lote.until) }} · {{ (lote.agentes or [])|length }} agentes × {{ lote.chats_por_agente }} chats · Pauta v{{ lote.pauta_version }} · {{ lote.modelo }}</p>
+      </div>
+      <span class="hero-badge{% if terminado %} is-ready{% endif %}" data-ac-estado>{{ estado_texto }}</span>
+    </div>
+
+    {% with mensajes = get_flashed_messages(with_categories=true) %}
+      {% for categoria, texto in mensajes %}
+        <div class="{% if categoria == 'success' %}success{% else %}warning{% endif %} top-space">{{ texto }}</div>
+      {% endfor %}
+    {% endwith %}
+
+    <div class="ac-progreso top-space" data-ac-progreso>
+      <progress max="{{ progreso.total or 1 }}" value="{{ progreso.auditados }}" aria-label="Chats auditados">{{ porcentaje }} %</progress>
+      <p class="small" data-ac-progreso-texto>{{ progreso.auditados }} / {{ progreso.total }} auditados · {{ progreso.pendientes }} pendientes · {{ progreso.errores }} errores</p>
+      <p class="small" data-ac-mensaje aria-live="polite"></p>
+    </div>
+
+    {% if not terminado %}
+      <div class="acciones-barra top-space">
+        <form method="post" action="{{ url_for('auditoria_chats.paso', lote_id=lote.id) }}" data-ac-paso-form data-allow-resubmit>
+          <button type="submit" class="btn secondary">Procesar siguiente</button>
+        </form>
+        <button type="button" class="ac-solo-js" data-ac-procesar data-url="{{ url_for('auditoria_chats.paso', lote_id=lote.id) }}">Procesar lote</button>
+        <button type="button" class="btn secondary ac-solo-js" data-ac-pausar hidden>Pausar</button>
+      </div>
+      {% if not ia_activa %}<div class="warning top-space">Sin AUDITORIA_CHATS_AI_API_KEY los chats se leen pero no se auditan.</div>{% endif %}
+    {% endif %}
+  </section>
+
+  <section class="card" aria-labelledby="ac-resumen-titulo">
+    <div class="page-section-title">
+      <div>
+        <h2 id="ac-resumen-titulo">Resumen por agente</h2>
+        <p class="small">La nota efectiva usa la del revisor cuando existe y la de la IA en los demás chats.</p>
+      </div>
+    </div>
+    {% if resumen %}
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Agente</th><th>Chats</th><th>Nota IA</th><th>Nota efectiva</th><th>Satisfechos</th><th>Por revisar</th><th>Revisados</th><th>Errores</th></tr>
+          </thead>
+          <tbody>
+            {% for fila in resumen %}
+              <tr>
+                <td>{{ fila.agente_nombre }}</td>
+                <td>{{ fila.chats }}</td>
+                <td>{{ fila.nota_ia_media|decimal_es }}</td>
+                <td>{{ fila.nota_efectiva_media|decimal_es }}</td>
+                <td>{{ fila.pct_satisfechos|decimal_es(0) }} %</td>
+                <td>{{ fila.por_revisar }}</td>
+                <td>{{ fila.revisados }}</td>
+                <td>{{ fila.errores }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="small">Aún no hay chats elegidos. Pulsa «Procesar lote» para empezar.</p>
+    {% endif %}
+    {% set sin_chats = muestreados|selectattr("elegidos", "equalto", 0)|list %}
+    {% if sin_chats %}
+      <p class="small top-space">{{ sin_chats|length }} agente(s) sin chats disponibles en el rango.</p>
+    {% endif %}
+  </section>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='auditoria_chats.js', v=asset_version('auditoria_chats.js')) }}" defer></script>
+{% endblock %}

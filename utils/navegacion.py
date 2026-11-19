@@ -38,6 +38,15 @@ HERRAMIENTAS = [
         "destacada": False,
     },
     {
+        "endpoint": "auditoria_chats.index",
+        "prefijo": "auditoria_chats.",
+        "grupo": "Calidad",
+        "titulo": "Auditoría de chats",
+        "icono": "calidad",
+        "descripcion": "Audita con IA chats aleatorios de cada agente y deja la revisión final a una persona.",
+        "destacada": False,
+    },
+    {
         "endpoint": "auditoria_salientes.auditoria_salientes",
         "prefijo": None,
         "grupo": "Calidad",

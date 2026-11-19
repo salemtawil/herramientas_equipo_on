@@ -70,7 +70,8 @@ def test_html_referencia_las_versiones_vigentes(cliente):
     html = cliente.get("/").get_data(as_text=True)
     assert f"styles.css?v={ASSET_VERSIONS['styles.css']}" in html
     assert f"app.js?v={ASSET_VERSIONS['app.js']}" in html
-    assert ASSET_VERSIONS["styles.css"] == "23"
+    assert ASSET_VERSIONS["styles.css"] == "24"
+    assert "styles.css?v=23" not in html
     assert "styles.css?v=21" not in html
     assert "styles.css?v=22" not in html
 
