@@ -12,7 +12,11 @@ from utils.auditoria_chats_pauta import (
     validar_resultado,
 )
 from utils.auditoria_chats_manual import codigos_para, seleccionar_secciones, version_manual
+from utils.auditoria_chats_rubrica import FACTOR as FACTOR_RESULTADO
 from utils.auditoria_chats_rubrica import (
+    CRITERIOS_QA,
+    ESTADOS_QA,
+    ETIQUETAS_RESULTADOS,
     PAUTA_VERSION_QA,
     calcular_qa,
     construir_mensajes_clasificacion,
@@ -529,6 +533,32 @@ def nota_efectiva(chat):
     return chat.get("ia_nota")
 
 
+def qa_efectivo(chat):
+    """QA del revisor si existe; si no, el de la IA (pauta QA-1.1)."""
+    valor = chat.get("qa_final") if chat.get("qa_final") is not None else chat.get("ia_qa")
+    return float(valor) if valor is not None else None
+
+
+def estado_efectivo(chat):
+    return chat.get("estado_final") or chat.get("ia_estado")
+
+
+def criterios_efectivos(chat):
+    """Resultado por criterio con las correcciones del revisor aplicadas."""
+    criterios = resultados_criterios(chat.get("ia_resultado"))
+    criterios.update((chat.get("revision") or {}).get("criterios") or {})
+    return criterios
+
+
+def _conteo_estados(grupo):
+    conteo = {clave: 0 for clave in ESTADOS_QA}
+    for chat in grupo:
+        estado = estado_efectivo(chat)
+        if estado in conteo and chat.get("estado") in ESTADOS_AUDITADOS:
+            conteo[estado] += 1
+    return conteo
+
+
 def _satisfaccion_efectiva(chat):
     return chat.get("satisfaccion_final") or chat.get("ia_satisfaccion")
 
@@ -563,6 +593,8 @@ def resumen_por_agente(chats):
                 "por_revisar": sum(1 for c in grupo if c.get("por_revisar") and c.get("estado") != "revisado"),
                 "revisados": sum(1 for c in grupo if c.get("estado") == "revisado"),
                 "errores": sum(1 for c in grupo if c.get("estado") == "error"),
+                "qa_media": _media(qa_efectivo(c) for c in grupo),
+                "estados": _conteo_estados(grupo),
             }
         )
     return sorted(filas, key=lambda f: _normalizar_nombre(f["agente_nombre"]))
@@ -634,6 +666,53 @@ def feedback_por_agente(chats):
     return sorted(filas, key=lambda f: _normalizar_nombre(f["agente_nombre"]))
 
 
+CORTE_PUNTO_FUERTE = 80
+
+
+def feedback_por_agente_qa(chats):
+    """Feedback por agente con la rúbrica QA-1.1: % de cumplimiento por criterio sobre lo verificable."""
+    grupos = {}
+    for chat in chats:
+        if chat.get("estado") in ESTADOS_AUDITADOS and (chat.get("ia_resultado") or {}).get("criterios"):
+            grupos.setdefault(chat.get("agente_id"), []).append(chat)
+
+    filas = []
+    for agente_id, grupo in grupos.items():
+        resultados = [c.get("ia_resultado") or {} for c in grupo]
+        por_chat = [criterios_efectivos(c) for c in grupo]
+        criterios = []
+        for codigo, etiqueta, _ in CRITERIOS_QA:
+            valores = [FACTOR_RESULTADO[r[codigo]] for r in por_chat if r.get(codigo) in FACTOR_RESULTADO]
+            if valores:
+                criterios.append(
+                    {"codigo": codigo, "etiqueta": etiqueta, "pct": round(sum(valores) * 100 / len(valores), 1)}
+                )
+        fallas_confirmadas = sum(
+            1 for c in grupo for v in ((c.get("revision") or {}).get("fallas") or {}).values() if v == "confirmada"
+        )
+        filas.append(
+            {
+                "agente_id": agente_id,
+                "agente_nombre": grupo[0].get("agente_nombre", ""),
+                "auditados": len(grupo),
+                "qa_media": _media(qa_efectivo(c) for c in grupo),
+                "estados": _conteo_estados(grupo),
+                "fallas_confirmadas": fallas_confirmadas,
+                "puntos_fuertes": sorted(
+                    (c for c in criterios if c["pct"] >= CORTE_PUNTO_FUERTE), key=lambda c: -c["pct"]
+                )[:MAX_CRITERIOS_FEEDBACK],
+                "areas_mejora": sorted(
+                    (c for c in criterios if c["pct"] < CORTE_PUNTO_FUERTE), key=lambda c: c["pct"]
+                )[:MAX_CRITERIOS_FEEDBACK],
+                "cumplimientos": _textos_unicos(r.get("cumplimientos") for r in resultados),
+                "incumplimientos": _textos_unicos(r.get("incumplimientos") for r in resultados),
+                "recomendaciones": _textos_unicos(r.get("recomendaciones") for r in resultados),
+                "comentarios": _textos_unicos([c.get("comentario_revisor")] for c in grupo),
+            }
+        )
+    return sorted(filas, key=lambda f: _normalizar_nombre(f["agente_nombre"]))
+
+
 def _lunes_local(fecha_iso, tz):
     fecha = datetime.fromisoformat(str(fecha_iso)).astimezone(tz).date()
     return fecha - timedelta(days=fecha.weekday())
@@ -643,7 +722,7 @@ def historial_semanal(chats, tz_name):
     tz = _obtener_timezone(tz_name)
     grupos = {}
     for chat in chats:
-        if chat.get("estado") not in ESTADOS_AUDITADOS or nota_efectiva(chat) is None:
+        if chat.get("estado") not in ESTADOS_AUDITADOS or (nota_efectiva(chat) is None and qa_efectivo(chat) is None):
             continue
         if not chat.get("conversacion_fecha"):
             continue
@@ -660,6 +739,7 @@ def historial_semanal(chats, tz_name):
                 "chats": len(grupo),
                 "nota_efectiva_media": _media(nota_efectiva(c) for c in grupo),
                 "pct_revisado": _porcentaje(sum(1 for c in grupo if c.get("estado") == "revisado"), len(grupo)),
+                "qa_media": _media(qa_efectivo(c) for c in grupo),
             }
         )
     return sorted(filas, key=lambda f: (_normalizar_nombre(f["agente_nombre"]), f["semana"]))
@@ -672,7 +752,64 @@ def _celda_segura(valor):
     return valor
 
 
+def _texto_fallas(chat):
+    resultado = chat.get("ia_resultado") or {}
+    revisadas = (chat.get("revision") or {}).get("fallas") or {}
+    return ", ".join(
+        f"{f['codigo']} ({revisadas.get(f['codigo'], f.get('estado', 'sospechosa'))})"
+        for f in resultado.get("fallas_criticas") or []
+    )
+
+
+def _filas_csv_qa(chats, url_conversacion=None):
+    columnas = [
+        "Conversación", "Enlace", "Agente", "Turno", "Fecha", "Estado", "Motivo", "Procedimientos",
+        "QA IA", "% verificable", "Estado IA", "QA final", "Estado final",
+        *[f"{codigo} {etiqueta}" for codigo, etiqueta, _ in CRITERIOS_QA],
+        "Fallas críticas", "Resolución", "Satisfacción IA", "Satisfacción final", "Revisor", "Comentario", "Resumen IA",
+    ]
+
+    def vacio_si_none(valor):
+        return "" if valor is None else valor
+
+    filas = []
+    for chat in chats:
+        if chat.get("estado") == "descartado":
+            continue
+        resultado = chat.get("ia_resultado") or {}
+        clasificacion = (chat.get("detalle") or {}).get("clasificacion") or {}
+        criterios = criterios_efectivos(chat)
+        filas.append(
+            [
+                chat.get("conversation_id"),
+                url_conversacion(chat["conversation_id"]) if url_conversacion else "",
+                chat.get("agente_nombre", ""),
+                chat.get("turno") or "",
+                chat.get("conversacion_fecha") or "",
+                chat.get("estado", ""),
+                clasificacion.get("motivo_principal", ""),
+                ", ".join(clasificacion.get("procedimientos") or []),
+                vacio_si_none(chat.get("ia_qa")),
+                vacio_si_none(resultado.get("pct_verificable")),
+                ESTADOS_QA.get(chat.get("ia_estado"), ""),
+                vacio_si_none(chat.get("qa_final")),
+                ESTADOS_QA.get(chat.get("estado_final"), ""),
+                *[ETIQUETAS_RESULTADOS.get(criterios.get(codigo), "") for codigo, _, _ in CRITERIOS_QA],
+                _texto_fallas(chat),
+                resultado.get("estado_resolucion", ""),
+                chat.get("ia_satisfaccion") or "",
+                chat.get("satisfaccion_final") or "",
+                chat.get("revisor") or "",
+                chat.get("comentario_revisor") or "",
+                resultado.get("resumen", ""),
+            ]
+        )
+    return columnas, [[_celda_segura(valor) for valor in fila] for fila in filas]
+
+
 def filas_csv(lote, chats, url_conversacion=None):
+    if es_lote_qa(lote):
+        return _filas_csv_qa(chats, url_conversacion)
     columnas = [
         "Conversación", "Enlace", "Agente", "Turno", "Fecha", "Estado",
         "Nota IA", "Satisfacción IA", "Resuelto",

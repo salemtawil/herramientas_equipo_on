@@ -11,6 +11,7 @@ from flask import Blueprint, Response, abort, flash, jsonify, redirect, render_t
 
 from utils import auditoria_chats_motor as motor
 from utils.auditoria_chats_pauta import CRITERIOS, SATISFACCION
+from utils.auditoria_chats_rubrica import PAUTA_VERSION_QA, resultados_criterios
 from utils.auditoria_chats_store import AuditoriaChatsConfigError, AuditoriaChatsError, obtener_store
 from utils.auditoria_chats_transcripcion import _etiquetas_adjuntos, mensajes_utiles
 from utils.chatwoot_reportes import ChatwootClient, _obtener_timezone, _timezone
@@ -496,7 +497,7 @@ def reintentar_errores(lote_id):
 CAMPOS_DIAGNOSTICO_CHAT = (
     "conversation_id", "agente_id", "agente_nombre", "turno", "conversacion_fecha", "estado", "intentos",
     "ia_error", "ia_nota", "ia_satisfaccion", "por_revisar", "motivo_revision", "nota_final", "created_at", "updated_at",
-    "detalle",
+    "detalle", "ia_qa", "ia_estado", "qa_final", "estado_final",
 )
 
 
@@ -516,6 +517,13 @@ def diagnostico(lote_id):
         fila["ia_criterios"] = resultado.get("criterios")
         fila["ia_confianza"] = resultado.get("confianza")
         fila["ia_modelo"] = resultado.get("modelo")
+        if resultado.get("pauta_version") == PAUTA_VERSION_QA:
+            # Solo resultados y códigos: los comentarios de la IA pueden citar al cliente.
+            fila["ia_criterios"] = resultados_criterios(resultado)
+            fila["ia_fallas"] = [f.get("codigo") for f in resultado.get("fallas_criticas") or []]
+            fila["ia_pct_verificable"] = resultado.get("pct_verificable")
+            fila["ia_secciones_manual"] = resultado.get("secciones")
+            fila["revision"] = chat.get("revision")
         return fila
 
     datos = {

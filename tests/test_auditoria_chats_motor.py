@@ -274,7 +274,8 @@ def test_nota_efectiva_y_resumen():
     resumen = motor.resumen_por_agente(chats)
     assert resumen == [
         {"agente_id": 1, "agente_nombre": "Ana", "chats": 2, "nota_ia_media": 3.0, "nota_efectiva_media": 4.0,
-         "pct_satisfechos": 50.0, "por_revisar": 0, "revisados": 1, "errores": 0}
+         "pct_satisfechos": 50.0, "por_revisar": 0, "revisados": 1, "errores": 0,
+         "qa_media": None, "estados": {"aprobado": 0, "necesita_mejorar": 0, "no_aprobado": 0, "pendiente": 0}}
     ]
 
 
@@ -290,9 +291,9 @@ def test_historial_semanal():
     filas = motor.historial_semanal(chats, "America/Caracas")
     assert filas == [
         {"agente_id": 1, "agente_nombre": "Ana", "semana": "2026-11-09", "chats": 2,
-         "nota_efectiva_media": 3.5, "pct_revisado": 50.0},
+         "nota_efectiva_media": 3.5, "pct_revisado": 50.0, "qa_media": None},
         {"agente_id": 1, "agente_nombre": "Ana", "semana": "2026-11-16", "chats": 1,
-         "nota_efectiva_media": 5.0, "pct_revisado": 0.0},
+         "nota_efectiva_media": 5.0, "pct_revisado": 0.0, "qa_media": None},
     ]
 
 
@@ -780,3 +781,75 @@ def test_abandonado_con_clasificacion_vuelve_a_clasificado():
     )
     motor._recuperar_abandonados(store, store.listar_chats(lote["id"]))
     assert store.obtener_chat(chat["id"])["estado"] == "clasificado"
+
+
+# --- Resúmenes y exportes QA-1.1 ---
+
+
+def _chat_qa(qa, ia_estado, criterios=None, **extra):
+    criterios = criterios or {c: "cumple" for c, _, _ in CRITERIOS_QA}
+    chat = {
+        "agente_id": 7, "agente_nombre": "LuisM", "estado": "auditado", "conversation_id": extra.pop("cid", 1),
+        "ia_qa": qa, "ia_estado": ia_estado, "ia_satisfaccion": "satisfecho",
+        "ia_resultado": {
+            "pauta_version": PAUTA_VERSION_QA,
+            "criterios": {c: {"resultado": r, "evidencias": [], "comentario": "c"} for c, r in criterios.items()},
+            "fallas_criticas": [], "cumplimientos": ["Saluda bien"], "incumplimientos": ["No documenta"],
+            "recomendaciones": ["Dejar nota"], "resumen": "R", "estado_resolucion": "resuelto",
+        },
+        "detalle": {"clasificacion": {"motivo_principal": "Pausa", "procedimientos": ["P03"]}},
+    }
+    chat.update(extra)
+    return chat
+
+
+def test_qa_y_estado_efectivos():
+    assert motor.qa_efectivo({"ia_qa": 80.0}) == 80.0
+    assert motor.qa_efectivo({"ia_qa": 80.0, "qa_final": 90.0}) == 90.0
+    assert motor.estado_efectivo({"ia_estado": "pendiente", "estado_final": "aprobado"}) == "aprobado"
+    assert motor.estado_efectivo({"ia_estado": "necesita_mejorar"}) == "necesita_mejorar"
+
+
+def test_feedback_por_agente_qa_usa_criterios_corregidos():
+    base = {c: "cumple" for c, _, _ in CRITERIOS_QA}
+    chats = [
+        _chat_qa(100.0, "aprobado", dict(base, F2="no_cumple", E2="parcial")),
+        _chat_qa(75.0, "necesita_mejorar", dict(base, F2="no_cumple", B1="no_verificable", E2="no_cumple")),
+        _chat_qa(60.0, "pendiente", dict(base, F2="no_cumple", E2="no_cumple"), estado="revisado",
+                 qa_final=90.0, estado_final="aprobado", comentario_revisor="Bien resuelto",
+                 revision={"criterios": {"E2": "cumple"}, "fallas": {"CR04": "confirmada"}}),
+        {"agente_id": 7, "agente_nombre": "LuisM", "estado": "descartado"},
+    ]
+    [fila] = motor.feedback_por_agente_qa(chats)
+    assert fila["auditados"] == 3
+    assert fila["qa_media"] == 88.3
+    assert fila["estados"] == {"aprobado": 2, "necesita_mejorar": 1, "no_aprobado": 0, "pendiente": 0}
+    assert fila["fallas_confirmadas"] == 1
+    assert [c["codigo"] for c in fila["areas_mejora"]] == ["F2", "E2"]
+    assert fila["areas_mejora"][0]["pct"] == 0.0 and fila["areas_mejora"][1]["pct"] == 50.0
+    assert [c["codigo"] for c in fila["puntos_fuertes"]] == ["A1", "A2", "B1"]
+    assert fila["cumplimientos"] == ["Saluda bien"] and fila["recomendaciones"] == ["Dejar nota"]
+    assert fila["comentarios"] == ["Bien resuelto"]
+
+
+def test_resumen_e_historial_incluyen_qa():
+    chats = [
+        _chat_qa(80.0, "necesita_mejorar", conversacion_fecha="2026-11-10T14:00:00+00:00"),
+        _chat_qa(90.0, "aprobado", conversacion_fecha="2026-11-11T14:00:00+00:00"),
+    ]
+    [fila] = motor.resumen_por_agente(chats)
+    assert fila["qa_media"] == 85.0 and fila["estados"]["aprobado"] == 1
+    [semana] = motor.historial_semanal(chats, "America/Caracas")
+    assert semana["qa_media"] == 85.0 and semana["chats"] == 2
+
+
+def test_filas_csv_qa():
+    lote = {"pauta_version": PAUTA_VERSION_QA}
+    chat = _chat_qa(80.0, "necesita_mejorar", comentario_revisor="=HYPERLINK(1)")
+    columnas, filas = motor.filas_csv(lote, [chat])
+    assert "QA IA" in columnas and "Estado IA" in columnas and "A1 Identificación del problema" in columnas
+    fila = dict(zip(columnas, filas[0]))
+    assert fila["QA IA"] == 80.0 and fila["Estado IA"] == "NECESITA MEJORAR"
+    assert fila["Motivo"] == "Pausa" and fila["Procedimientos"] == "P03"
+    assert fila["A1 Identificación del problema"] == "Cumple"
+    assert fila["Comentario"] == "'=HYPERLINK(1)"

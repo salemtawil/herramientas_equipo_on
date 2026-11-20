@@ -442,3 +442,21 @@ def test_lote_muestra_todos_los_chats_con_valoracion_y_feedback(entorno, cliente
     assert "Buena atención" in html
     for chat in chats:
         assert f"#{chat['conversation_id']}" in html
+
+
+def test_diagnostico_qa_sin_textos_del_cliente_ni_del_manual(entorno, cliente):
+    lote = entorno.crear_lote({"etiqueta": "QA", "estado": "completado", "pauta_version": "QA-1.1", "since": BASE_TS, "until": BASE_TS})
+    entorno.insertar_chats([{
+        "batch_id": lote["id"], "conversation_id": 555, "agente_id": 1, "agente_nombre": "Ana Pérez",
+        "estado": "auditado", "ia_qa": 82.5, "ia_estado": "necesita_mejorar",
+        "ia_resultado": {
+            "pauta_version": "QA-1.1", "pct_verificable": 70.0, "secciones": ["1.1.1"],
+            "criterios": {"A1": {"resultado": "cumple", "evidencias": ["m1"], "comentario": "El cliente Pedro dijo X"}},
+            "fallas_criticas": [{"codigo": "CR01", "evidencias": [], "descripcion": "Dio el correo de Pedro", "estado": "sospechosa"}],
+        },
+        "detalle": {"clasificacion": {"motivo_principal": "Pausa", "procedimientos": ["P03"]}},
+    }])
+    texto = cliente.get(f"/auditoria-chats/lote/{lote['id']}/diagnostico").get_data(as_text=True)
+    assert '"ia_qa": 82.5' in texto and '"ia_estado": "necesita_mejorar"' in texto
+    assert '"A1": "cumple"' in texto and '"CR01"' in texto and '"P03"' in texto
+    assert "Pedro" not in texto
