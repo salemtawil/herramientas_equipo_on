@@ -38,7 +38,8 @@
                   {% set celda = por_semana.get(semana) %}
                   <td>
                     {% if celda %}
-                      <strong>{{ celda.nota_efectiva_media|decimal_es }}</strong>
+                      {% if celda.qa_media is not none %}<strong>QA {{ celda.qa_media|decimal_es }}</strong>{% endif %}
+                      {% if celda.nota_efectiva_media is not none %}<strong>{{ celda.nota_efectiva_media|decimal_es }}</strong>{% endif %}
                       <span class="small">· {{ celda.chats }} chats · {{ celda.pct_revisado|decimal_es(0) }} % rev.</span>
                     {% else %}—{% endif %}
                   </td>

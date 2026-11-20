@@ -22,6 +22,7 @@ from utils.auditoria_chats_rubrica import (
     calcular_qa,
     resultados_criterios,
 )
+from utils.auditoria_chats_manual import version_manual
 from utils.auditoria_chats_store import AuditoriaChatsConfigError, AuditoriaChatsError, obtener_store
 from utils.auditoria_chats_transcripcion import _etiquetas_adjuntos, _mensajes_v2, mensajes_utiles
 from utils.chatwoot_reportes import ChatwootClient, _obtener_timezone, _timezone
@@ -86,6 +87,8 @@ def _quiere_json():
 
 
 SIN_TURNO = "Sin turno asignado"
+PAUTA_LOTES_NUEVOS = PAUTA_VERSION_QA
+LLAMADAS_IA_POR_CHAT = {PAUTA_VERSION_QA: 2}
 CUPO_DIARIO_DEFAULT = 20
 
 
@@ -184,6 +187,15 @@ def index():
             logger.warning("No se pudieron listar los agentes de Chatwoot: %s", exc)
             error_chatwoot = mensaje_error_publico(exc, "No se pudieron listar los agentes de Chatwoot")
 
+    manual_cargado = True
+    if store and PAUTA_LOTES_NUEVOS == PAUTA_VERSION_QA:
+        try:
+            manual_cargado = bool(store.indice_manual(version_manual()))
+        except AuditoriaChatsError as exc:
+            manual_cargado = False
+            avisos.append(mensaje_error_publico(exc, "No se pudo leer el manual de procedimientos"))
+    llamadas_por_chat = LLAMADAS_IA_POR_CHAT.get(PAUTA_LOTES_NUEVOS, 1)
+
     hoy_local = datetime.now(_obtener_timezone(_timezone())).date()
     inicio, fin = motor.rango_semana_anterior(hoy_local, _timezone())
     return render_template(
@@ -192,7 +204,10 @@ def index():
         grupos=grupos,
         sin_cruce=sin_cruce,
         bandejas=bandejas,
-        cupo_diario=_cupo_diario(),
+        cupo_diario=_cupo_diario() // llamadas_por_chat,
+        llamadas_por_chat=llamadas_por_chat,
+        manual_cargado=manual_cargado,
+        version_manual=version_manual(),
         lotes=lotes,
         estados_lote=ESTADOS_LOTE,
         fecha_lote=_fecha_lote,
@@ -206,7 +221,7 @@ def index():
         ia_modelo=config_ia["model"],
         ia_respaldo=config_ia["model_respaldo"],
         avisos=avisos,
-        puede_crear=bool(store and chatwoot and not error_chatwoot),
+        puede_crear=bool(store and chatwoot and not error_chatwoot and manual_cargado),
     )
 
 
@@ -246,16 +261,17 @@ def crear():
         return redirect(url_for("auditoria_chats.index"))
 
     try:
-        disponibles = {b["id"] for b in _listar_bandejas(chatwoot)}
+        disponibles = {b["id"]: b["nombre"] for b in _listar_bandejas(chatwoot)}
     except Exception as exc:
         flash(mensaje_error_publico(exc, "No se pudieron listar las bandejas de Chatwoot"), "warning")
         return redirect(url_for("auditoria_chats.index"))
     if disponibles:
-        bandejas = sorted({int(b) for b in request.form.getlist("bandejas") if str(b).isdigit()} & disponibles)
+        bandejas = sorted({int(b) for b in request.form.getlist("bandejas") if str(b).isdigit()} & set(disponibles))
         if not bandejas:
             flash("Marca al menos una bandeja de entrada de chats.", "warning")
             return redirect(url_for("auditoria_chats.index"))
         detalle["bandejas"] = bandejas
+        detalle["bandejas_nombres"] = {str(b): disponibles[b] for b in bandejas}
 
     try:
         lote = motor.crear_lote(
@@ -267,6 +283,7 @@ def crear():
             chats_por_agente=request.form.get("chats_por_agente"),
             agentes=agentes,
             config_ia=obtener_config_ia(),
+            pauta_version=PAUTA_LOTES_NUEVOS,
         )
     except AuditoriaChatsError as exc:
         flash(mensaje_error_publico(exc, "No se pudo crear el lote"), "warning")
@@ -309,7 +326,12 @@ def ver_lote(lote_id):
         estado_texto=ESTADOS_LOTE.get(lote.get("estado"), lote.get("estado")),
         fecha_lote=_fecha_lote,
         resumen=motor.resumen_por_agente(chats),
+        es_qa=motor.es_lote_qa(lote),
         feedback=motor.feedback_por_agente(chats),
+        feedback_qa=motor.feedback_por_agente_qa(chats) if motor.es_lote_qa(lote) else [],
+        estados_qa=ESTADOS_QA,
+        estado_efectivo=motor.estado_efectivo,
+        qa_efectivo=motor.qa_efectivo,
         todos=sorted(vigentes, key=lambda c: (motor._normalizar_nombre(c.get("agente_nombre", "")), str(c.get("conversacion_fecha") or ""))),
         valoracion=motor.valoracion,
         valoraciones=motor.VALORACIONES,

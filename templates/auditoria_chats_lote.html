@@ -43,10 +43,31 @@
     <div class="page-section-title">
       <div>
         <h2 id="ac-resumen-titulo">Resumen por agente</h2>
-        <p class="small">La nota efectiva usa la del revisor cuando existe y la de la IA en los demás chats.</p>
+        <p class="small">{% if es_qa %}El QA efectivo usa el del revisor cuando existe y el de la IA en los demás chats.{% else %}La nota efectiva usa la del revisor cuando existe y la de la IA en los demás chats.{% endif %}</p>
       </div>
     </div>
-    {% if resumen %}
+    {% if resumen and es_qa %}
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Agente</th><th>Chats</th><th>QA medio</th>{% for clave, texto in estados_qa.items() %}<th>{{ texto|capitalize }}</th>{% endfor %}<th>Por revisar</th><th>Revisados</th><th>Errores</th></tr>
+          </thead>
+          <tbody>
+            {% for fila in resumen %}
+              <tr>
+                <td>{{ fila.agente_nombre }}</td>
+                <td>{{ fila.chats }}</td>
+                <td>{{ fila.qa_media|decimal_es }}</td>
+                {% for clave in estados_qa %}<td>{{ fila.estados[clave] }}</td>{% endfor %}
+                <td>{{ fila.por_revisar }}</td>
+                <td>{{ fila.revisados }}</td>
+                <td>{{ fila.errores }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% elif resumen %}
       <div class="table-wrap">
         <table>
           <thead>
@@ -77,7 +98,59 @@
     {% endif %}
   </section>
 
-  {% if feedback %}
+  {% if es_qa and feedback_qa %}
+  <section class="card" aria-labelledby="ac-feedback-titulo">
+    <div class="page-section-title">
+      <div>
+        <h2 id="ac-feedback-titulo">Feedback por agente</h2>
+        <p class="small">Lo que hace bien y lo que debe mejorar según la rúbrica QA-1.1. El porcentaje es el cumplimiento del criterio en sus chats (cumple = 100 %, parcial = 50 %), sin contar los no verificables.</p>
+      </div>
+    </div>
+    <div class="ac-feedback">
+      {% for fila in feedback_qa %}
+        <article class="ac-feedback__agente">
+          <header class="ac-feedback__cabecera">
+            <h3>{{ fila.agente_nombre }}</h3>
+            <p class="small">{{ fila.auditados }} chats · QA medio {{ fila.qa_media|decimal_es }}{% if fila.fallas_confirmadas %} · {{ fila.fallas_confirmadas }} falla(s) crítica(s) confirmada(s){% endif %}</p>
+          </header>
+          <p class="ac-feedback__valoraciones">
+            {% for clave, texto in estados_qa.items() %}
+              <span class="ac-valoracion ac-valoracion--{{ clave }}">{{ texto }}: {{ fila.estados[clave] }}</span>
+            {% endfor %}
+          </p>
+          <div class="ac-feedback__columnas">
+            <div>
+              <h4>Puntos fuertes</h4>
+              {% if fila.puntos_fuertes or fila.cumplimientos %}
+                <ul>
+                  {% for c in fila.puntos_fuertes %}<li><strong>{{ c.codigo }} {{ c.etiqueta }}</strong> ({{ c.pct|decimal_es(0) }} %)</li>{% endfor %}
+                  {% for t in fila.cumplimientos %}<li>{{ t }}</li>{% endfor %}
+                </ul>
+              {% else %}<p class="small">Sin puntos destacados todavía.</p>{% endif %}
+            </div>
+            <div>
+              <h4>Áreas de mejora</h4>
+              {% if fila.areas_mejora or fila.incumplimientos %}
+                <ul>
+                  {% for c in fila.areas_mejora %}<li><strong>{{ c.codigo }} {{ c.etiqueta }}</strong> ({{ c.pct|decimal_es(0) }} %)</li>{% endfor %}
+                  {% for t in fila.incumplimientos %}<li>{{ t }}</li>{% endfor %}
+                </ul>
+              {% else %}<p class="small">Sin áreas de mejora marcadas.</p>{% endif %}
+            </div>
+          </div>
+          {% if fila.recomendaciones %}
+            <h4>Recomendaciones</h4>
+            <ul>{% for t in fila.recomendaciones %}<li>{{ t }}</li>{% endfor %}</ul>
+          {% endif %}
+          {% if fila.comentarios %}
+            <h4>Comentarios del revisor</h4>
+            <ul>{% for t in fila.comentarios %}<li>{{ t }}</li>{% endfor %}</ul>
+          {% endif %}
+        </article>
+      {% endfor %}
+    </div>
+  </section>
+  {% elif not es_qa and feedback %}
   <section class="card" aria-labelledby="ac-feedback-titulo">
     <div class="page-section-title">
       <div>
@@ -135,7 +208,32 @@
       </div>
       <span class="hero-badge hero-badge-soft">{{ todos|length }}</span>
     </div>
-    {% if todos %}
+    {% if todos and es_qa %}
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Chat</th><th>Agente</th><th>Estado</th><th>QA</th><th>Motivo</th><th>Satisfacción</th><th>Resumen</th><th></th></tr>
+          </thead>
+          <tbody>
+            {% for chat in todos %}
+              {% set e = estado_efectivo(chat) if chat.estado in ("auditado", "revisado") else None %}
+              {% set q = qa_efectivo(chat) %}
+              {% set pct = (chat.ia_resultado or {}).get("pct_verificable") %}
+              <tr>
+                <td>#{{ chat.conversation_id }}</td>
+                <td>{{ chat.agente_nombre }}</td>
+                <td>{% if e %}<span class="ac-valoracion ac-valoracion--{{ e }}">{{ estados_qa[e] }}</span>{% elif chat.estado == "error" %}Error de IA{% else %}Pendiente{% endif %}{% if chat.estado == "revisado" %} <span class="small">(revisado)</span>{% endif %}</td>
+                <td>{% if q is not none %}{{ q|decimal_es }}{% if pct is not none %} <span class="small">· {{ pct|decimal_es(0) }} % verificable</span>{% endif %}{% else %}—{% endif %}</td>
+                <td>{{ ((chat.detalle or {}).get("clasificacion") or {}).get("motivo_principal", "") }}</td>
+                <td>{{ (chat.satisfaccion_final or chat.ia_satisfaccion or "—")|replace("_", " ") }}</td>
+                <td>{{ (chat.ia_resultado or {}).get("resumen", chat.ia_error or "") }}</td>
+                <td><a href="{{ url_for('auditoria_chats.ver_chat', chat_id=chat.id) }}">Ver</a></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% elif todos %}
       <div class="table-wrap">
         <table>
           <thead>
@@ -166,7 +264,7 @@
     <div class="page-section-title">
       <div>
         <h2 id="ac-cola-titulo">Cola de revisión</h2>
-        <p class="small">Primero los marcados por la IA (nota ≤ 3, cliente insatisfecho, confianza baja o error) y luego la muestra de control del 10 %.</p>
+        <p class="small">{% if es_qa %}Primero los marcados (estado distinto de APROBADO, posibles fallas críticas, confianza baja o error) y luego la muestra de control del 10 %.{% else %}Primero los marcados por la IA (nota ≤ 3, cliente insatisfecho, confianza baja o error) y luego la muestra de control del 10 %.{% endif %}</p>
       </div>
       <span class="hero-badge hero-badge-soft">{{ cola|length }}</span>
     </div>
@@ -174,7 +272,7 @@
       <div class="table-wrap">
         <table>
           <thead>
-            <tr><th>Chat</th><th>Agente</th><th>Motivo</th><th>Nota IA</th><th>Satisfacción IA</th><th>Resumen</th><th></th></tr>
+            <tr><th>Chat</th><th>Agente</th><th>Motivo</th><th>{% if es_qa %}Estado IA{% else %}Nota IA{% endif %}</th><th>Satisfacción IA</th><th>Resumen</th><th></th></tr>
           </thead>
           <tbody>
             {% for chat in cola %}
@@ -182,7 +280,7 @@
                 <td>#{{ chat.conversation_id }}</td>
                 <td>{{ chat.agente_nombre }}</td>
                 <td>{{ "Control" if chat.motivo_revision == "control" else ("Error de IA" if chat.estado == "error" else "Marcado") }}</td>
-                <td>{{ chat.ia_nota or "—" }}</td>
+                <td>{% if es_qa %}{% if chat.ia_estado %}<span class="ac-valoracion ac-valoracion--{{ chat.ia_estado }}">{{ estados_qa[chat.ia_estado] }}</span>{% if chat.ia_qa is not none %} {{ chat.ia_qa|decimal_es }}{% endif %}{% else %}—{% endif %}{% else %}{{ chat.ia_nota or "—" }}{% endif %}</td>
                 <td>{{ (chat.ia_satisfaccion or "—")|replace("_", " ") }}</td>
                 <td>{{ (chat.ia_resultado or {}).get("resumen", chat.ia_error or "") }}</td>
                 <td><a href="{{ url_for('auditoria_chats.ver_chat', chat_id=chat.id) }}">Revisar</a></td>

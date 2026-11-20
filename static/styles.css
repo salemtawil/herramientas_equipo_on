@@ -5053,3 +5053,37 @@ th {
   margin: 0;
   padding-left: 18px;
 }
+
+/* Estados de la pauta QA-1.1 */
+.ac-valoracion--aprobado {
+  background: var(--success-bg);
+  border-color: var(--success-border);
+  color: var(--success-text);
+}
+
+.ac-valoracion--necesita_mejorar {
+  background: var(--warning-bg);
+  border-color: var(--warning-border);
+  color: var(--warning-text);
+}
+
+.ac-valoracion--no_aprobado {
+  background: var(--danger-bg);
+  border-color: var(--danger-border);
+  color: var(--danger-text);
+}
+
+.ac-valoracion--pendiente {
+  border-style: dashed;
+  color: var(--muted);
+}
+
+.ac-mensaje--interno {
+  border-style: dashed;
+  color: var(--muted);
+}
+
+.ac-mensaje:target {
+  outline: 2px solid var(--warning-border);
+  outline-offset: 2px;
+}

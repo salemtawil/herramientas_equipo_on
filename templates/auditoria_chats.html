@@ -38,6 +38,7 @@
     {% if error_store %}<div class="warning top-space">{{ error_store }} Ejecuta también <code>supabase_chat_audits.sql</code> en Supabase.</div>{% endif %}
     {% if error_chatwoot %}<div class="warning top-space">{{ error_chatwoot }}</div>{% endif %}
     {% if not ia_activa %}<div class="warning top-space">Sin AUDITORIA_CHATS_AI_API_KEY los chats se eligen y se leen, pero no se auditan.</div>{% endif %}
+    {% if not manual_cargado %}<div class="warning top-space">El manual de procedimientos (versión {{ version_manual }}) no está cargado en Supabase, así que no se pueden crear lotes. Cárgalo con <code>scripts/cargar_manual_auditoria.py</code>.</div>{% endif %}
     {% for aviso in avisos %}<div class="warning top-space">{{ aviso }}</div>{% endfor %}
 
     <div class="contextual-note top-space">
@@ -49,7 +50,7 @@
     <div class="page-section-title">
       <div>
         <h2 id="ac-nuevo-titulo">Nuevo lote</h2>
-        <p class="small">Los planes gratuitos de IA tienen un cupo diario: audita por turno o por grupos de agentes.</p>
+        <p class="small">Los planes gratuitos de IA tienen un cupo diario: audita por turno o por grupos de agentes.{% if llamadas_por_chat > 1 %} Con la pauta QA-1.1 cada chat usa {{ llamadas_por_chat }} llamadas a la IA (identificar el motivo y evaluar).{% endif %}</p>
       </div>
       <a class="btn secondary" href="{{ url_for('auditoria_chats.historial') }}">Historial semanal</a>
     </div>

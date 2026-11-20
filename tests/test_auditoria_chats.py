@@ -53,6 +53,8 @@ def entorno(monkeypatch):
     monkeypatch.setattr(herramienta, "obtener_turnos_configurados", lambda: {"Mañana": ["Ana Pérez"]})
     monkeypatch.setattr(herramienta.motor, "completar_json", lambda mensajes, config, **k: _resultado())
     monkeypatch.setenv("AUDITORIA_CHATS_AI_API_KEY", "clave-secreta-prueba")
+    # Las pruebas históricas usan la pauta v1; las de la pauta QA-1.1 usan `entorno_qa`.
+    monkeypatch.setattr(herramienta, "PAUTA_LOTES_NUEVOS", "1")
     return store
 
 
@@ -531,3 +533,69 @@ def test_revisar_qa_exige_decidir_fallas_y_nombre(entorno, cliente):
     cliente.post(f"/auditoria-chats/chat/{chat['id']}", data=_form_qa(falla_CR04="descartada", estado_final="necesita_mejorar"))
     guardado = entorno.obtener_chat(chat["id"])
     assert guardado["estado"] == "revisado" and guardado["estado_final"] == "necesita_mejorar"
+
+
+# --- Páginas con la pauta QA-1.1 ---
+
+
+def _evaluacion_qa_ruta(resultado="cumple"):
+    return {
+        "criterios": {c: {"resultado": resultado, "evidencias": ["m2"], "comentario": "ok"} for c, _, _ in CRITERIOS_QA},
+        "fallas_criticas": [], "cumplimientos": ["Saluda con su nombre"], "incumplimientos": ["No deja nota"],
+        "recomendaciones": ["Documentar la gestión"], "estado_resolucion": "resuelto", "responsabilidad": "agente",
+        "satisfaccion_cliente": "satisfecho", "resumen": "Atención QA correcta.", "confianza": "alta",
+    }
+
+
+def _ia_qa_ruta(mensajes, config, **kwargs):
+    if "INSTRUCCIONES DE RESPUESTA" in mensajes[0]["content"]:
+        return _evaluacion_qa_ruta()
+    return {"motivo_principal": "Consulta de pausa", "procedimientos": ["P03"], "secciones_extra": [], "servicio": "Compinche"}
+
+
+@pytest.fixture
+def entorno_qa(entorno, monkeypatch):
+    monkeypatch.setattr(herramienta, "PAUTA_LOTES_NUEVOS", "QA-1.1")
+    monkeypatch.setattr(herramienta.motor, "completar_json", _ia_qa_ruta)
+    monkeypatch.delenv("AUDITORIA_CHATS_MANUAL_VERSION", raising=False)
+    entorno.guardar_manual("3.0", [
+        {"codigo": c, "titulo": f"Sección {c}", "texto": f"Texto {c}", "orden": i}
+        for i, c in enumerate(["1.1.1", "1.1.3", "1.1.8", "1.2.5", "1.4.1"])
+    ])
+    return entorno
+
+
+def test_lotes_nuevos_usan_pauta_qa_por_defecto():
+    assert herramienta.PAUTA_LOTES_NUEVOS == "QA-1.1"
+
+
+def test_index_sin_manual_avisa_y_no_crea(entorno, cliente, monkeypatch):
+    monkeypatch.setattr(herramienta, "PAUTA_LOTES_NUEVOS", "QA-1.1")
+    html = cliente.get("/auditoria-chats/").get_data(as_text=True)
+    assert "manual de procedimientos" in html.lower()
+    _crear_lote(cliente)
+    assert entorno.listar_lotes() == []
+
+
+def test_lote_qa_procesado_muestra_estado_feedback_y_todos_los_chats(entorno_qa, cliente):
+    lote_id, chats = _lote_procesado(cliente, entorno_qa)
+    lote = entorno_qa.obtener_lote(lote_id)
+    assert lote["pauta_version"] == "QA-1.1"
+    assert all(c["estado"] == "auditado" and c["ia_qa"] == 100.0 for c in chats if c["estado"] != "descartado")
+    html = cliente.get(f"/auditoria-chats/lote/{lote_id}").get_data(as_text=True)
+    assert "APROBADO" in html and "100,0" in html
+    assert "Feedback por agente" in html and "Documentar la gestión" in html
+    assert "Consulta de pausa" in html
+    for chat in chats:
+        assert f"#{chat['conversation_id']}" in html
+    contenido = html[html.index('id="contenido-principal"'):]
+    assert ' style="' not in contenido
+
+
+def test_csv_e_historial_qa(entorno_qa, cliente, monkeypatch):
+    lote_id, _ = _lote_procesado(cliente, entorno_qa)
+    texto = cliente.get(f"/auditoria-chats/lote/{lote_id}/csv").get_data().decode("utf-8-sig")
+    assert "QA IA" in texto.splitlines()[0] and "APROBADO" in texto
+    monkeypatch.setattr(herramienta, "_desde_historial", lambda: "2000-01-01T00:00:00+00:00")
+    html = cliente.get("/auditoria-chats/historial").get_data(as_text=True)
+    assert "QA 100,0" in html
