@@ -53,9 +53,10 @@ class ChatwootFalso:
 AGENTES = [{"id": 1, "nombre": "Ana Pérez", "turno": "Mañana"}, {"id": 2, "nombre": "Luis Gómez", "turno": "Tarde"}]
 
 
-def _crear(store, chats_por_agente=3, agentes=AGENTES):
+def _crear(store, chats_por_agente=3, agentes=AGENTES, pauta_version="1"):
     return motor.crear_lote(
         store,
+        pauta_version=pauta_version,
         since=date(2026, 11, 9),
         until=date(2026, 11, 15),
         alcance="todos",
@@ -628,3 +629,154 @@ def test_feedback_por_agente_agrupa_valoraciones_criterios_y_textos():
     assert fila["fortalezas"] == ["Saluda con cordialidad"]
     assert fila["mejoras"] == ["Despedirse", "Confirmar si queda algo"]
     assert fila["comentarios"] == ["Faltó dar el paso siguiente"]
+
+
+# --- Flujo QA-1.1: lectura, clasificación y evaluación ---
+
+import pytest  # noqa: E402
+
+from utils.auditoria_chats_rubrica import CRITERIOS_QA, PAUTA_VERSION_QA  # noqa: E402
+from utils.auditoria_chats_store import AuditoriaChatsError  # noqa: E402
+
+MANUAL = [
+    {"codigo": c, "titulo": f"Sección {c}", "texto": f"Texto {c}", "orden": i}
+    for i, c in enumerate(["1.1.1", "1.1.3", "1.1.8", "1.2.5", "1.4.1", "1.1.5"])
+]
+
+
+def _evaluacion_qa(resultado="cumple", fallas=()):
+    return {
+        "criterios": {c: {"resultado": resultado, "evidencias": ["m2"], "comentario": "ok"} for c, _, _ in CRITERIOS_QA},
+        "fallas_criticas": [{"codigo": f, "evidencias": ["m2"], "descripcion": "x"} for f in fallas],
+        "cumplimientos": ["Saluda"],
+        "incumplimientos": [],
+        "recomendaciones": ["Despedirse"],
+        "estado_resolucion": "resuelto",
+        "responsabilidad": "agente",
+        "satisfaccion_cliente": "satisfecho",
+        "resumen": "Bien.",
+        "confianza": "alta",
+    }
+
+
+class IAFalsaQA:
+    def __init__(self, evaluacion=None):
+        self.llamadas = []
+        self.evaluacion = evaluacion or _evaluacion_qa()
+
+    def __call__(self, mensajes, config, **kwargs):
+        es_evaluacion = "INSTRUCCIONES DE RESPUESTA" in mensajes[0]["content"]
+        self.llamadas.append("evaluacion" if es_evaluacion else "clasificacion")
+        if es_evaluacion:
+            return self.evaluacion
+        return {"motivo_principal": "Pausa", "procedimientos": ["P03"], "secciones_extra": ["1.1.5"], "servicio": "Compinche"}
+
+
+def _store_qa():
+    store = MemoriaAuditoriaStore()
+    store.guardar_manual("3.0", MANUAL)
+    return store
+
+
+def _correr_contando(store, lote_id, chatwoot, ia, maximo=100):
+    for _ in range(maximo):
+        antes = len(ia.llamadas)
+        paso = motor.ejecutar_paso(store, lote_id, chatwoot, CONFIG_IA, rng=random.Random(0))
+        assert len(ia.llamadas) - antes <= 1
+        if paso["accion"] in ("fin", "espera", "configuracion") or paso["estado"] == "limite_diario":
+            return paso
+    raise AssertionError("El lote no terminó")
+
+
+def test_crear_lote_qa_sin_manual_lanza(monkeypatch):
+    monkeypatch.delenv("AUDITORIA_CHATS_MANUAL_VERSION", raising=False)
+    with pytest.raises(AuditoriaChatsError):
+        _crear(MemoriaAuditoriaStore(), pauta_version=PAUTA_VERSION_QA)
+
+
+def test_lote_qa_completo_clasifica_y_evalua(monkeypatch):
+    monkeypatch.delenv("AUDITORIA_CHATS_MANUAL_VERSION", raising=False)
+    store = _store_qa()
+    ia = IAFalsaQA()
+    monkeypatch.setattr(motor, "completar_json", ia)
+    lote = _crear(store, chats_por_agente=2, agentes=AGENTES[:1], pauta_version=PAUTA_VERSION_QA)
+    assert lote["pauta_version"] == PAUTA_VERSION_QA
+    assert lote["alcance_detalle"]["manual_version"] == "3.0"
+    paso = _correr_contando(store, lote["id"], ChatwootFalso({1: [101, 102]}), ia)
+    assert paso["accion"] == "fin"
+    assert ia.llamadas == ["clasificacion", "evaluacion", "clasificacion", "evaluacion"] or sorted(ia.llamadas) == [
+        "clasificacion", "clasificacion", "evaluacion", "evaluacion"
+    ]
+    chats = store.listar_chats(lote["id"])
+    for chat in chats:
+        assert chat["estado"] == "auditado"
+        assert chat["ia_qa"] == 100.0 and chat["ia_estado"] == "aprobado" and chat["ia_nota"] is None
+        assert chat["ia_resultado"]["pauta_version"] == PAUTA_VERSION_QA
+        assert chat["ia_resultado"]["criterios"]["A1"]["evidencias"] == ["m2"]
+        assert chat["detalle"]["clasificacion"]["procedimientos"] == ["P03"]
+        assert chat["detalle"]["periodo"] == {"desde": None, "hasta": None, "inferido": False}  # mensajes sin remitente
+        assert chat["detalle"]["ids"] == ["m1", "m2"]
+        assert "primera_respuesta" in chat["detalle"]["metricas"]
+        assert chat["transcripcion_tmp"] is None
+
+
+def test_lote_qa_envia_solo_las_secciones_aplicables(monkeypatch):
+    store = _store_qa()
+    vistos = []
+
+    def ia(mensajes, config, **kwargs):
+        if "INSTRUCCIONES DE RESPUESTA" in mensajes[0]["content"]:
+            vistos.append(mensajes[1]["content"])
+            return _evaluacion_qa()
+        return {"motivo_principal": "Pausa", "procedimientos": ["P03"], "secciones_extra": [], "servicio": "Compinche"}
+
+    monkeypatch.setattr(motor, "completar_json", ia)
+    lote = _crear(store, chats_por_agente=1, agentes=AGENTES[:1], pauta_version=PAUTA_VERSION_QA)
+    _correr(store, lote["id"], ChatwootFalso({1: [101]}))
+    assert "Texto 1.4.1" in vistos[0] and "Texto 1.1.1" in vistos[0] and "Texto 1.1.5" not in vistos[0]
+
+
+def test_lote_qa_falla_sospechosa_queda_pendiente_y_por_revisar(monkeypatch):
+    store = _store_qa()
+    monkeypatch.setattr(motor, "completar_json", IAFalsaQA(_evaluacion_qa(fallas=["CR04"])))
+    lote = _crear(store, chats_por_agente=1, agentes=AGENTES[:1], pauta_version=PAUTA_VERSION_QA)
+    _correr(store, lote["id"], ChatwootFalso({1: [101]}))
+    [chat] = store.listar_chats(lote["id"])
+    assert chat["ia_estado"] == "pendiente" and chat["por_revisar"] is True
+    assert chat["ia_resultado"]["fallas_criticas"][0]["estado"] == "sospechosa"
+
+
+def test_lote_qa_limite_diario_en_clasificacion_no_pierde_fila(monkeypatch):
+    store = _store_qa()
+
+    def ia(mensajes, config, **kwargs):
+        raise IARateLimitError("Sin cupo diario", diario=True)
+
+    monkeypatch.setattr(motor, "completar_json", ia)
+    lote = _crear(store, chats_por_agente=1, agentes=AGENTES[:1], pauta_version=PAUTA_VERSION_QA)
+    pasos = _correr(store, lote["id"], ChatwootFalso({1: [101]}))
+    assert pasos[-1]["estado"] == "limite_diario"
+    [chat] = store.listar_chats(lote["id"])
+    assert chat["estado"] == "leido" and chat["transcripcion_tmp"]
+
+
+def test_lote_qa_json_invalido_en_evaluacion_reintenta_y_luego_error(monkeypatch):
+    store = _store_qa()
+    monkeypatch.setattr(motor, "completar_json", IAFalsaQA({"criterios": {}}))
+    lote = _crear(store, chats_por_agente=1, agentes=AGENTES[:1], pauta_version=PAUTA_VERSION_QA)
+    _correr(store, lote["id"], ChatwootFalso({1: [101]}))
+    [chat] = store.listar_chats(lote["id"])
+    assert chat["estado"] == "error" and chat["intentos"] == motor.MAX_INTENTOS_IA
+
+
+def test_abandonado_con_clasificacion_vuelve_a_clasificado():
+    store = _store_qa()
+    lote = _crear(store, chats_por_agente=1, agentes=AGENTES[:1], pauta_version=PAUTA_VERSION_QA)
+    store.insertar_chats([{"batch_id": lote["id"], "conversation_id": 5, "agente_id": 1, "estado": "procesando"}])
+    [chat] = store.listar_chats(lote["id"])
+    viejo = (datetime.now(timezone.utc) - timedelta(seconds=600)).isoformat()
+    store.chats[chat["id"]].update(
+        transcripcion_tmp="[m1 10:00:00] Cliente: hola", detalle={"clasificacion": {"motivo_principal": "x"}}, updated_at=viejo
+    )
+    motor._recuperar_abandonados(store, store.listar_chats(lote["id"]))
+    assert store.obtener_chat(chat["id"])["estado"] == "clasificado"

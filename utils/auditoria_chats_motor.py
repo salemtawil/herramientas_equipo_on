@@ -11,11 +11,26 @@ from utils.auditoria_chats_pauta import (
     requiere_revision,
     validar_resultado,
 )
+from utils.auditoria_chats_manual import codigos_para, seleccionar_secciones, version_manual
+from utils.auditoria_chats_rubrica import (
+    PAUTA_VERSION_QA,
+    calcular_qa,
+    construir_mensajes_clasificacion,
+    construir_mensajes_evaluacion,
+    requiere_revision_qa,
+    resultados_criterios,
+    validar_clasificacion,
+    validar_evaluacion,
+)
 from utils.auditoria_chats_store import AuditoriaChatsError
 from utils.auditoria_chats_transcripcion import (
     construir_transcripcion,
+    construir_transcripcion_v2,
     es_llamada,
     forma_mensajes,
+    ids_mensajes,
+    metricas_tiempos,
+    periodo_agente,
     tiene_mensajes_de_agente,
 )
 from utils.chatwoot_reportes import _obtener_timezone, _timezone
@@ -28,8 +43,12 @@ MAX_INTENTOS_IA = 2
 SEGUNDOS_PROCESANDO_ABANDONADO = 120
 PORCENTAJE_CONTROL = 0.10
 
-ESTADOS_PENDIENTES = ("pendiente", "leido", "procesando")
+ESTADOS_PENDIENTES = ("pendiente", "leido", "clasificado", "procesando")
 ESTADOS_AUDITADOS = ("auditado", "revisado")
+
+
+def es_lote_qa(lote):
+    return (lote or {}).get("pauta_version") == PAUTA_VERSION_QA
 
 
 # ---------------------------------------------------------------------------
@@ -86,8 +105,17 @@ def _epoch(dia, hora, tz):
     return int(datetime.combine(dia, hora, tzinfo=tz).timestamp())
 
 
-def crear_lote(store, *, since, until, alcance, detalle, chats_por_agente, agentes, config_ia):
+def crear_lote(store, *, since, until, alcance, detalle, chats_por_agente, agentes, config_ia, pauta_version=PAUTA_VERSION):
     tz = _obtener_timezone(_timezone())
+    detalle = dict(detalle or {})
+    if pauta_version == PAUTA_VERSION_QA:
+        version = version_manual()
+        if not store.indice_manual(version):
+            raise AuditoriaChatsError(
+                f"El manual de procedimientos (versión {version}) no está cargado. Cárgalo con "
+                "scripts/cargar_manual_auditoria.py antes de crear lotes."
+            )
+        detalle["manual_version"] = version
     try:
         chats_por_agente = int(chats_por_agente)
     except (TypeError, ValueError):
@@ -103,14 +131,14 @@ def crear_lote(store, *, since, until, alcance, detalle, chats_por_agente, agent
             "since": _epoch(since, time(0, 0, 0), tz),
             "until": _epoch(until, time(23, 59, 59), tz),
             "alcance": alcance,
-            "alcance_detalle": detalle or {},
+            "alcance_detalle": detalle,
             "chats_por_agente": chats_por_agente,
             "agentes": agentes,
             "agentes_muestreados": [],
             "reservas": {},
             "estado": "muestreando",
             "modelo": config_ia.get("model", ""),
-            "pauta_version": PAUTA_VERSION,
+            "pauta_version": pauta_version,
         }
     )
 
@@ -148,7 +176,11 @@ def _recuperar_abandonados(store, chats):
         if actualizado.tzinfo is None:
             actualizado = actualizado.replace(tzinfo=timezone.utc)
         if actualizado <= limite:
-            store.actualizar_chat(chat["id"], {"estado": "leido" if chat.get("transcripcion_tmp") else "pendiente"})
+            if chat.get("transcripcion_tmp") and (chat.get("detalle") or {}).get("clasificacion"):
+                estado = "clasificado"
+            else:
+                estado = "leido" if chat.get("transcripcion_tmp") else "pendiente"
+            store.actualizar_chat(chat["id"], {"estado": estado})
 
 
 def _fila_chat(lote, agente, conversacion):
@@ -255,10 +287,18 @@ def _leer_chat(store, lote_id, chatwoot):
         _reponer_desde_reserva(store, lote_id, chat)
         return _respuesta(store, lote_id, "lectura", f"Chat #{chat['conversation_id']} {texto}; se reemplaza.")
 
-    store.actualizar_chat(
-        chat["id"],
-        {"estado": "leido", "transcripcion_tmp": construir_transcripcion(mensajes, _timezone()), "detalle": detalle},
-    )
+    if es_lote_qa(store.obtener_lote(lote_id)):
+        periodo = periodo_agente(mensajes, chat.get("agente_id"), chat.get("agente_nombre"))
+        detalle.update(
+            periodo=periodo,
+            metricas=metricas_tiempos(mensajes, periodo, chat.get("agente_id"), chat.get("agente_nombre") or ""),
+            ids=sorted(ids_mensajes(mensajes)),
+        )
+        detalle.pop("clasificacion", None)
+        transcripcion = construir_transcripcion_v2(mensajes, _timezone())
+    else:
+        transcripcion = construir_transcripcion(mensajes, _timezone())
+    store.actualizar_chat(chat["id"], {"estado": "leido", "transcripcion_tmp": transcripcion, "detalle": detalle})
     return _respuesta(store, lote_id, "lectura", f"Chat #{chat['conversation_id']} leído.")
 
 
@@ -284,6 +324,107 @@ def _llamar_ia(mensajes, config_ia):
     raise temporales[0] if temporales else errores[0]
 
 
+def _manejar_error_ia(store, lote_id, chat, exc, estado_previo):
+    """Respuesta del paso cuando falla la IA; la fila vuelve a `estado_previo` salvo error final."""
+    if isinstance(exc, IARateLimitError):
+        store.actualizar_chat(chat["id"], {"estado": estado_previo})
+        if exc.diario:
+            store.actualizar_lote(lote_id, {"estado": "limite_diario"})
+            return _respuesta(store, lote_id, "auditoria", str(exc))
+        return _respuesta(store, lote_id, "espera", str(exc), esperar_segundos=exc.esperar_segundos)
+    if isinstance(exc, IAConfigError):
+        store.actualizar_chat(chat["id"], {"estado": estado_previo})
+        return _respuesta(store, lote_id, "configuracion", str(exc))
+
+    intentos = int(chat.get("intentos") or 0) + 1
+    if intentos < MAX_INTENTOS_IA:
+        store.actualizar_chat(chat["id"], {"estado": estado_previo, "intentos": intentos, "ia_error": str(exc)})
+        return _respuesta(store, lote_id, "auditoria", f"Chat #{chat['conversation_id']}: se reintenta ({exc}).")
+    store.actualizar_chat(
+        chat["id"],
+        {
+            "estado": "error",
+            "intentos": intentos,
+            "ia_error": str(exc),
+            "transcripcion_tmp": None,
+            "por_revisar": True,
+            "motivo_revision": "marcado",
+        },
+    )
+    return _respuesta(store, lote_id, "auditoria", f"Chat #{chat['conversation_id']}: error de IA ({exc}).")
+
+
+ERRORES_IA = (IARateLimitError, IAConfigError, ValueError, IARespuestaError)
+
+
+def _clasificar_chat(store, lote, config_ia):
+    chat = store.tomar_siguiente(lote["id"], ("leido",), "procesando")
+    if not chat:
+        return None
+    version = (lote.get("alcance_detalle") or {}).get("manual_version") or version_manual()
+    try:
+        indice = store.indice_manual(version)
+        data, modelo = _llamar_ia(construir_mensajes_clasificacion(chat.get("transcripcion_tmp") or "", indice), config_ia)
+        clasificacion = validar_clasificacion(data, {s["codigo"] for s in indice})
+        clasificacion["modelo"] = modelo
+    except ERRORES_IA as exc:
+        return _manejar_error_ia(store, lote["id"], chat, exc, "leido")
+
+    detalle = dict(chat.get("detalle") or {}, clasificacion=clasificacion)
+    store.actualizar_chat(chat["id"], {"estado": "clasificado", "detalle": detalle, "intentos": 0, "ia_error": None})
+    return _respuesta(store, lote["id"], "auditoria", f"Chat #{chat['conversation_id']}: motivo identificado.")
+
+
+def _evaluar_chat_qa(store, lote, config_ia):
+    chat = store.tomar_siguiente(lote["id"], ("clasificado",), "procesando")
+    if not chat:
+        return None
+    alcance = lote.get("alcance_detalle") or {}
+    version = alcance.get("manual_version") or version_manual()
+    detalle = chat.get("detalle") or {}
+    clasificacion = detalle.get("clasificacion") or {}
+    try:
+        indice = store.indice_manual(version)
+        generales, procedimientos, extra = codigos_para(clasificacion, [s["codigo"] for s in indice])
+        secciones = seleccionar_secciones(
+            clasificacion, store.secciones_manual(version, generales + procedimientos + extra)
+        )
+        canal = (alcance.get("bandejas_nombres") or {}).get(str(detalle.get("bandeja_id")), "")
+        mensajes = construir_mensajes_evaluacion(
+            transcripcion=chat.get("transcripcion_tmp") or "",
+            agente_nombre=chat.get("agente_nombre"),
+            canal=canal,
+            clasificacion={k: v for k, v in clasificacion.items() if k != "modelo"},
+            secciones=secciones,
+            metricas=detalle.get("metricas") or {},
+            periodo=detalle.get("periodo") or {},
+        )
+        data, modelo = _llamar_ia(mensajes, config_ia)
+        resultado = validar_evaluacion(data, set(detalle.get("ids") or []))
+    except ERRORES_IA as exc:
+        return _manejar_error_ia(store, lote["id"], chat, exc, "clasificado")
+
+    resultado.update(calcular_qa(resultados_criterios(resultado), 0, len(resultado["fallas_criticas"])))
+    resultado.update(modelo=modelo, pauta_version=PAUTA_VERSION_QA, secciones=[s["codigo"] for s in secciones])
+    marcado = requiere_revision_qa(resultado, hubo_error=False)
+    store.actualizar_chat(
+        chat["id"],
+        {
+            "estado": "auditado",
+            "ia_resultado": resultado,
+            "ia_qa": resultado["qa"],
+            "ia_estado": resultado["estado"],
+            "ia_nota": None,
+            "ia_satisfaccion": resultado["satisfaccion_cliente"],
+            "ia_error": None,
+            "transcripcion_tmp": None,
+            "por_revisar": marcado,
+            "motivo_revision": "marcado" if marcado else None,
+        },
+    )
+    return _respuesta(store, lote["id"], "auditoria", f"Chat #{chat['conversation_id']} auditado.")
+
+
 def _auditar_chat(store, lote_id, config_ia):
     chat = store.tomar_siguiente(lote_id, ("leido",), "procesando")
     if not chat:
@@ -294,32 +435,8 @@ def _auditar_chat(store, lote_id, config_ia):
         )
         resultado = validar_resultado(data)
         resultado["modelo"] = modelo
-    except IARateLimitError as exc:
-        store.actualizar_chat(chat["id"], {"estado": "leido"})
-        if exc.diario:
-            store.actualizar_lote(lote_id, {"estado": "limite_diario"})
-            return _respuesta(store, lote_id, "auditoria", str(exc))
-        return _respuesta(store, lote_id, "espera", str(exc), esperar_segundos=exc.esperar_segundos)
-    except IAConfigError as exc:
-        store.actualizar_chat(chat["id"], {"estado": "leido"})
-        return _respuesta(store, lote_id, "configuracion", str(exc))
-    except (ValueError, IARespuestaError) as exc:
-        intentos = int(chat.get("intentos") or 0) + 1
-        if intentos < MAX_INTENTOS_IA:
-            store.actualizar_chat(chat["id"], {"estado": "leido", "intentos": intentos, "ia_error": str(exc)})
-            return _respuesta(store, lote_id, "auditoria", f"Chat #{chat['conversation_id']}: se reintenta ({exc}).")
-        store.actualizar_chat(
-            chat["id"],
-            {
-                "estado": "error",
-                "intentos": intentos,
-                "ia_error": str(exc),
-                "transcripcion_tmp": None,
-                "por_revisar": True,
-                "motivo_revision": "marcado",
-            },
-        )
-        return _respuesta(store, lote_id, "auditoria", f"Chat #{chat['conversation_id']}: error de IA ({exc}).")
+    except ERRORES_IA as exc:
+        return _manejar_error_ia(store, lote_id, chat, exc, "leido")
 
     marcado = requiere_revision(resultado, hubo_error=False)
     store.actualizar_chat(
@@ -379,7 +496,11 @@ def ejecutar_paso(store, lote_id, chatwoot, config_ia, rng=None):
 
     if config_ia.get("activa"):
         # Otra pestaña puede llevarse el último chat leído: entonces se sigue con la lectura.
-        respuesta = _auditar_chat(store, lote_id, config_ia)
+        # En la pauta QA cada paso hace como mucho una llamada: evaluar o, si no hay, clasificar.
+        if es_lote_qa(lote):
+            respuesta = _evaluar_chat_qa(store, lote, config_ia) or _clasificar_chat(store, lote, config_ia)
+        else:
+            respuesta = _auditar_chat(store, lote_id, config_ia)
         if respuesta:
             return respuesta
 
@@ -390,7 +511,7 @@ def ejecutar_paso(store, lote_id, chatwoot, config_ia, rng=None):
     chats = store.listar_chats(lote_id)
     if any(c.get("estado") == "procesando" for c in chats):
         return _respuesta(store, lote_id, "espera", "Hay un chat en proceso en otra pestaña.", esperar_segundos=5)
-    if any(c.get("estado") == "leido" for c in chats):
+    if any(c.get("estado") in ("leido", "clasificado") for c in chats):
         return _respuesta(
             store, lote_id, "configuracion", "Configura AUDITORIA_CHATS_AI_API_KEY para auditar los chats leídos."
         )
