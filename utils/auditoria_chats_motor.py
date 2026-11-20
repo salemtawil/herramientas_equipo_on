@@ -447,6 +447,72 @@ def resumen_por_agente(chats):
     return sorted(filas, key=lambda f: _normalizar_nombre(f["agente_nombre"]))
 
 
+VALORACIONES = {"buena": "Buena atención", "regular": "Atención regular", "mala": "Mala atención"}
+MAX_CRITERIOS_FEEDBACK = 3
+MAX_TEXTOS_FEEDBACK = 8
+
+
+def valoracion(chat):
+    """Veredicto simple de la atención según la nota efectiva: 4-5 buena, 3 regular, 1-2 mala."""
+    nota = nota_efectiva(chat)
+    if nota is None:
+        return None
+    if nota >= 4:
+        return "buena"
+    return "regular" if nota == 3 else "mala"
+
+
+def _textos_unicos(listas, maximo=MAX_TEXTOS_FEEDBACK):
+    vistos, salida = set(), []
+    for lista in listas:
+        for texto in lista or []:
+            texto = " ".join(str(texto or "").split())
+            clave = texto.lower()
+            if texto and clave not in vistos:
+                vistos.add(clave)
+                salida.append(texto)
+    return salida[:maximo]
+
+
+def feedback_por_agente(chats):
+    """Puntos fuertes, áreas de mejora y comentarios de cada agente para darle feedback."""
+    grupos = {}
+    for chat in chats:
+        if chat.get("estado") in ESTADOS_AUDITADOS and nota_efectiva(chat) is not None:
+            grupos.setdefault(chat.get("agente_id"), []).append(chat)
+
+    filas = []
+    for agente_id, grupo in grupos.items():
+        resultados = [c.get("ia_resultado") or {} for c in grupo]
+        criterios = []
+        for clave, etiqueta in CRITERIOS:
+            media = _media((r.get("criterios") or {}).get(clave) for r in resultados)
+            if media is not None:
+                criterios.append({"clave": clave, "etiqueta": etiqueta, "media": media})
+        valoraciones = {clave: 0 for clave in VALORACIONES}
+        for chat in grupo:
+            valoraciones[valoracion(chat)] += 1
+        filas.append(
+            {
+                "agente_id": agente_id,
+                "agente_nombre": grupo[0].get("agente_nombre", ""),
+                "auditados": len(grupo),
+                "nota_media": _media(nota_efectiva(c) for c in grupo),
+                "valoraciones": valoraciones,
+                "puntos_fuertes": sorted(
+                    (c for c in criterios if c["media"] >= 4), key=lambda c: -c["media"]
+                )[:MAX_CRITERIOS_FEEDBACK],
+                "areas_mejora": sorted(
+                    (c for c in criterios if c["media"] < 4), key=lambda c: c["media"]
+                )[:MAX_CRITERIOS_FEEDBACK],
+                "fortalezas": _textos_unicos(r.get("fortalezas") for r in resultados),
+                "mejoras": _textos_unicos(r.get("mejoras") for r in resultados),
+                "comentarios": _textos_unicos([c.get("comentario_revisor")] for c in grupo),
+            }
+        )
+    return sorted(filas, key=lambda f: _normalizar_nombre(f["agente_nombre"]))
+
+
 def _lunes_local(fecha_iso, tz):
     fecha = datetime.fromisoformat(str(fecha_iso)).astimezone(tz).date()
     return fecha - timedelta(days=fecha.weekday())

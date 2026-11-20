@@ -49,7 +49,10 @@
       <section class="card" aria-labelledby="ac-ia-titulo">
         <div class="page-section-title">
           <div><h2 id="ac-ia-titulo">Auditoría de la IA</h2></div>
-          {% if chat.ia_nota %}<span class="hero-badge">Nota {{ chat.ia_nota }}/5</span>{% endif %}
+          <span class="ac-feedback__valoraciones">
+            {% if valoracion %}<span class="ac-valoracion ac-valoracion--{{ valoracion }}">{{ valoraciones[valoracion] }}</span>{% endif %}
+            {% if chat.ia_nota %}<span class="hero-badge">Nota {{ chat.ia_nota }}/5</span>{% endif %}
+          </span>
         </div>
         {% if chat.estado == "error" %}
           <div class="warning">La IA no pudo auditar este chat: {{ chat.ia_error }}</div>

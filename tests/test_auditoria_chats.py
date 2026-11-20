@@ -426,3 +426,19 @@ def test_diagnostico_incluye_bandejas_y_descartes(entorno, cliente, monkeypatch)
     assert {"id": 11, "nombre": "Voz", "tipo": "Voice"}.items() <= next(b for b in datos["bandejas"] if b["id"] == 11).items()
     assert datos["descartes_por_motivo"] == {"llamada": 1}
     assert datos["chats"][0]["detalle"]["motivo_descarte"] == "llamada"
+
+
+def test_lote_muestra_todos_los_chats_con_valoracion_y_feedback(entorno, cliente):
+    _crear_lote(cliente)
+    lote_id = entorno.listar_lotes()[0]["id"]
+    for _ in range(30):
+        datos = cliente.post(f"/auditoria-chats/lote/{lote_id}/paso", headers={"Accept": "application/json"}).get_json()
+        if datos["accion"] == "fin":
+            break
+    chats = [c for c in entorno.listar_chats(lote_id) if c["estado"] != "descartado"]
+    html = cliente.get(f"/auditoria-chats/lote/{lote_id}").get_data(as_text=True)
+    assert "Todos los chats" in html
+    assert "Feedback por agente" in html
+    assert "Buena atención" in html
+    for chat in chats:
+        assert f"#{chat['conversation_id']}" in html

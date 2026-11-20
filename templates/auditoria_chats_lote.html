@@ -77,6 +77,91 @@
     {% endif %}
   </section>
 
+  {% if feedback %}
+  <section class="card" aria-labelledby="ac-feedback-titulo">
+    <div class="page-section-title">
+      <div>
+        <h2 id="ac-feedback-titulo">Feedback por agente</h2>
+        <p class="small">Lo que hace bien y lo que debe mejorar, a partir de todos sus chats auditados. Valoración: nota 4–5 buena, 3 regular, 1–2 mala.</p>
+      </div>
+    </div>
+    <div class="ac-feedback">
+      {% for fila in feedback %}
+        <article class="ac-feedback__agente">
+          <header class="ac-feedback__cabecera">
+            <h3>{{ fila.agente_nombre }}</h3>
+            <p class="small">{{ fila.auditados }} chats · nota media {{ fila.nota_media|decimal_es }}</p>
+          </header>
+          <p class="ac-feedback__valoraciones">
+            {% for clave, texto in valoraciones.items() %}
+              <span class="ac-valoracion ac-valoracion--{{ clave }}">{{ texto }}: {{ fila.valoraciones[clave] }}</span>
+            {% endfor %}
+          </p>
+          <div class="ac-feedback__columnas">
+            <div>
+              <h4>Puntos fuertes</h4>
+              {% if fila.puntos_fuertes or fila.fortalezas %}
+                <ul>
+                  {% for c in fila.puntos_fuertes %}<li><strong>{{ c.etiqueta }}</strong> ({{ c.media|decimal_es }})</li>{% endfor %}
+                  {% for t in fila.fortalezas %}<li>{{ t }}</li>{% endfor %}
+                </ul>
+              {% else %}<p class="small">Sin puntos destacados todavía.</p>{% endif %}
+            </div>
+            <div>
+              <h4>Áreas de mejora</h4>
+              {% if fila.areas_mejora or fila.mejoras %}
+                <ul>
+                  {% for c in fila.areas_mejora %}<li><strong>{{ c.etiqueta }}</strong> ({{ c.media|decimal_es }})</li>{% endfor %}
+                  {% for t in fila.mejoras %}<li>{{ t }}</li>{% endfor %}
+                </ul>
+              {% else %}<p class="small">Sin áreas de mejora marcadas.</p>{% endif %}
+            </div>
+          </div>
+          {% if fila.comentarios %}
+            <h4>Comentarios del revisor</h4>
+            <ul>{% for t in fila.comentarios %}<li>{{ t }}</li>{% endfor %}</ul>
+          {% endif %}
+        </article>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  <section class="card" aria-labelledby="ac-todos-titulo">
+    <div class="page-section-title">
+      <div>
+        <h2 id="ac-todos-titulo">Todos los chats</h2>
+        <p class="small">Todos los chats del lote, estén o no marcados para revisión. Abre cualquiera para ver la transcripción y el detalle.</p>
+      </div>
+      <span class="hero-badge hero-badge-soft">{{ todos|length }}</span>
+    </div>
+    {% if todos %}
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Chat</th><th>Agente</th><th>Valoración</th><th>Nota</th><th>Satisfacción</th><th>Resumen</th><th></th></tr>
+          </thead>
+          <tbody>
+            {% for chat in todos %}
+              {% set v = valoracion(chat) if chat.estado in ("auditado", "revisado") else None %}
+              <tr>
+                <td>#{{ chat.conversation_id }}</td>
+                <td>{{ chat.agente_nombre }}</td>
+                <td>{% if v %}<span class="ac-valoracion ac-valoracion--{{ v }}">{{ valoraciones[v] }}</span>{% elif chat.estado == "error" %}Error de IA{% else %}Pendiente{% endif %}</td>
+                <td>{{ chat.nota_final if chat.nota_final is not none else (chat.ia_nota or "—") }}{% if chat.estado == "revisado" %} <span class="small">(revisado)</span>{% endif %}</td>
+                <td>{{ (chat.satisfaccion_final or chat.ia_satisfaccion or "—")|replace("_", " ") }}</td>
+                <td>{{ (chat.ia_resultado or {}).get("resumen", chat.ia_error or "") }}</td>
+                <td><a href="{{ url_for('auditoria_chats.ver_chat', chat_id=chat.id) }}">Ver</a></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="small">Aún no hay chats elegidos.</p>
+    {% endif %}
+  </section>
+
   <section class="card" aria-labelledby="ac-cola-titulo">
     <div class="page-section-title">
       <div>

@@ -588,3 +588,43 @@ def test_chat_auditado_guarda_bandeja_y_forma(monkeypatch):
     assert chat["estado"] == "auditado"
     assert chat["detalle"]["bandeja_id"] == 7
     assert [m["tipo"] for m in chat["detalle"]["forma"]] == [0, 1]
+
+
+def test_valoracion_segun_nota_efectiva():
+    assert motor.valoracion({"ia_nota": 5}) == "buena"
+    assert motor.valoracion({"ia_nota": 4}) == "buena"
+    assert motor.valoracion({"ia_nota": 3}) == "regular"
+    assert motor.valoracion({"ia_nota": 2}) == "mala"
+    assert motor.valoracion({"ia_nota": 2, "nota_final": 4}) == "buena"
+    assert motor.valoracion({"estado": "error"}) is None
+
+
+def _chat_feedback(nota, criterios, fortalezas=(), mejoras=(), **extra):
+    chat = {
+        "agente_id": 7, "agente_nombre": "LuisM", "estado": "auditado", "ia_nota": nota,
+        "ia_resultado": {"criterios": criterios, "fortalezas": list(fortalezas), "mejoras": list(mejoras)},
+    }
+    chat.update(extra)
+    return chat
+
+
+def test_feedback_por_agente_agrupa_valoraciones_criterios_y_textos():
+    base = {"saludo": 5, "comprension": 4, "exactitud": 4, "resolucion": 4, "tono": 5, "tiempos": 3, "cierre": 2}
+    chats = [
+        _chat_feedback(5, base, fortalezas=["Saluda con cordialidad"], mejoras=["Despedirse"]),
+        _chat_feedback(3, dict(base, cierre=1), fortalezas=["saluda con cordialidad"], mejoras=["Confirmar si queda algo"]),
+        _chat_feedback(2, dict(base, resolucion=2), estado="revisado", nota_final=2, comentario_revisor="Faltó dar el paso siguiente"),
+        {"agente_id": 7, "agente_nombre": "LuisM", "estado": "descartado"},
+        {"agente_id": 7, "agente_nombre": "LuisM", "estado": "error", "ia_error": "x"},
+    ]
+    [fila] = motor.feedback_por_agente(chats)
+    assert fila["agente_nombre"] == "LuisM"
+    assert fila["auditados"] == 3
+    assert fila["valoraciones"] == {"buena": 1, "regular": 1, "mala": 1}
+    assert fila["nota_media"] == 3.3
+    assert [c["clave"] for c in fila["puntos_fuertes"]] == ["saludo", "tono", "comprension"]
+    assert [c["clave"] for c in fila["areas_mejora"]] == ["cierre", "tiempos", "resolucion"]
+    assert fila["areas_mejora"][0]["media"] == 1.7
+    assert fila["fortalezas"] == ["Saluda con cordialidad"]
+    assert fila["mejoras"] == ["Despedirse", "Confirmar si queda algo"]
+    assert fila["comentarios"] == ["Faltó dar el paso siguiente"]
