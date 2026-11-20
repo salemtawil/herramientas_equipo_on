@@ -460,3 +460,74 @@ def test_diagnostico_qa_sin_textos_del_cliente_ni_del_manual(entorno, cliente):
     assert '"ia_qa": 82.5' in texto and '"ia_estado": "necesita_mejorar"' in texto
     assert '"A1": "cumple"' in texto and '"CR01"' in texto and '"P03"' in texto
     assert "Pedro" not in texto
+
+
+# --- Revisión humana QA-1.1 ---
+
+from utils.auditoria_chats_rubrica import CRITERIOS_QA  # noqa: E402
+
+
+def _chat_qa_guardado(store, fallas=()):
+    lote = store.crear_lote({"etiqueta": "QA", "estado": "completado", "pauta_version": "QA-1.1", "since": BASE_TS, "until": BASE_TS})
+    criterios = {c: {"resultado": "cumple", "evidencias": ["m2"], "comentario": f"Comentario {c}"} for c, _, _ in CRITERIOS_QA}
+    criterios["B2"]["resultado"] = "no_cumple"
+    store.insertar_chats([{
+        "batch_id": lote["id"], "conversation_id": 777, "agente_id": 1, "agente_nombre": "Ana Pérez",
+        "estado": "auditado", "ia_qa": 90.0, "ia_estado": "pendiente" if fallas else "aprobado",
+        "ia_satisfaccion": "satisfecho", "por_revisar": True, "motivo_revision": "marcado",
+        "ia_resultado": {
+            "pauta_version": "QA-1.1", "qa": 90.0, "pct_verificable": 100.0, "estado": "aprobado",
+            "criterios": criterios, "resumen": "Resumen QA", "confianza": "alta",
+            "fallas_criticas": [{"codigo": f, "evidencias": ["m2"], "descripcion": "Desc", "estado": "sospechosa"} for f in fallas],
+            "cumplimientos": ["Saluda"], "incumplimientos": ["No ofrece solución"], "recomendaciones": ["Ofrecer alternativa"],
+            "estado_resolucion": "parcial", "responsabilidad": "agente", "satisfaccion_cliente": "satisfecho",
+        },
+        "detalle": {"clasificacion": {"motivo_principal": "Pausa de días", "procedimientos": ["P03"]}},
+    }])
+    return store.listar_chats(lote["id"])[0]
+
+
+def _form_qa(**extra):
+    datos = {"revisor": "Sofía", "satisfaccion_final": "satisfecho", "estado_final": "aprobado", "comentario_revisor": ""}
+    datos.update({f"criterio_{c}": "cumple" for c, _, _ in CRITERIOS_QA})
+    datos.update(extra)
+    return datos
+
+
+def test_ver_chat_qa_muestra_criterios_qa_y_motivo(entorno, cliente):
+    chat = _chat_qa_guardado(entorno)
+    html = cliente.get(f"/auditoria-chats/chat/{chat['id']}").get_data(as_text=True)
+    assert "A1" in html and "Identificación del problema" in html and "Comentario B1" in html
+    assert "90,0" in html and "Pausa de días" in html and "P03" in html
+    assert 'href="#m2"' in html and 'id="m2"' in html
+    assert 'name="criterio_A1"' in html and 'name="estado_final"' in html
+    assert 'name="nota_final"' not in html
+
+
+def test_revisar_qa_corrige_criterio_y_recalcula(entorno, cliente):
+    chat = _chat_qa_guardado(entorno)
+    respuesta = cliente.post(f"/auditoria-chats/chat/{chat['id']}", data=_form_qa(criterio_B2="cumple", criterio_D4="no_cumple"))
+    assert respuesta.status_code == 302
+    guardado = entorno.obtener_chat(chat["id"])
+    assert guardado["estado"] == "revisado" and guardado["revisor"] == "Sofía"
+    assert guardado["qa_final"] == 97.0 and guardado["estado_final"] == "aprobado"
+    assert guardado["revision"]["criterios"] == {"B2": "cumple", "D4": "no_cumple"}
+
+
+def test_revisar_qa_falla_confirmada_fuerza_no_aprobado(entorno, cliente):
+    chat = _chat_qa_guardado(entorno, fallas=["CR04"])
+    cliente.post(f"/auditoria-chats/chat/{chat['id']}", data=_form_qa(falla_CR04="confirmada"))
+    guardado = entorno.obtener_chat(chat["id"])
+    assert guardado["estado_final"] == "no_aprobado"
+    assert guardado["revision"]["fallas"] == {"CR04": "confirmada"}
+
+
+def test_revisar_qa_exige_decidir_fallas_y_nombre(entorno, cliente):
+    chat = _chat_qa_guardado(entorno, fallas=["CR04"])
+    cliente.post(f"/auditoria-chats/chat/{chat['id']}", data=_form_qa())
+    assert entorno.obtener_chat(chat["id"])["estado"] == "auditado"
+    cliente.post(f"/auditoria-chats/chat/{chat['id']}", data=_form_qa(revisor="", falla_CR04="descartada"))
+    assert entorno.obtener_chat(chat["id"])["estado"] == "auditado"
+    cliente.post(f"/auditoria-chats/chat/{chat['id']}", data=_form_qa(falla_CR04="descartada", estado_final="necesita_mejorar"))
+    guardado = entorno.obtener_chat(chat["id"])
+    assert guardado["estado"] == "revisado" and guardado["estado_final"] == "necesita_mejorar"

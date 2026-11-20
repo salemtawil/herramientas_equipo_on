@@ -1,0 +1,135 @@
+{# Auditoría y revisión de un chat con la pauta QA-1.1. Se incluye desde auditoria_chats_chat.html. #}
+{% set etiquetas_resolucion = {"resuelto": "Resuelto", "parcial": "Parcial", "no_resuelto": "No resuelto", "no_verificable": "No verificable"} %}
+{% set etiquetas_responsabilidad = {"agente": "Agente", "externa": "Externa", "usuario": "Usuario", "compartida": "Compartida", "no_determinable": "No determinable"} %}
+{% set clasificacion = (chat.detalle or {}).get("clasificacion") or {} %}
+{% set estado_ia = chat.ia_estado %}
+<section class="card" aria-labelledby="ac-ia-titulo">
+  <div class="page-section-title">
+    <div><h2 id="ac-ia-titulo">Auditoría de la IA · QA-1.1</h2></div>
+    <span class="ac-feedback__valoraciones">
+      {% if estado_ia %}<span class="ac-valoracion ac-valoracion--{{ estado_ia }}">{{ estados_qa[estado_ia] }}</span>{% endif %}
+      {% if chat.ia_qa is not none %}<span class="hero-badge">QA {{ chat.ia_qa|decimal_es }}</span>{% endif %}
+    </span>
+  </div>
+  {% if chat.estado == "error" %}
+    <div class="warning">La IA no pudo auditar este chat: {{ chat.ia_error }}</div>
+  {% endif %}
+  {% if clasificacion %}
+    <p><strong>Motivo:</strong> {{ clasificacion.motivo_principal }}</p>
+    {% if clasificacion.procedimientos %}
+      <p class="small">Procedimientos: {% for p in clasificacion.procedimientos %}{{ p }} {{ procedimientos[p][0] if p in procedimientos else "" }}{% if not loop.last %} · {% endif %}{% endfor %}</p>
+    {% endif %}
+  {% endif %}
+  {% if resultado %}
+    <p>{{ resultado.resumen }}</p>
+    {% if resultado.modelo %}<p class="small">Auditado con {{ resultado.modelo }}</p>{% endif %}
+    <div class="grid top-space">
+      <div class="metric"><div class="label">% verificable</div><div class="value ac-config__valor">{{ resultado.pct_verificable|decimal_es(0) if resultado.pct_verificable is not none else "—" }} %</div></div>
+      <div class="metric"><div class="label">Resolución</div><div class="value ac-config__valor">{{ etiquetas_resolucion.get(resultado.estado_resolucion, "—") }}</div></div>
+      <div class="metric"><div class="label">Responsabilidad</div><div class="value ac-config__valor">{{ etiquetas_responsabilidad.get(resultado.responsabilidad, "—") }}</div></div>
+      <div class="metric"><div class="label">Confianza</div><div class="value ac-config__valor">{{ (resultado.confianza or "—")|capitalize }}</div></div>
+    </div>
+
+    {% if resultado.fallas_criticas %}
+      <div class="warning top-space">
+        <strong>Posibles fallas críticas</strong> (requieren confirmación humana):
+        <ul>
+          {% for f in resultado.fallas_criticas %}
+            <li>{{ f.codigo }} · {{ fallas_criticas.get(f.codigo, "") }}{% if f.descripcion %}: {{ f.descripcion }}{% endif %}
+              {% for e in f.evidencias %}<a href="#{{ e }}">{{ e }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+
+    <div class="table-wrap top-space">
+      <table>
+        <thead><tr><th>Criterio</th><th>Peso</th><th>Resultado IA</th><th>Comentario</th><th>Evidencias</th></tr></thead>
+        <tbody>
+          {% for codigo, etiqueta, peso in criterios_qa %}
+            {% set item = (resultado.criterios or {}).get(codigo) or {} %}
+            <tr>
+              <td>{{ codigo }} {{ etiqueta }}</td>
+              <td>{{ peso }}</td>
+              <td>{{ etiquetas_resultados.get(item.resultado, "—") }}</td>
+              <td>{{ item.comentario or "" }}</td>
+              <td>{% for e in item.evidencias or [] %}<a href="#{{ e }}">{{ e }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if resultado.cumplimientos %}<h3 class="top-space">Cumplimientos destacados</h3><ul>{% for t in resultado.cumplimientos %}<li>{{ t }}</li>{% endfor %}</ul>{% endif %}
+    {% if resultado.incumplimientos %}<h3 class="top-space">Incumplimientos</h3><ul>{% for t in resultado.incumplimientos %}<li>{{ t }}</li>{% endfor %}</ul>{% endif %}
+    {% if resultado.recomendaciones %}<h3 class="top-space">Recomendaciones</h3><ul>{% for t in resultado.recomendaciones %}<li>{{ t }}</li>{% endfor %}</ul>{% endif %}
+  {% endif %}
+</section>
+
+<section class="card" aria-labelledby="ac-revision-titulo">
+  <div class="page-section-title">
+    <div>
+      <h2 id="ac-revision-titulo">Revisión humana</h2>
+      {% if chat.estado == "revisado" %}<p class="small">Revisado por {{ chat.revisor }}{% if chat.qa_final is not none %} · QA final {{ chat.qa_final|decimal_es }}{% endif %}. Puedes corregirlo.</p>{% endif %}
+    </div>
+  </div>
+  {% if chat.estado in ("auditado", "revisado") and resultado.criterios %}
+    {% set fallas_revisadas = (chat.revision or {}).get("fallas") or {} %}
+    <form method="post" action="{{ url_for('auditoria_chats.revisar', chat_id=chat.id) }}">
+      <label class="small" for="ac-revisor">Tu nombre</label>
+      <input type="text" id="ac-revisor" name="revisor" maxlength="80" value="{{ chat.revisor or '' }}" required autocomplete="name" data-ac-revisor>
+
+      <p class="small top-space">Corrige los criterios que no compartas; el QA se recalcula al guardar.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Criterio</th><th>Resultado</th></tr></thead>
+          <tbody>
+            {% for codigo, etiqueta, peso in criterios_qa %}
+              <tr>
+                <td><label for="ac-criterio-{{ codigo }}">{{ codigo }} {{ etiqueta }}</label></td>
+                <td>
+                  <select id="ac-criterio-{{ codigo }}" name="criterio_{{ codigo }}">
+                    {% for r in resultados_qa %}<option value="{{ r }}"{% if r == criterios_efectivos.get(codigo) %} selected{% endif %}>{{ etiquetas_resultados[r] }}</option>{% endfor %}
+                  </select>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      {% for f in resultado.fallas_criticas or [] %}
+        <fieldset class="top-space">
+          <legend class="small">{{ f.codigo }} · {{ fallas_criticas.get(f.codigo, "") }}</legend>
+          <label><input type="radio" name="falla_{{ f.codigo }}" value="confirmada" required{% if fallas_revisadas.get(f.codigo) == "confirmada" %} checked{% endif %}> Confirmar (el chat queda NO APROBADO)</label>
+          <label><input type="radio" name="falla_{{ f.codigo }}" value="descartada"{% if fallas_revisadas.get(f.codigo) == "descartada" %} checked{% endif %}> Descartar</label>
+        </fieldset>
+      {% endfor %}
+
+      <div class="row-2 top-space">
+        <div>
+          <label class="small" for="ac-estado-final">Estado final</label>
+          <select id="ac-estado-final" name="estado_final" required>
+            {% for clave in ("aprobado", "necesita_mejorar", "no_aprobado") %}<option value="{{ clave }}"{% if clave == estado_precargado %} selected{% endif %}>{{ estados_qa[clave] }}</option>{% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="small" for="ac-satisfaccion">Satisfacción del cliente</label>
+          <select id="ac-satisfaccion" name="satisfaccion_final" required>
+            {% set satisfaccion_actual = chat.satisfaccion_final or chat.ia_satisfaccion %}
+            {% for s in satisfacciones %}<option value="{{ s }}"{% if s == satisfaccion_actual %} selected{% endif %}>{{ etiquetas_satisfaccion.get(s, s) }}</option>{% endfor %}
+          </select>
+        </div>
+      </div>
+      <label class="small top-space" for="ac-comentario">Comentario para el agente</label>
+      <textarea id="ac-comentario" name="comentario_revisor" rows="4" maxlength="2000">{{ chat.comentario_revisor or '' }}</textarea>
+      <div class="acciones-barra top-space">
+        <button type="submit">Guardar revisión</button>
+        {% if siguiente %}<a class="btn secondary" href="{{ url_for('auditoria_chats.ver_chat', chat_id=siguiente.id) }}">Saltar al siguiente</a>{% endif %}
+      </div>
+    </form>
+  {% elif chat.estado == "error" %}
+    <p class="small">Reintenta la auditoría de este chat desde la página del lote para poder revisarlo.</p>
+  {% else %}
+    <p class="small">Este chat todavía no se ha auditado.</p>
+  {% endif %}
+</section>

@@ -11,9 +11,19 @@ from flask import Blueprint, Response, abort, flash, jsonify, redirect, render_t
 
 from utils import auditoria_chats_motor as motor
 from utils.auditoria_chats_pauta import CRITERIOS, SATISFACCION
-from utils.auditoria_chats_rubrica import PAUTA_VERSION_QA, resultados_criterios
+from utils.auditoria_chats_rubrica import (
+    CRITERIOS_QA,
+    ESTADOS_QA,
+    ETIQUETAS_RESULTADOS,
+    FALLAS_CRITICAS,
+    PAUTA_VERSION_QA,
+    PROCEDIMIENTOS,
+    RESULTADOS,
+    calcular_qa,
+    resultados_criterios,
+)
 from utils.auditoria_chats_store import AuditoriaChatsConfigError, AuditoriaChatsError, obtener_store
-from utils.auditoria_chats_transcripcion import _etiquetas_adjuntos, mensajes_utiles
+from utils.auditoria_chats_transcripcion import _etiquetas_adjuntos, _mensajes_v2, mensajes_utiles
 from utils.chatwoot_reportes import ChatwootClient, _obtener_timezone, _timezone
 from utils.errores import mensaje_error_publico
 from utils.ia_chat import obtener_config_ia
@@ -365,16 +375,27 @@ def _siguiente_por_revisar(store, lote_id, excluir_id):
     return None
 
 
-def _mensajes_para_vista(mensajes):
+def _mensajes_para_vista(mensajes, incluir_internos=False):
+    """Mensajes para mostrar. En la pauta QA también las notas internas y los eventos del sistema,
+    porque la IA puede citarlos como evidencia."""
     tz = _obtener_timezone(_timezone())
     vista = []
-    for mensaje in mensajes_utiles(mensajes):
+    for mensaje in _mensajes_v2(mensajes) if incluir_internos else mensajes_utiles(mensajes):
         es_agente = mensaje.get("message_type") == 1
+        es_sistema = mensaje.get("message_type") == 2
         remitente = mensaje.get("sender") if isinstance(mensaje.get("sender"), dict) else {}
+        if es_sistema:
+            autor = "Sistema"
+        else:
+            autor = remitente.get("name") or ("Agente" if es_agente else "Cliente")
+            if mensaje.get("private"):
+                autor = f"Nota interna · {autor}"
         vista.append(
             {
+                "id": f"m{mensaje.get('id')}",
                 "es_agente": es_agente,
-                "autor": remitente.get("name") or ("Agente" if es_agente else "Cliente"),
+                "es_interno": es_sistema or bool(mensaje.get("private")),
+                "autor": autor,
                 "hora": datetime.fromtimestamp(int(mensaje.get("created_at") or 0), tz).strftime("%d/%m %H:%M"),
                 "texto": " ".join(
                     p for p in [str(mensaje.get("content") or "").strip(), *_etiquetas_adjuntos(mensaje)] if p
@@ -392,12 +413,15 @@ def ver_chat(chat_id):
     chat = _cargar_chat_o_404(store, chat_id)
     lote = _cargar_lote_o_404(store, chat["batch_id"])
 
+    es_qa = motor.es_lote_qa(lote)
     mensajes, url_chatwoot = [], ""
     chatwoot, error_chatwoot = _chatwoot_o_error()
     if chatwoot:
         url_chatwoot = chatwoot.url_conversacion(chat["conversation_id"])
         try:
-            mensajes = _mensajes_para_vista(chatwoot.mensajes_de_conversacion(chat["conversation_id"]))
+            mensajes = _mensajes_para_vista(
+                chatwoot.mensajes_de_conversacion(chat["conversation_id"]), incluir_internos=es_qa
+            )
         except Exception as exc:
             logger.warning("No se pudo leer el chat %s: %s", chat["conversation_id"], exc)
             error_chatwoot = mensaje_error_publico(exc, "No se pudo leer el chat en Chatwoot")
@@ -415,7 +439,72 @@ def ver_chat(chat_id):
         error_chatwoot=error_chatwoot,
         url_chatwoot=url_chatwoot,
         siguiente=_siguiente_por_revisar(store, lote["id"], chat["id"]),
+        es_qa=es_qa,
+        criterios_qa=CRITERIOS_QA,
+        resultados_qa=RESULTADOS,
+        etiquetas_resultados=ETIQUETAS_RESULTADOS,
+        estados_qa=ESTADOS_QA,
+        fallas_criticas=FALLAS_CRITICAS,
+        procedimientos=PROCEDIMIENTOS,
+        criterios_efectivos=motor.criterios_efectivos(chat) if es_qa else {},
+        estado_precargado=_estado_precargado(chat) if es_qa else None,
     )
+
+
+def _estado_precargado(chat):
+    """Estado sugerido para el formulario de revisión: el del revisor, si no el recalculado."""
+    if chat.get("estado_final"):
+        return chat["estado_final"]
+    fallas = (chat.get("revision") or {}).get("fallas") or {}
+    calculo = calcular_qa(motor.criterios_efectivos(chat), sum(1 for v in fallas.values() if v == "confirmada"))
+    return calculo["estado"] if calculo["estado"] in ESTADOS_FINALES_REVISION else None
+
+
+ESTADOS_FINALES_REVISION = ("aprobado", "necesita_mejorar", "no_aprobado")
+DECISIONES_FALLA = ("confirmada", "descartada")
+
+
+def _revisar_qa(store, chat, revisor, satisfaccion, comentario):
+    """Guarda la revisión de un chat QA-1.1. Devuelve un mensaje de error o None si se guardó."""
+    resultado = chat.get("ia_resultado") or {}
+    originales = resultados_criterios(resultado)
+    criterios, corregidos = {}, {}
+    for codigo, _, _ in CRITERIOS_QA:
+        valor = request.form.get(f"criterio_{codigo}") or originales.get(codigo)
+        if valor not in RESULTADOS:
+            return f"Elige un resultado válido para el criterio {codigo}."
+        criterios[codigo] = valor
+        if valor != originales.get(codigo):
+            corregidos[codigo] = valor
+
+    fallas = {}
+    for falla in resultado.get("fallas_criticas") or []:
+        decision = request.form.get(f"falla_{falla['codigo']}", "")
+        if decision not in DECISIONES_FALLA:
+            return f"Confirma o descarta la falla crítica {falla['codigo']}."
+        fallas[falla["codigo"]] = decision
+
+    estado_final = request.form.get("estado_final", "")
+    if estado_final not in ESTADOS_FINALES_REVISION:
+        return "Elige el estado final del chat."
+    confirmadas = sum(1 for v in fallas.values() if v == "confirmada")
+    if confirmadas:
+        estado_final = "no_aprobado"
+
+    store.actualizar_chat(
+        chat["id"],
+        {
+            "estado": "revisado",
+            "revisor": revisor,
+            "qa_final": calcular_qa(criterios, confirmadas)["qa"],
+            "estado_final": estado_final,
+            "revision": {"criterios": corregidos, "fallas": fallas},
+            "satisfaccion_final": satisfaccion,
+            "comentario_revisor": comentario,
+            "revisado_at": datetime.now(timezone.utc).isoformat(),
+        },
+    )
+    return None
 
 
 @auditoria_chats_bp.route("/auditoria-chats/chat/<chat_id>", methods=["POST"])
@@ -431,6 +520,15 @@ def revisar(chat_id):
     revisor = " ".join(str(request.form.get("revisor") or "").split())[:MAX_REVISOR]
     satisfaccion = request.form.get("satisfaccion_final", "")
     comentario = str(request.form.get("comentario_revisor") or "").strip()[:MAX_COMENTARIO]
+    if (chat.get("ia_resultado") or {}).get("pauta_version") == PAUTA_VERSION_QA:
+        if not revisor or satisfaccion not in SATISFACCION:
+            error = "Indica tu nombre y la satisfacción del cliente."
+        else:
+            error = _revisar_qa(store, chat, revisor, satisfaccion, comentario)
+        if error:
+            flash(error, "warning")
+            return redirect(url_for("auditoria_chats.ver_chat", chat_id=chat_id))
+        return _tras_revisar(store, chat)
     try:
         nota = int(request.form.get("nota_final", ""))
     except ValueError:
@@ -451,8 +549,12 @@ def revisar(chat_id):
             "revisado_at": datetime.now(timezone.utc).isoformat(),
         },
     )
+    return _tras_revisar(store, chat)
+
+
+def _tras_revisar(store, chat):
     flash(f"Chat #{chat['conversation_id']} revisado.", "success")
-    siguiente = _siguiente_por_revisar(store, chat["batch_id"], chat_id)
+    siguiente = _siguiente_por_revisar(store, chat["batch_id"], chat["id"])
     if siguiente:
         return redirect(url_for("auditoria_chats.ver_chat", chat_id=siguiente["id"]))
     return redirect(url_for("auditoria_chats.ver_lote", lote_id=chat["batch_id"]))
