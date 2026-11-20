@@ -245,3 +245,39 @@ def test_metricas_sin_respuestas_no_fallan():
     metricas = metricas_tiempos(mensajes, periodo_agente(mensajes, 7, "Ana"), 7)
     assert metricas["primera_respuesta"] is None and metricas["primera_respuesta_agente"] is None
     assert metricas["esperas_largas"] == [] and metricas["inactividad"]["cierre"] is None
+
+
+def test_periodo_no_confunde_nombres_que_se_contienen():
+    ANA_ = {"id": 7, "name": "Ana", "type": "user"}
+    MARIANA = {"id": 9, "name": "Mariana", "type": "user"}
+    mensajes = [
+        _m(1, 0, 2, "Assigned to Ana by Admin"),
+        _m(2, 10, 0, "Hola", CLIENTE),
+        _m(3, 610, 1, "Hola, soy Ana", ANA_),
+        _m(4, 620, 2, "Assigned to Mariana by Admin"),
+        _m(5, 630, 0, "¿Hola?", CLIENTE),
+        _m(6, 700, 1, "Hola, soy Mariana", MARIANA),
+    ]
+    assert periodo_agente(mensajes, 7, "Ana") == {"desde": "m1", "hasta": "m4", "inferido": True}
+    periodo = periodo_agente(mensajes, 9, "Mariana")
+    assert periodo == {"desde": "m4", "hasta": None, "inferido": True}
+    assert metricas_tiempos(mensajes, periodo, 9)["primera_respuesta_agente"]["segundos"] == 70
+
+
+def test_primera_respuesta_agente_sin_evento_de_asignacion_cuenta_la_espera():
+    mensajes = [_m(1, 0, 0, "Hola", CLIENTE), _m(2, 900, 1, "Hola, soy Ana", ANA)]
+    periodo = periodo_agente(mensajes, 7, "Ana Pérez")
+    assert metricas_tiempos(mensajes, periodo, 7)["primera_respuesta_agente"] == {"segundos": 900, "desde": "m1", "hasta": "m2"}
+
+
+def test_asignacion_a_un_equipo_no_corta_el_periodo():
+    mensajes = [
+        _m(1, 0, 0, "Hola", CLIENTE),
+        _m(2, 5, 2, "Assigned to Ana Pérez by Admin"),
+        _m(3, 10, 2, "Assigned to Soporte team by Admin"),
+        _m(4, 15, 2, "Asignado al equipo Ventas por Admin"),
+        _m(5, 60, 1, "Hola, soy Ana", ANA),
+    ]
+    periodo = periodo_agente(mensajes, 7, "Ana Pérez")
+    assert periodo == {"desde": "m2", "hasta": None, "inferido": True}
+    assert metricas_tiempos(mensajes, periodo, 7)["primera_respuesta_agente"]["segundos"] == 55

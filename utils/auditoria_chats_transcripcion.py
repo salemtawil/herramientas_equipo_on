@@ -1,6 +1,7 @@
 """Transcripción y anonimización de conversaciones de Chatwoot para la auditoría de chats."""
 
 import re
+import unicodedata
 from datetime import datetime
 
 from utils.chatwoot_reportes import _obtener_timezone
@@ -136,6 +137,9 @@ MENSAJE_ACTIVIDAD = 2
 ESPERA_MAXIMA_SEGUNDOS = 180
 
 _RE_ASIGNACION = re.compile(r"(?:assigned to|asignad[oa] a)\s+(.+?)(?:\s+(?:by|por)\s+.*)?$", re.IGNORECASE)
+_RE_ASIGNACION_EQUIPO = re.compile(
+    r"(?:assigned to\s+.+?\s+team\b|asignad[oa] al equipo\b|asignad[oa] a(?:l)? equipo\b)", re.IGNORECASE
+)
 _RE_AUTOASIGNACION = re.compile(r"^(.+?)\s+(?:self-assigned|se auto-?asign)", re.IGNORECASE)
 _RE_RESOLUCION = re.compile(r"resolved|resuelt", re.IGNORECASE)
 _RE_RESUELTO_POR = re.compile(r"(?:by|por)\s+(.+?)\.?$", re.IGNORECASE)
@@ -206,10 +210,12 @@ def construir_transcripcion_v2(mensajes, tz_name, max_chars=12000):
 
 
 def _asignado_a(mensaje):
-    """Nombre de la persona asignada en un mensaje de actividad, o None."""
+    """Nombre de la persona asignada en un mensaje de actividad, o None (también para equipos)."""
     if mensaje.get("message_type") != MENSAJE_ACTIVIDAD:
         return None
     texto = _texto(mensaje)
+    if _RE_ASIGNACION_EQUIPO.search(texto):
+        return None
     coincidencia = _RE_ASIGNACION.search(texto) or _RE_AUTOASIGNACION.search(texto)
     return coincidencia.group(1).strip().rstrip(".") if coincidencia else None
 
@@ -218,9 +224,15 @@ def _es_resolucion(mensaje):
     return mensaje.get("message_type") == MENSAJE_ACTIVIDAD and bool(_RE_RESOLUCION.search(_texto(mensaje)))
 
 
+def _nombre_normalizado(nombre):
+    texto = unicodedata.normalize("NFKD", str(nombre or "").lower())
+    return " ".join("".join(c for c in texto if not unicodedata.combining(c)).split())
+
+
 def _mismo_nombre(a, b):
-    a, b = " ".join(str(a or "").lower().split()), " ".join(str(b or "").lower().split())
-    return bool(a and b) and (a == b or a in b or b in a)
+    """Coincidencia exacta (sin mayúsculas ni tildes): «Ana» no debe coincidir con «Mariana»."""
+    a, b = _nombre_normalizado(a), _nombre_normalizado(b)
+    return bool(a) and a == b
 
 
 def periodo_agente(mensajes, agente_id, agente_nombre):
@@ -292,11 +304,18 @@ def _primera_respuesta_agente(ordenados, tramo, agente_id):
         elif _es_respuesta_agente(mensaje):
             pendiente = None
     if pendiente:
-        # El cliente ya esperaba cuando llegó la asignación: se cuenta desde la asignación.
+        # El cliente ya esperaba cuando empezó el período: se cuenta desde la asignación o, si el
+        # período empieza con la propia respuesta del agente (sin evento de asignación), desde el
+        # mensaje del cliente que esperaba.
+        referencia = inicio if inicio.get("message_type") == MENSAJE_ACTIVIDAD else pendiente
         respuesta = next((m for m in tramo if _es_respuesta_agente(m, agente_id)), None)
         if not respuesta:
             return None
-        return {"segundos": _ts_mensaje(respuesta) - _ts_mensaje(inicio), "desde": _id(inicio), "hasta": _id(respuesta)}
+        return {
+            "segundos": _ts_mensaje(respuesta) - _ts_mensaje(referencia),
+            "desde": _id(referencia),
+            "hasta": _id(respuesta),
+        }
     return _primera_respuesta(tramo, agente_id)
 
 
