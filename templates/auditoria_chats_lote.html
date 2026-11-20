@@ -112,13 +112,10 @@
 
     {% if errores %}
       <h3 class="top-space">Chats con error de IA</h3>
-      <div class="acciones-barra">
-        {% for chat in errores %}
-          <form method="post" action="{{ url_for('auditoria_chats.reintentar', chat_id=chat.id) }}">
-            <button type="submit" class="btn secondary">Reintentar #{{ chat.conversation_id }}</button>
-          </form>
-        {% endfor %}
-      </div>
+      <p class="small">Último error: {{ errores[-1].ia_error }}</p>
+      <form method="post" action="{{ url_for('auditoria_chats.reintentar_errores', lote_id=lote.id) }}" class="top-space">
+        <button type="submit" class="btn secondary">Reintentar los {{ errores|length }} chats con error</button>
+      </form>
     {% endif %}
   </section>
 

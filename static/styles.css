@@ -4799,12 +4799,27 @@ th {
   display: inline-flex;
 }
 
+.ac-solo-js-flex,
+.ac-solo-js-inline {
+  display: none !important;
+}
+
+.js .ac-solo-js-flex {
+  display: flex !important;
+}
+
+.js .ac-solo-js-inline {
+  display: inline-block !important;
+}
+
 .metric .ac-config__valor {
   font-size: 1rem;
   overflow-wrap: anywhere;
 }
 
-.ac-agentes {
+.ac-selector {
+  display: grid;
+  gap: var(--space-3);
   margin: 0;
   padding: var(--space-3);
   border: 1px solid var(--border);
@@ -4814,12 +4829,82 @@ th {
   min-width: 0;
 }
 
-.ac-agentes__lista {
+.ac-selector__barra {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.ac-selector__buscar {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--space-1);
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.ac-selector__acciones {
+  flex-wrap: wrap;
   gap: var(--space-2);
-  max-height: 320px;
-  overflow-y: auto;
+}
+
+.ac-selector__resumen,
+.ac-selector__aviso {
+  margin: 0;
+}
+
+.ac-selector__resumen {
+  font-family: var(--font-mono);
+}
+
+.ac-selector__resumen.is-warning,
+.ac-selector__aviso {
+  color: var(--warn-text-strong);
+}
+
+.ac-grupo {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  min-width: 0;
+}
+
+.ac-grupo--vacio {
+  opacity: 0.6;
+}
+
+.ac-grupo__cabecera {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--panel-head);
+  border-bottom: 1px solid var(--border);
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  cursor: pointer;
+}
+
+.ac-grupo--vacio .ac-grupo__cabecera {
+  border-bottom: 0;
+  border-radius: var(--radius-md);
+  cursor: default;
+}
+
+.ac-grupo__nombre {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.ac-grupo__agentes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--space-1) var(--space-3);
+  padding: var(--space-2) var(--space-3);
 }
 
 .ac-agente {
@@ -4827,10 +4912,11 @@ th {
   align-items: center;
   gap: var(--space-2);
   min-width: 0;
+  padding: var(--space-1) 0;
+  cursor: pointer;
 }
 
-.ac-agente span:first-of-type {
-  flex: 1;
+.ac-agente span {
   min-width: 0;
   overflow-wrap: anywhere;
 }

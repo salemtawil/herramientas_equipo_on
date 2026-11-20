@@ -137,3 +137,12 @@ def test_429_por_minuto_gemini(monkeypatch):
     with pytest.raises(IARateLimitError) as error:
         completar_json([], _config())
     assert error.value.diario is False
+
+
+def test_404_modelo_inexistente_es_error_de_configuracion(monkeypatch):
+    texto = '[{"error": {"code": 404, "message": "This model models/gemini-2.5-flash is no longer available to new users."}}]'
+    monkeypatch.setattr(ia_chat.requests, "post", lambda *a, **k: RespuestaFalsa(404, text=texto))
+    with pytest.raises(IAConfigError) as error:
+        completar_json([], _config(model="gemini-2.5-flash"))
+    assert "AUDITORIA_CHATS_AI_MODEL" in str(error.value)
+    assert "gemini-2.5-flash" in str(error.value)

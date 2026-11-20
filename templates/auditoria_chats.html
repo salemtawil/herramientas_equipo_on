@@ -67,41 +67,53 @@
 
       <div class="row-2 top-space">
         <div>
-          <label class="small" for="ac-alcance">Alcance</label>
-          <select id="ac-alcance" name="alcance" data-ac-alcance>
-            <option value="turno">Un turno</option>
-            <option value="agentes">Agentes elegidos</option>
-            <option value="todos">Todos los agentes</option>
-          </select>
-        </div>
-        <div>
           <label class="small" for="ac-chats">Chats por agente (máx. {{ chats_por_agente_max }})</label>
-          <input type="number" id="ac-chats" name="chats_por_agente" min="1" max="{{ chats_por_agente_max }}" value="{{ chats_por_agente }}" required>
+          <input type="number" id="ac-chats" name="chats_por_agente" min="1" max="{{ chats_por_agente_max }}" value="{{ chats_por_agente }}" required data-ac-chats>
         </div>
       </div>
 
-      <div class="top-space" data-ac-bloque="turno">
-        <label class="small" for="ac-turno">Turno</label>
-        <select id="ac-turno" name="turno">
-          {% for turno in turnos %}<option value="{{ turno }}">{{ turno }}</option>{% endfor %}
-        </select>
-      </div>
+      <input type="hidden" name="alcance" value="agentes">
+      <fieldset class="top-space ac-selector" data-ac-selector data-ac-cupo="{{ cupo_diario }}">
+        <legend class="small">Agentes a auditar</legend>
 
-      <fieldset class="top-space ac-agentes" data-ac-bloque="agentes">
-        <legend class="small">Agentes ({{ agentes|length }})</legend>
-        {% if agentes %}
-          <div class="ac-agentes__lista">
-            {% for agente in agentes %}
-              <label class="ac-agente">
-                <input type="checkbox" name="agentes" value="{{ agente.id }}">
-                <span>{{ agente.nombre }}</span>
-                <span class="small">{{ agente.turno or "Sin turno" }}</span>
-              </label>
-            {% endfor %}
+        <div class="ac-selector__barra">
+          <label class="small ac-selector__buscar" for="ac-buscar">
+            <span>Buscar agente</span>
+            <input type="search" id="ac-buscar" placeholder="Nombre…" autocomplete="off" data-ac-buscar>
+          </label>
+          <div class="ac-selector__acciones ac-solo-js-flex">
+            <button type="button" class="btn secondary" data-ac-marcar="todos">Todos</button>
+            <button type="button" class="btn secondary" data-ac-marcar="ninguno">Ninguno</button>
+          </div>
+        </div>
+        <p class="small ac-selector__resumen" data-ac-resumen aria-live="polite">Marca los agentes o turnos completos que quieres auditar.</p>
+
+        {% if sin_cruce %}
+          <p class="small ac-selector__aviso">Estos nombres de Turnos de trabajo no coinciden con ningún agente de Chatwoot: {{ sin_cruce|join(", ") }}. Corrígelos en Turnos de trabajo para que aparezcan en su turno.</p>
+        {% endif %}
+
+        {% for grupo in grupos %}
+          <div class="ac-grupo{% if not grupo.agentes %} ac-grupo--vacio{% endif %}" data-ac-grupo data-ac-grupo-nombre="{{ grupo.nombre }}"{% if not grupo.agentes %} data-ac-grupo-vacio{% endif %}>
+            <label class="ac-grupo__cabecera">
+              <input type="checkbox" class="ac-solo-js-inline" data-ac-grupo-todos {% if not grupo.agentes %}disabled{% endif %}>
+              <span class="ac-grupo__nombre">{{ grupo.nombre }}</span>
+              {% set n = grupo.agentes|length %}
+              <span class="small">{% if n %}{{ n }} agente{{ "s" if n != 1 }}{% else %}sin agentes en Chatwoot{% endif %}</span>
+            </label>
+            {% if grupo.agentes %}
+              <div class="ac-grupo__agentes">
+                {% for agente in grupo.agentes %}
+                  <label class="ac-agente" data-ac-agente="{{ agente.nombre|lower }}">
+                    <input type="checkbox" name="agentes" value="{{ agente.id }}">
+                    <span>{{ agente.nombre }}</span>
+                  </label>
+                {% endfor %}
+              </div>
+            {% endif %}
           </div>
         {% else %}
           <p class="small">No hay agentes disponibles.</p>
-        {% endif %}
+        {% endfor %}
       </fieldset>
 
       <div class="top-space acciones-barra">

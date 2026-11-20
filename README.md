@@ -94,6 +94,7 @@ Opcionales según funcionalidad:
 - `AUDITORIA_CHATS_AI_BASE_URL` (por defecto `https://api.groq.com/openai/v1`)
 - `AUDITORIA_CHATS_AI_MODEL` (por defecto `openai/gpt-oss-120b`)
 - `AUDITORIA_CHATS_AI_API_KEY` (sin clave, la auditoría con IA queda desactivada)
+- `AUDITORIA_CHATS_AI_CUPO_DIARIO` (chats que la IA puede auditar al día; solo sirve para avisar en el selector; por defecto `20`, `0` lo oculta)
 - `CHATWOOT_BASE_URL`
 - `CHATWOOT_ACCOUNT_ID`
 - `CHATWOOT_API_ACCESS_TOKEN`
@@ -239,7 +240,7 @@ Cómo funciona:
 - Cada lote se procesa **un paso por petición** (elegir los chats de un agente, leer un chat o auditar un chat), para no superar el tiempo máximo de Vercel. El botón «Procesar lote» repite los pasos; sin JavaScript, «Procesar siguiente» avanza uno por clic. Se puede pausar y retomar.
 - Antes de enviar un chat a la IA se ocultan correos, teléfonos y números largos. La transcripción solo se guarda mientras se procesa y se borra al terminar; para revisar se vuelve a leer en vivo desde Chatwoot.
 - Se marcan para revisión humana los chats con nota ≤ 3, cliente insatisfecho, confianza baja o error de IA, y además un 10 % al azar del resto como control.
-- Con el plan gratuito de Groq (unos 200.000 tokens al día) caben unos 60 chats diarios. Si se agota el cupo, el lote queda en «Límite diario de la IA alcanzado; retoma mañana». Conviene crear lotes por turno o por grupos de agentes.
+- Los planes gratuitos tienen un cupo diario (por ejemplo, Gemini 2.5/3 Flash gratis: 20 peticiones al día; Groq: unos 60 chats). El selector de agentes avisa cuando el lote supera `AUDITORIA_CHATS_AI_CUPO_DIARIO`. Si se agota el cupo, el lote queda en «Límite diario de la IA alcanzado; retoma mañana». Conviene crear lotes por turno o por grupos de agentes.
 - Un chat ya auditado no vuelve a elegirse. Borrar un lote libera sus chats.
 - El filtro usa el agente asignado al final de la conversación: un chat transferido cuenta para quien lo tiene al cierre.
 

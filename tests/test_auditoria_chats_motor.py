@@ -400,3 +400,19 @@ def test_filas_csv_neutraliza_formulas():
     assert "'@HYPERLINK(\"x\")" in fila
     assert "'-1" in fila
     assert fila[0] == 11
+
+
+def test_error_de_configuracion_no_gasta_los_chats(monkeypatch):
+    from utils.ia_chat import IAConfigError
+
+    def ia_sin_modelo(mensajes, config, **k):
+        raise IAConfigError("El modelo no existe.")
+
+    monkeypatch.setattr(motor, "completar_json", ia_sin_modelo)
+    store = MemoriaAuditoriaStore()
+    lote = _crear(store, chats_por_agente=2, agentes=AGENTES[:1])
+    pasos = _correr(store, lote["id"], ChatwootFalso({1: [11, 12]}))
+    assert pasos[-1]["accion"] == "configuracion"
+    assert "El modelo no existe." in pasos[-1]["mensaje"]
+    assert all(c["estado"] in ("leido", "pendiente") for c in store.listar_chats(lote["id"]))
+    assert all(int(c.get("intentos") or 0) == 0 for c in store.listar_chats(lote["id"]))

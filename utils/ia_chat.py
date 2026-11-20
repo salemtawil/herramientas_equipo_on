@@ -87,6 +87,11 @@ def completar_json(mensajes, config, timeout=40):
         raise IAConfigError(
             "El proveedor de IA rechazó la clave. Revisa AUDITORIA_CHATS_AI_API_KEY y AUDITORIA_CHATS_AI_BASE_URL."
         )
+    if respuesta.status_code == 404:
+        raise IAConfigError(
+            f"El proveedor de IA no tiene el modelo «{config['model']}». Cambia AUDITORIA_CHATS_AI_MODEL "
+            "por un modelo disponible en tu cuenta y vuelve a desplegar."
+        )
     if respuesta.status_code == 429:
         diario = _es_limite_diario(respuesta.text)
         mensaje = (

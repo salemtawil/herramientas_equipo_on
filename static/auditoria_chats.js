@@ -2,16 +2,98 @@
 (function () {
   "use strict";
 
-  function iniciarAlcance() {
-    const selector = document.querySelector("[data-ac-alcance]");
+  function normalizar(texto) {
+    return String(texto || "")
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .toLowerCase()
+      .trim();
+  }
+
+  function iniciarSelector() {
+    const selector = document.querySelector("[data-ac-selector]");
     if (!selector) return;
-    const actualizar = () => {
-      document.querySelectorAll("[data-ac-bloque]").forEach((bloque) => {
-        bloque.hidden = bloque.getAttribute("data-ac-bloque") !== selector.value;
+    const buscador = selector.querySelector("[data-ac-buscar]");
+    const resumen = selector.querySelector("[data-ac-resumen]");
+    const campoChats = document.querySelector("[data-ac-chats]");
+    const cupo = parseInt(selector.getAttribute("data-ac-cupo"), 10) || 0;
+    const grupos = Array.from(selector.querySelectorAll("[data-ac-grupo]"));
+    const casillas = () => Array.from(selector.querySelectorAll('input[name="agentes"]'));
+
+    function actualizarGrupos() {
+      grupos.forEach((grupo) => {
+        const todos = grupo.querySelector("[data-ac-grupo-todos]");
+        const agentes = Array.from(grupo.querySelectorAll('input[name="agentes"]'));
+        if (!todos || !agentes.length) return;
+        const marcados = agentes.filter((c) => c.checked).length;
+        todos.checked = marcados === agentes.length;
+        todos.indeterminate = marcados > 0 && marcados < agentes.length;
       });
-    };
-    selector.addEventListener("change", actualizar);
-    actualizar();
+    }
+
+    function actualizarResumen() {
+      const marcados = casillas().filter((c) => c.checked).length;
+      const porAgente = Math.max(1, parseInt(campoChats && campoChats.value, 10) || 1);
+      const total = marcados * porAgente;
+      let texto;
+      if (!marcados) {
+        texto = "Marca los agentes o turnos completos que quieres auditar.";
+      } else {
+        texto = marcados + (marcados === 1 ? " agente" : " agentes") + " · " + total + " chats";
+        if (cupo > 0 && total > cupo) {
+          const dias = Math.ceil(total / cupo);
+          texto += " · ⚠ supera el cupo diario de la IA (~" + cupo + "/día): el lote tardará unos " + dias + " días";
+        } else if (cupo > 0) {
+          texto += " · cabe en el cupo diario de la IA (~" + cupo + "/día)";
+        }
+      }
+      resumen.textContent = texto;
+      resumen.classList.toggle("is-warning", cupo > 0 && total > cupo);
+    }
+
+    function refrescar() {
+      actualizarGrupos();
+      actualizarResumen();
+    }
+
+    selector.addEventListener("change", (evento) => {
+      const objetivo = evento.target;
+      if (objetivo.hasAttribute("data-ac-grupo-todos")) {
+        const grupo = objetivo.closest("[data-ac-grupo]");
+        grupo.querySelectorAll('input[name="agentes"]').forEach((c) => {
+          if (!c.closest("[data-ac-agente]").hidden) c.checked = objetivo.checked;
+        });
+      }
+      refrescar();
+    });
+
+    selector.querySelectorAll("[data-ac-marcar]").forEach((boton) => {
+      boton.addEventListener("click", () => {
+        const marcar = boton.getAttribute("data-ac-marcar") === "todos";
+        casillas().forEach((c) => {
+          if (!c.closest("[data-ac-agente]").hidden) c.checked = marcar;
+        });
+        refrescar();
+      });
+    });
+
+    if (buscador) {
+      buscador.addEventListener("input", () => {
+        const consulta = normalizar(buscador.value);
+        grupos.forEach((grupo) => {
+          let visibles = 0;
+          grupo.querySelectorAll("[data-ac-agente]").forEach((etiqueta) => {
+            const coincide = !consulta || normalizar(etiqueta.getAttribute("data-ac-agente")).includes(consulta);
+            etiqueta.hidden = !coincide;
+            if (coincide) visibles += 1;
+          });
+          grupo.hidden = Boolean(consulta) && visibles === 0;
+        });
+      });
+    }
+
+    if (campoChats) campoChats.addEventListener("input", actualizarResumen);
+    refrescar();
   }
 
   function esperar(segundos, alTick) {
@@ -138,7 +220,7 @@
   }
 
   document.addEventListener("DOMContentLoaded", () => {
-    iniciarAlcance();
+    iniciarSelector();
     iniciarProcesamiento();
     iniciarRevisor();
   });

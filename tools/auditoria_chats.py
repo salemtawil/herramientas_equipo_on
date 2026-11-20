@@ -3,6 +3,7 @@
 import csv
 import io
 import logging
+import os
 from datetime import date, datetime, timedelta, timezone
 
 from flask import Blueprint, Response, abort, flash, jsonify, redirect, render_template, request, url_for
@@ -72,19 +73,50 @@ def _quiere_json():
     return mejor == "application/json" and request.accept_mimetypes["application/json"] > request.accept_mimetypes["text/html"]
 
 
+SIN_TURNO = "Sin turno asignado"
+CUPO_DIARIO_DEFAULT = 20
+
+
+def _cupo_diario():
+    try:
+        return max(0, int(os.getenv("AUDITORIA_CHATS_AI_CUPO_DIARIO", CUPO_DIARIO_DEFAULT)))
+    except ValueError:
+        return CUPO_DIARIO_DEFAULT
+
+
+def _agrupar_por_turno(agentes, turnos):
+    """Agentes de Chatwoot agrupados en el orden de Turnos de trabajo, más los que no tienen turno.
+
+    Devuelve también los nombres de Turnos de trabajo que no coinciden con ningún agente de Chatwoot.
+    """
+    grupos = [{"nombre": nombre, "agentes": [a for a in agentes if a["turno"] == nombre]} for nombre in turnos]
+    sin_turno = [a for a in agentes if not a["turno"]]
+    if sin_turno:
+        grupos.append({"nombre": SIN_TURNO, "agentes": sin_turno})
+
+    en_chatwoot = {motor._normalizar_nombre(a["nombre"]) for a in agentes}
+    sin_cruce = sorted(
+        {n for nombres in turnos.values() for n in nombres if motor._normalizar_nombre(n) not in en_chatwoot},
+        key=motor._normalizar_nombre,
+    )
+    return grupos, sin_cruce
+
+
 @auditoria_chats_bp.route("/auditoria-chats/", methods=["GET"])
 def index():
     store, error_store = _store_o_error()
     config_ia = obtener_config_ia()
     chatwoot, error_chatwoot = _chatwoot_o_error()
 
-    agentes, avisos = [], []
+    turnos = obtener_turnos_configurados()
+    agentes, avisos, grupos, sin_cruce = [], [], [], []
     if chatwoot:
         try:
             agentes = sorted(
-                motor.resolver_agentes("todos", {}, chatwoot.listar_agentes(), obtener_turnos_configurados())[0],
+                motor.resolver_agentes("todos", {}, chatwoot.listar_agentes(), turnos)[0],
                 key=lambda a: motor._normalizar_nombre(a["nombre"]),
             )
+            grupos, sin_cruce = _agrupar_por_turno(agentes, turnos)
         except Exception as exc:
             logger.warning("No se pudieron listar los agentes de Chatwoot: %s", exc)
             error_chatwoot = mensaje_error_publico(exc, "No se pudieron listar los agentes de Chatwoot")
@@ -101,7 +133,9 @@ def index():
     return render_template(
         "auditoria_chats.html",
         agentes=agentes,
-        turnos=list(obtener_turnos_configurados().keys()),
+        grupos=grupos,
+        sin_cruce=sin_cruce,
+        cupo_diario=_cupo_diario(),
         lotes=lotes,
         estados_lote=ESTADOS_LOTE,
         fecha_lote=_fecha_lote,
@@ -372,6 +406,24 @@ def reintentar(chat_id):
         store.actualizar_lote(chat["batch_id"], {"estado": "auditando"})
         flash(f"Chat #{chat['conversation_id']} vuelve a la cola.", "success")
     return redirect(url_for("auditoria_chats.ver_lote", lote_id=chat["batch_id"]))
+
+
+@auditoria_chats_bp.route("/auditoria-chats/lote/<lote_id>/reintentar-errores", methods=["POST"])
+def reintentar_errores(lote_id):
+    store, _ = _store_o_error()
+    if not store:
+        abort(404)
+    _cargar_lote_o_404(store, lote_id)
+    errores = [c for c in store.listar_chats(lote_id) if c.get("estado") == "error"]
+    for chat in errores:
+        store.actualizar_chat(
+            chat["id"],
+            {"estado": "pendiente", "intentos": 0, "ia_error": None, "por_revisar": False, "motivo_revision": None},
+        )
+    if errores:
+        store.actualizar_lote(lote_id, {"estado": "auditando"})
+        flash(f"{len(errores)} chats vuelven a la cola. Pulsa «Procesar lote» para auditarlos.", "success")
+    return redirect(url_for("auditoria_chats.ver_lote", lote_id=lote_id))
 
 
 @auditoria_chats_bp.route("/auditoria-chats/lote/<lote_id>/csv", methods=["GET"])

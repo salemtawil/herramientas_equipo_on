@@ -270,3 +270,70 @@ def test_fecha_lote_usa_zona_de_chatwoot(monkeypatch):
     monkeypatch.setenv("CHATWOOT_TIMEZONE", "Asia/Tokyo")
     epoch = 1763236800  # 2025-11-15 20:00 UTC = 2025-11-16 05:00 en Tokio
     assert herramienta._fecha_lote(epoch) == "16/11/2025"
+
+
+def test_reintentar_todos_los_errores(entorno, cliente):
+    lote_id, chats = _lote_procesado(cliente, entorno)
+    for chat in chats[:3]:
+        entorno.actualizar_chat(chat["id"], {"estado": "error", "ia_error": "404", "intentos": 2, "por_revisar": True, "motivo_revision": "marcado"})
+    entorno.actualizar_lote(lote_id, {"estado": "con_errores"})
+
+    html = cliente.get(f"/auditoria-chats/lote/{lote_id}").get_data(as_text=True)
+    assert f'action="/auditoria-chats/lote/{lote_id}/reintentar-errores"' in html
+    assert "Reintentar los 3 chats con error" in html
+
+    respuesta = cliente.post(f"/auditoria-chats/lote/{lote_id}/reintentar-errores")
+    assert respuesta.status_code == 302
+    for chat in chats[:3]:
+        actual = entorno.obtener_chat(chat["id"])
+        assert actual["estado"] == "pendiente" and actual["intentos"] == 0 and actual["ia_error"] is None
+        assert actual["por_revisar"] is False
+    assert entorno.obtener_lote(lote_id)["estado"] == "auditando"
+
+
+# ---------------------------------------------------------------------------
+# Selector de agentes agrupado por turno
+# ---------------------------------------------------------------------------
+
+
+def _seccion_turno(html, nombre):
+    inicio = html.index(f'data-ac-grupo-nombre="{nombre}"')
+    fin = html.find("data-ac-grupo-nombre=", inicio + 1)
+    return html[inicio : fin if fin != -1 else len(html)]
+
+
+def test_selector_agrupa_agentes_por_turno(entorno, cliente, monkeypatch):
+    monkeypatch.setattr(
+        herramienta, "obtener_turnos_configurados", lambda: {"Mañana": ["Ana Pérez"], "Noche": ["Nadie Existe"]}
+    )
+    html = cliente.get("/auditoria-chats/").get_data(as_text=True)
+
+    assert '<select id="ac-alcance"' not in html
+    assert 'name="alcance" value="agentes"' in html
+    manana = _seccion_turno(html, "Mañana")
+    assert "Ana Pérez" in manana and "Luis Gómez" not in manana
+    sin_turno = _seccion_turno(html, "Sin turno asignado")
+    assert "Luis Gómez" in sin_turno
+    assert 'name="agentes" value="1"' in manana
+    noche = _seccion_turno(html, "Noche")
+    assert "data-ac-grupo-vacio" in noche
+    assert "Nadie Existe" in html  # aviso de nombres que no cruzan con Chatwoot
+    assert 'id="ac-buscar"' in html and "data-ac-resumen" in html
+
+
+def test_selector_crea_lote_con_agentes_marcados(entorno, cliente):
+    respuesta = cliente.post(
+        "/auditoria-chats/lotes",
+        data={"fecha_inicio": "2025-11-09", "fecha_fin": "2025-11-15", "alcance": "agentes",
+              "agentes": ["1", "2"], "chats_por_agente": "4"},
+    )
+    assert respuesta.status_code == 302
+    lote = entorno.listar_lotes()[0]
+    assert sorted(a["id"] for a in lote["agentes"]) == [1, 2]
+    assert lote["chats_por_agente"] == 4
+
+
+def test_selector_muestra_cupo_diario(entorno, cliente, monkeypatch):
+    monkeypatch.setenv("AUDITORIA_CHATS_AI_CUPO_DIARIO", "20")
+    html = cliente.get("/auditoria-chats/").get_data(as_text=True)
+    assert 'data-ac-cupo="20"' in html
