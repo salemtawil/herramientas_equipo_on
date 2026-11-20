@@ -159,3 +159,20 @@ def test_mensajes_evaluacion_incluyen_rubrica_secciones_y_metricas():
     usuario = mensajes[1]["content"]
     for esperado in ("LuisM", "WhatsApp", "Texto de la pausa", "1.4.1", '"segundos": 90', "m1"):
         assert esperado in usuario
+
+
+def test_documentacion_f2_nunca_se_evalua_desde_el_chat():
+    data = _evaluacion()
+    data["criterios"]["F2"]["resultado"] = "no_cumple"
+    r = validar_evaluacion(data, {"m1"})
+    assert r["criterios"]["F2"]["resultado"] == "no_aplica"
+    assert calcular_qa({c: v["resultado"] for c, v in r["criterios"].items()})["qa"] == 100.0
+
+
+def test_prompt_no_exige_saludo_con_nombre_ni_notas():
+    sistema = construir_mensajes_evaluacion(
+        transcripcion="", agente_nombre="A", canal="", clasificacion={}, secciones=[], metricas={}, periodo={}
+    )[0]["content"]
+    assert "AJUSTES DE COMPINCHE" in sistema
+    assert "no exijas que el agente se presente con su nombre" in sistema.lower()
+    assert "notas obligatorias" in sistema.lower()

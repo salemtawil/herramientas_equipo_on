@@ -79,6 +79,20 @@ ESTADOS_QA = {
 CORTE_APROBADO = 85
 CORTE_MEJORAR = 70
 
+# Criterios que no se pueden evaluar desde el chat: siempre «no aplica».
+# F2: las notas obligatorias se registran en el perfil del usuario dentro del sistema, no en Chatwoot.
+CRITERIOS_NO_EVALUABLES = ("F2",)
+
+AJUSTES_COMPINCHE = (
+    "AJUSTES DE COMPINCHE (prevalecen sobre la rúbrica anterior)\n"
+    "- D3 Profesionalismo: evalúa solo el trato respetuoso y profesional. No exijas que el agente se "
+    "presente con su nombre ni que use un saludo reglamentario; su ausencia no resta puntos y no debe "
+    "aparecer en incumplimientos ni en recomendaciones.\n"
+    "- F2 Documentación: las notas obligatorias se registran en el perfil del usuario dentro del sistema, "
+    "no en el chat. Marca F2 como no_aplica y no menciones notas, registros ni documentación en "
+    "incumplimientos ni en recomendaciones.\n"
+)
+
 RESOLUCION = ("resuelto", "parcial", "no_resuelto", "no_verificable")
 RESPONSABILIDAD = ("agente", "externa", "usuario", "compartida", "no_determinable")
 CONFIANZA = ("alta", "media", "baja")
@@ -409,6 +423,8 @@ def validar_evaluacion(data, ids_validos):
             "evidencias": _evidencias(item.get("evidencias") or [], ids_validos),
             "comentario": str(item.get("comentario") or "").strip(),
         }
+        if codigo in CRITERIOS_NO_EVALUABLES:
+            criterios[codigo]["resultado"] = "no_aplica"
 
     fallas = []
     for falla in data.get("fallas_criticas") if isinstance(data.get("fallas_criticas"), list) else []:
@@ -495,6 +511,7 @@ def construir_mensajes_evaluacion(*, transcripcion, agente_nombre, canal, clasif
     criterios = "\n".join(f"- {c} {e} ({p} puntos)" for c, e, p in CRITERIOS_QA)
     sistema = (
         f"{RUBRICA_TEXTO}\n\n"
+        f"{AJUSTES_COMPINCHE}\n"
         "INSTRUCCIONES DE RESPUESTA\n"
         f"Evalúa cada uno de estos criterios con cumple, parcial, no_cumple, no_aplica o no_verificable:\n{criterios}\n"
         "No calcules el puntaje: lo calcula el sistema con los pesos.\n"
