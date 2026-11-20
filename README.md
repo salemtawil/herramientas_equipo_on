@@ -96,7 +96,8 @@ Opcionales según funcionalidad:
 - `AUDITORIA_CHATS_AI_API_KEY` (sin clave, la auditoría con IA queda desactivada)
 - `AUDITORIA_CHATS_AI_MODEL_RESPALDO` (opcional: modelo que se usa si el principal está saturado, tarda demasiado o agotó su cupo diario)
 - `AUDITORIA_CHATS_AI_RAZONAMIENTO` (opcional: `low`, `medium`, `high`; menos razonamiento = respuestas más rápidas. Vacío = no se envía)
-- `AUDITORIA_CHATS_AI_CUPO_DIARIO` (chats que la IA puede auditar al día; solo sirve para avisar en el selector; por defecto `20`, `0` lo oculta)
+- `AUDITORIA_CHATS_AI_CUPO_DIARIO` (peticiones diarias que permite el plan de la IA; solo sirve para avisar en el selector; con la pauta QA-1.1 cada chat usa 2; por defecto `20`, `0` lo oculta)
+- `AUDITORIA_CHATS_MANUAL_VERSION` (versión del manual de procedimientos cargado en Supabase que usan los lotes nuevos; por defecto `3.0`)
 - `CHATWOOT_BASE_URL`
 - `CHATWOOT_ACCOUNT_ID`
 - `CHATWOOT_API_ACCESS_TOKEN`
@@ -246,6 +247,23 @@ Cómo funciona:
 - Los planes gratuitos tienen un cupo diario (por ejemplo, Gemini 2.5/3 Flash gratis: 20 peticiones al día; Groq: unos 60 chats). El selector de agentes avisa cuando el lote supera `AUDITORIA_CHATS_AI_CUPO_DIARIO`. Si se agota el cupo, el lote queda en «Límite diario de la IA alcanzado; retoma mañana». Conviene crear lotes por turno o por grupos de agentes.
 - Un chat ya auditado no vuelve a elegirse. Borrar un lote libera sus chats.
 - El filtro usa el agente asignado al final de la conversación: un chat transferido cuenta para quien lo tiene al cierre.
+
+### Pauta QA-1.1 y manual de procedimientos
+
+Los lotes nuevos se evalúan con la rúbrica QA-1.1 de Compinche (17 criterios ponderados, puntaje QA de 0 a 100, fallas críticas CR01–CR10) usando las secciones aplicables del Manual de Procedimientos. Los lotes creados antes siguen mostrándose con la pauta de 7 criterios.
+
+- Cada chat usa **2 llamadas a la IA**: la primera identifica el motivo y los procedimientos (P01–P14); la segunda evalúa con la rúbrica y solo las secciones del manual que aplican (más las generales: 1.1.1, 1.1.3, 1.1.8 y 1.2.5). El selector muestra el cupo en chats por día (`AUDITORIA_CHATS_AI_CUPO_DIARIO` / 2).
+- El QA y el estado los calcula la app: cumple 100 %, parcial 50 %, no cumple 0 %; «no aplica» y «no verificable» no cuentan. ≥ 85 APROBADO, 70–84 NECESITA MEJORAR, < 70 NO APROBADO. Las fallas críticas que detecta la IA quedan como sospechosas (PENDIENTE DE REVISIÓN) hasta que una persona las confirma (NO APROBADO) o las descarta. El «% verificable» se muestra como indicador de confiabilidad.
+- Los tiempos (primera respuesta, esperas de más de 3 min, seguimiento y cierre) los calcula la app con los segundos de Chatwoot, separando lo atribuible al agente evaluado cuando hubo traspasos.
+- El manual es de uso interno: se guarda en la tabla `chat_audit_manual` de Supabase (sin acceso desde el navegador) y no está en el repositorio. Para cargar o actualizar una versión:
+
+```bash
+pip install -r requirements-dev.txt
+python scripts/cargar_manual_auditoria.py "Manual de Procedimientos.pdf" --version 3.0 --dry-run   # revisa el corte
+python scripts/cargar_manual_auditoria.py "Manual de Procedimientos.pdf" --version 3.0
+```
+
+- `AUDITORIA_CHATS_MANUAL_VERSION` (por defecto `3.0`) elige qué versión del manual usan los lotes nuevos. Sin manual cargado no se pueden crear lotes.
 
 ## Limitaciones conocidas
 
