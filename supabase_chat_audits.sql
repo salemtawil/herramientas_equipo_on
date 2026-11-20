@@ -33,6 +33,7 @@ create table if not exists public.chat_audits (
     check (estado in ('pendiente', 'procesando', 'leido', 'auditado', 'error', 'revisado', 'descartado')),
   intentos integer not null default 0,
   transcripcion_tmp text,
+  detalle jsonb, -- bandeja, motivo de descarte y forma de los mensajes (sin texto)
   ia_resultado jsonb,
   ia_nota smallint check (ia_nota between 1 and 5),
   ia_satisfaccion text,
@@ -53,3 +54,6 @@ create index if not exists chat_audits_agente_idx on public.chat_audits (agente_
 
 alter table public.chat_audit_batches enable row level security;
 alter table public.chat_audits enable row level security;
+
+-- Para tablas creadas antes de añadir la columna:
+alter table public.chat_audits add column if not exists detalle jsonb;

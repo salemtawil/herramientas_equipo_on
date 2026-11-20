@@ -89,26 +89,35 @@ PALABRAS_LLAMADAS = ("llamad", "voz", "voice", "call", "telefon", "phone")
 
 
 def _es_bandeja_de_llamadas(bandeja):
-    texto = motor._normalizar_nombre(f"{bandeja.get('name', '')} {bandeja.get('channel_type', '')}")
+    campos = ("name", "channel_type", "medium", "provider", "channel_name")
+    texto = motor._normalizar_nombre(" ".join(str(bandeja.get(campo) or "") for campo in campos))
     return any(palabra in texto for palabra in PALABRAS_LLAMADAS)
 
 
-def _listar_bandejas(chatwoot):
-    """Bandejas de Chatwoot con una marca de si se preseleccionan (las de llamadas no)."""
+def _listar_bandejas(chatwoot, preferidas=None):
+    """Bandejas de Chatwoot y si se preseleccionan.
+
+    Si hay un lote anterior, se marcan las mismas bandejas que se usaron en él (así una
+    excepción como una bandeja Voice con SMS se elige una vez y se recuerda). Si no, se
+    marcan todas menos las de llamadas o voz.
+    """
     listar = getattr(chatwoot, "listar_bandejas", None)
     if not listar:
         return []
+    preferidas = {int(b) for b in preferidas or []}
     bandejas = []
     for bandeja in listar() or []:
         if bandeja.get("id") is None:
             continue
         tipo = str(bandeja.get("channel_type") or "").replace("Channel::", "")
+        identificador = int(bandeja["id"])
         bandejas.append(
             {
-                "id": int(bandeja["id"]),
-                "nombre": bandeja.get("name") or f"Bandeja {bandeja['id']}",
+                "id": identificador,
+                "nombre": bandeja.get("name") or f"Bandeja {identificador}",
                 "tipo": tipo,
-                "marcada": not _es_bandeja_de_llamadas(bandeja),
+                "es_voz": _es_bandeja_de_llamadas(bandeja),
+                "marcada": identificador in preferidas if preferidas else not _es_bandeja_de_llamadas(bandeja),
             }
         )
     return sorted(bandejas, key=lambda b: (not b["marcada"], motor._normalizar_nombre(b["nombre"])))
@@ -140,17 +149,6 @@ def index():
 
     turnos = obtener_turnos_configurados()
     agentes, avisos, grupos, sin_cruce, bandejas = [], [], [], [], []
-    if chatwoot:
-        try:
-            agentes = sorted(
-                motor.resolver_agentes("todos", {}, chatwoot.listar_agentes(), turnos)[0],
-                key=lambda a: motor._normalizar_nombre(a["nombre"]),
-            )
-            grupos, sin_cruce = _agrupar_por_turno(agentes, turnos)
-            bandejas = _listar_bandejas(chatwoot)
-        except Exception as exc:
-            logger.warning("No se pudieron listar los agentes de Chatwoot: %s", exc)
-            error_chatwoot = mensaje_error_publico(exc, "No se pudieron listar los agentes de Chatwoot")
 
     lotes = []
     if store:
@@ -158,6 +156,22 @@ def index():
             lotes = store.listar_lotes()
         except AuditoriaChatsError as exc:
             avisos.append(mensaje_error_publico(exc, "No se pudieron leer los lotes guardados"))
+    bandejas_ultimo_lote = next(
+        ((l.get("alcance_detalle") or {}).get("bandejas") for l in lotes if (l.get("alcance_detalle") or {}).get("bandejas")),
+        None,
+    )
+
+    if chatwoot:
+        try:
+            agentes = sorted(
+                motor.resolver_agentes("todos", {}, chatwoot.listar_agentes(), turnos)[0],
+                key=lambda a: motor._normalizar_nombre(a["nombre"]),
+            )
+            grupos, sin_cruce = _agrupar_por_turno(agentes, turnos)
+            bandejas = _listar_bandejas(chatwoot, preferidas=bandejas_ultimo_lote)
+        except Exception as exc:
+            logger.warning("No se pudieron listar los agentes de Chatwoot: %s", exc)
+            error_chatwoot = mensaje_error_publico(exc, "No se pudieron listar los agentes de Chatwoot")
 
     hoy_local = datetime.now(_obtener_timezone(_timezone())).date()
     inicio, fin = motor.rango_semana_anterior(hoy_local, _timezone())
@@ -476,6 +490,7 @@ def reintentar_errores(lote_id):
 CAMPOS_DIAGNOSTICO_CHAT = (
     "conversation_id", "agente_id", "agente_nombre", "turno", "conversacion_fecha", "estado", "intentos",
     "ia_error", "ia_nota", "ia_satisfaccion", "por_revisar", "motivo_revision", "nota_final", "created_at", "updated_at",
+    "detalle",
 )
 
 
@@ -525,6 +540,8 @@ def diagnostico(lote_id):
         },
         "progreso": motor._progreso(chats),
         "errores_por_mensaje": _contar_errores(chats),
+        "descartes_por_motivo": _contar_descartes(chats),
+        "bandejas": _bandejas_para_diagnostico(lote),
         "chats": [chat_diagnostico(c) for c in chats],
     }
     nombre = f"diagnostico_lote_{lote_id[:8]}.json"
@@ -533,6 +550,32 @@ def diagnostico(lote_id):
         mimetype="application/json",
         headers={"Content-Disposition": f'attachment; filename="{nombre}"'},
     )
+
+
+def _contar_descartes(chats):
+    conteo = {}
+    for chat in chats:
+        if chat.get("estado") == "descartado":
+            motivo = (chat.get("detalle") or {}).get("motivo_descarte") or "sin_motivo_registrado"
+            conteo[motivo] = conteo.get(motivo, 0) + 1
+    return conteo
+
+
+def _bandejas_para_diagnostico(lote):
+    """Id, nombre y tipo de cada bandeja (sin teléfonos, tokens ni URLs) y si se usó en el lote."""
+    chatwoot, _ = _chatwoot_o_error()
+    if not chatwoot:
+        return []
+    usadas = {int(b) for b in (lote.get("alcance_detalle") or {}).get("bandejas") or []}
+    try:
+        bandejas = _listar_bandejas(chatwoot)
+    except Exception as exc:
+        logger.warning("No se pudieron listar las bandejas para el diagnóstico: %s", exc)
+        return []
+    return [
+        {"id": b["id"], "nombre": b["nombre"], "tipo": b["tipo"], "parece_voz": b["es_voz"], "en_lote": b["id"] in usadas}
+        for b in bandejas
+    ]
 
 
 def _contar_errores(chats):

@@ -59,6 +59,50 @@ def mensajes_utiles(mensajes):
     return utiles
 
 
+_RE_REGISTRO_LLAMADA = re.compile(
+    r"^\s*(llamada|call)\s+(entrante|saliente|perdida|finalizada|terminada|recibida|incoming|outgoing|missed|ended|completed)"
+    r"|^\s*(missed|incoming|outgoing)\s+call",
+    re.IGNORECASE,
+)
+MAX_FORMA = 40
+
+
+def es_llamada(mensajes):
+    """True si la conversación es una llamada (no un chat con notas de voz).
+
+    Una nota de voz es un adjunto de audio en un mensaje normal y no cuenta. Una llamada deja
+    mensajes de tipo llamada, atributos de llamada (call_status, call_sid…) o un registro de sistema
+    del estilo «Llamada entrante…» / «Missed call…».
+    """
+    for mensaje in mensajes or []:
+        if "call" in str(mensaje.get("content_type") or "").lower():
+            return True
+        atributos = mensaje.get("content_attributes") or {}
+        if isinstance(atributos, dict) and any("call" in str(clave).lower() for clave in atributos):
+            return True
+        if mensaje.get("message_type") == 2 and _RE_REGISTRO_LLAMADA.search(_texto(mensaje)):
+            return True
+    return False
+
+
+def forma_mensajes(mensajes):
+    """Estructura de la conversación sin ningún texto ni enlace, para diagnosticar descartes."""
+    forma = []
+    for mensaje in (mensajes or [])[:MAX_FORMA]:
+        atributos = mensaje.get("content_attributes") or {}
+        forma.append(
+            {
+                "tipo": mensaje.get("message_type"),
+                "content_type": mensaje.get("content_type"),
+                "con_texto": bool(_texto(mensaje)),
+                "adjuntos": [str(a.get("file_type") or "") for a in mensaje.get("attachments") or []],
+                "atributos": sorted(str(k) for k in atributos) if isinstance(atributos, dict) else [],
+                "privado": bool(mensaje.get("private")),
+            }
+        )
+    return forma
+
+
 def tiene_mensajes_de_agente(mensajes):
     """Solo cuentan las respuestas escritas del agente: un chat atendido solo con audios no es auditable."""
     return any(m.get("message_type") == MENSAJE_SALIENTE and _texto(m) for m in mensajes_utiles(mensajes))

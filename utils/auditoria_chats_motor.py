@@ -12,7 +12,12 @@ from utils.auditoria_chats_pauta import (
     validar_resultado,
 )
 from utils.auditoria_chats_store import AuditoriaChatsError
-from utils.auditoria_chats_transcripcion import construir_transcripcion, tiene_mensajes_de_agente
+from utils.auditoria_chats_transcripcion import (
+    construir_transcripcion,
+    es_llamada,
+    forma_mensajes,
+    tiene_mensajes_de_agente,
+)
 from utils.chatwoot_reportes import _obtener_timezone, _timezone
 from utils.ia_chat import IAConfigError, IARateLimitError, IARespuestaError, completar_json
 
@@ -158,6 +163,7 @@ def _fila_chat(lote, agente, conversacion):
         "estado": "pendiente",
         "intentos": 0,
         "por_revisar": False,
+        "detalle": {"bandeja_id": conversacion.get("inbox_id")},
     }
 
 
@@ -201,7 +207,9 @@ def _muestrear_agente(store, lote, agente, chatwoot, rng):
 
     actual = store.obtener_lote(lote["id"]) or lote
     reservas = dict(actual.get("reservas") or {})
-    reservas[str(agente["id"])] = [{"id": int(c["id"]), "created_at": c.get("created_at")} for c in reserva]
+    reservas[str(agente["id"])] = [
+        {"id": int(c["id"]), "created_at": c.get("created_at"), "inbox_id": c.get("inbox_id")} for c in reserva
+    ]
     muestreados = [m for m in actual.get("agentes_muestreados") or [] if int(m["id"]) != int(agente["id"])]
     muestreados.append({"id": agente["id"], "encontrados": len(disponibles), "elegidos": len(elegidas)})
     cambios = {"agentes_muestreados": muestreados, "reservas": reservas}
@@ -235,13 +243,21 @@ def _leer_chat(store, lote_id, chatwoot):
         store.actualizar_chat(chat["id"], {"estado": "pendiente"})
         return _respuesta(store, lote_id, "error", f"No se pudo leer el chat #{chat['conversation_id']}: {exc}")
 
-    if not tiene_mensajes_de_agente(mensajes):
-        store.actualizar_chat(chat["id"], {"estado": "descartado", "transcripcion_tmp": None})
+    detalle = dict(chat.get("detalle") or {}, forma=forma_mensajes(mensajes))
+    motivo = None
+    if es_llamada(mensajes):
+        motivo, texto = "llamada", "es una llamada"
+    elif not tiene_mensajes_de_agente(mensajes):
+        motivo, texto = "sin_respuesta_escrita", "sin respuesta escrita del agente"
+    if motivo:
+        detalle["motivo_descarte"] = motivo
+        store.actualizar_chat(chat["id"], {"estado": "descartado", "transcripcion_tmp": None, "detalle": detalle})
         _reponer_desde_reserva(store, lote_id, chat)
-        return _respuesta(store, lote_id, "lectura", f"Chat #{chat['conversation_id']} sin respuesta del agente; se reemplaza.")
+        return _respuesta(store, lote_id, "lectura", f"Chat #{chat['conversation_id']} {texto}; se reemplaza.")
 
     store.actualizar_chat(
-        chat["id"], {"estado": "leido", "transcripcion_tmp": construir_transcripcion(mensajes, _timezone())}
+        chat["id"],
+        {"estado": "leido", "transcripcion_tmp": construir_transcripcion(mensajes, _timezone()), "detalle": detalle},
     )
     return _respuesta(store, lote_id, "lectura", f"Chat #{chat['conversation_id']} leído.")
 

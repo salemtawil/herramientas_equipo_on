@@ -201,3 +201,37 @@ def test_razonamiento_y_timeout_en_la_peticion(monkeypatch):
 
     completar_json([], _config(razonamiento=""))
     assert "reasoning_effort" not in llamadas["json"]
+
+
+@pytest.mark.parametrize(
+    "valor, esperado",
+    [
+        ('"gemini-3.8-flash"', "gemini-3.8-flash"),
+        ("'gemini-3.8-flash'\n", "gemini-3.8-flash"),
+        ("models/gemini-3.8-flash", "gemini-3.8-flash"),
+        ("  gemini-3.8-flash  ", "gemini-3.8-flash"),
+    ],
+)
+def test_nombre_de_modelo_se_limpia(monkeypatch, valor, esperado):
+    monkeypatch.setenv("AUDITORIA_CHATS_AI_MODEL", valor)
+    monkeypatch.setenv("AUDITORIA_CHATS_AI_MODEL_RESPALDO", valor)
+    config = obtener_config_ia()
+    assert config["model"] == esperado
+    assert config["model_respaldo"] == esperado
+
+
+def test_400_por_nombre_de_modelo_es_error_de_configuracion(monkeypatch):
+    texto = '[{"error": {"code": 400, "message": "* GenerateContentRequest.model: unexpected model name format\n", "status": "INVALID_ARGUMENT"}}]'
+    monkeypatch.setattr(ia_chat.requests, "post", lambda *a, **k: RespuestaFalsa(400, text=texto))
+    with pytest.raises(IAConfigError) as error:
+        completar_json([], _config(model="Gemini 3.8 Flash"))
+    mensaje = str(error.value)
+    assert "Gemini 3.8 Flash" in mensaje and "AUDITORIA_CHATS_AI_MODEL" in mensaje
+
+
+def test_400_por_razonamiento_es_error_de_configuracion(monkeypatch):
+    texto = '[{"error": {"code": 400, "message": "Invalid value for reasoning_effort", "status": "INVALID_ARGUMENT"}}]'
+    monkeypatch.setattr(ia_chat.requests, "post", lambda *a, **k: RespuestaFalsa(400, text=texto))
+    with pytest.raises(IAConfigError) as error:
+        completar_json([], _config(razonamiento="low"))
+    assert "AUDITORIA_CHATS_AI_RAZONAMIENTO" in str(error.value)

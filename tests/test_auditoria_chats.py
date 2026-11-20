@@ -406,3 +406,23 @@ def test_diagnostico_y_revision_muestran_modelo_usado(entorno, cliente):
     assert "model_respaldo" in str(datos["configuracion"]) or "ia_modelo_respaldo" in datos["configuracion"]
     html = cliente.get(f"/auditoria-chats/chat/{chats[0]['id']}").get_data(as_text=True)
     assert f"Auditado con {datos['chats'][0]['ia_modelo']}" in html
+
+
+def test_bandejas_por_defecto_son_las_del_ultimo_lote(entorno, cliente, monkeypatch):
+    monkeypatch.setattr(herramienta, "obtener_chatwoot", lambda: ChatwootConBandejasWeb())
+    cliente.post("/auditoria-chats/lotes", data={"fecha_inicio": "2025-11-09", "fecha_fin": "2025-11-15",
+                 "alcance": "agentes", "agentes": ["1"], "bandejas": ["9", "11"], "chats_por_agente": "2"})
+    html = cliente.get("/auditoria-chats/").get_data(as_text=True)
+    assert re.search(r'name="bandejas" value="9"[^>]*checked', html)
+    assert re.search(r'name="bandejas" value="11"[^>]*checked', html)
+    assert not re.search(r'name="bandejas" value="3"[^>]*checked', html)
+
+
+def test_diagnostico_incluye_bandejas_y_descartes(entorno, cliente, monkeypatch):
+    lote_id, chats = _lote_procesado(cliente, entorno)
+    monkeypatch.setattr(herramienta, "obtener_chatwoot", lambda: ChatwootConBandejasWeb())
+    entorno.actualizar_chat(chats[0]["id"], {"estado": "descartado", "detalle": {"motivo_descarte": "llamada", "forma": []}})
+    datos = cliente.get(f"/auditoria-chats/lote/{lote_id}/diagnostico").get_json()
+    assert {"id": 11, "nombre": "Voz", "tipo": "Voice"}.items() <= next(b for b in datos["bandejas"] if b["id"] == 11).items()
+    assert datos["descartes_por_motivo"] == {"llamada": 1}
+    assert datos["chats"][0]["detalle"]["motivo_descarte"] == "llamada"

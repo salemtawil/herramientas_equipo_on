@@ -38,13 +38,21 @@ def _env(nombre):
     return str(os.getenv(nombre) or "").strip()
 
 
+def _limpiar_modelo(valor):
+    """Quita comillas, espacios y el prefijo «models/» que suelen colarse al copiar el nombre."""
+    modelo = str(valor or "").strip().strip("\"'").strip()
+    if modelo.startswith("models/"):
+        modelo = modelo[len("models/"):]
+    return modelo
+
+
 def obtener_config_ia():
     api_key = _env("AUDITORIA_CHATS_AI_API_KEY")
     return {
         "base_url": (_env("AUDITORIA_CHATS_AI_BASE_URL") or BASE_URL_DEFAULT).rstrip("/"),
-        "model": _env("AUDITORIA_CHATS_AI_MODEL") or MODEL_DEFAULT,
+        "model": _limpiar_modelo(_env("AUDITORIA_CHATS_AI_MODEL")) or MODEL_DEFAULT,
         # Se usa cuando el principal está saturado, tarda demasiado o agotó su cupo (cada modelo tiene el suyo).
-        "model_respaldo": _env("AUDITORIA_CHATS_AI_MODEL_RESPALDO"),
+        "model_respaldo": _limpiar_modelo(_env("AUDITORIA_CHATS_AI_MODEL_RESPALDO")),
         # Esfuerzo de razonamiento ("low", "medium"...); vacío = no se envía y decide el proveedor.
         "razonamiento": _env("AUDITORIA_CHATS_AI_RAZONAMIENTO").lower(),
         "api_key": api_key,
@@ -123,6 +131,19 @@ def completar_json(mensajes, config, timeout=60):
             f"El proveedor de IA está saturado o con fallos ({respuesta.status_code}); "
             f"se reintentará en {ESPERA_TEMPORAL} s."
         )
+    if respuesta.status_code == 400:
+        detalle = respuesta.text.lower()
+        if "model" in detalle and ("name" in detalle or "not found" in detalle or "format" in detalle):
+            raise IAConfigError(
+                f"El proveedor de IA no acepta el nombre de modelo «{config['model']}». Revisa "
+                "AUDITORIA_CHATS_AI_MODEL (y AUDITORIA_CHATS_AI_MODEL_RESPALDO): debe ser el identificador exacto, "
+                "por ejemplo gemini-3.8-flash, sin espacios ni comillas."
+            )
+        if "reasoning" in detalle or "thinking" in detalle:
+            raise IAConfigError(
+                f"El modelo «{config['model']}» no acepta el razonamiento «{config.get('razonamiento')}». "
+                "Borra AUDITORIA_CHATS_AI_RAZONAMIENTO o prueba otro valor."
+            )
     if respuesta.status_code >= 400:
         raise IARespuestaError(f"El proveedor de IA respondió {respuesta.status_code}: {respuesta.text[:200]}")
 

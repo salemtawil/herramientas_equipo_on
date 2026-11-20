@@ -535,3 +535,56 @@ def test_sin_respaldo_guarda_el_modelo_principal(monkeypatch):
     _ia_por_modelo(monkeypatch, {})
     store, lote, _ = _auditar_un_chat(dict(CONFIG_IA, model="principal"))
     assert store.listar_chats(lote["id"])[0]["ia_resultado"]["modelo"] == "principal"
+
+
+# ---------------------------------------------------------------------------
+# Llamadas, motivo de descarte y forma del chat
+# ---------------------------------------------------------------------------
+
+
+class ChatwootConLlamada(ChatwootFalso):
+    def __init__(self, conversaciones, llamadas=(), sin_agente=()):
+        super().__init__(conversaciones, sin_agente=sin_agente)
+        self.llamadas = set(llamadas)
+
+    def conversaciones_de_agente(self, agente_id, since, until, page=1, inbox_ids=None):
+        return [dict(c, inbox_id=7) for c in super().conversaciones_de_agente(agente_id, since, until, page)]
+
+    def mensajes_de_conversacion(self, conversation_id, max_paginas=5):
+        if conversation_id in self.llamadas:
+            return _mensajes() + [{"id": 3, "message_type": 2, "content_type": "voice_call", "created_at": BASE_TS + 90}]
+        return super().mensajes_de_conversacion(conversation_id, max_paginas)
+
+
+def test_llamada_se_descarta_y_se_reemplaza(monkeypatch):
+    _ia_ok(monkeypatch)
+    store = MemoriaAuditoriaStore()
+    lote = _crear(store, chats_por_agente=2, agentes=AGENTES[:1])
+    # 3 conversaciones, 2 llamadas: siempre queda al menos una llamada elegida y la reserva la reemplaza.
+    chatwoot = ChatwootConLlamada({1: [11, 12, 13]}, llamadas={11, 12})
+    _correr(store, lote["id"], chatwoot, rng=random.Random(3))
+    chats = store.listar_chats(lote["id"])
+    descartados = [c for c in chats if c["estado"] == "descartado"]
+    assert descartados and all(c["detalle"]["motivo_descarte"] == "llamada" for c in descartados)
+    assert [c["conversation_id"] for c in chats if c["estado"] == "auditado"] == [13]
+
+
+def test_sin_respuesta_escrita_tiene_motivo(monkeypatch):
+    _ia_ok(monkeypatch)
+    store = MemoriaAuditoriaStore()
+    lote = _crear(store, chats_por_agente=1, agentes=AGENTES[:1])
+    _correr(store, lote["id"], ChatwootConLlamada({1: [11]}, sin_agente={11}))
+    chat = store.listar_chats(lote["id"])[0]
+    assert chat["estado"] == "descartado"
+    assert chat["detalle"]["motivo_descarte"] == "sin_respuesta_escrita"
+
+
+def test_chat_auditado_guarda_bandeja_y_forma(monkeypatch):
+    _ia_ok(monkeypatch)
+    store = MemoriaAuditoriaStore()
+    lote = _crear(store, chats_por_agente=1, agentes=AGENTES[:1])
+    _correr(store, lote["id"], ChatwootConLlamada({1: [11]}))
+    chat = store.listar_chats(lote["id"])[0]
+    assert chat["estado"] == "auditado"
+    assert chat["detalle"]["bandeja_id"] == 7
+    assert [m["tipo"] for m in chat["detalle"]["forma"]] == [0, 1]

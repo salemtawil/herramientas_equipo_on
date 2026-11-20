@@ -89,3 +89,47 @@ def test_chat_solo_con_audios_del_agente_no_cuenta_como_respuesta_escrita():
         {"message_type": 1, "content": None, "created_at": _ts(9, 1), "attachments": [{"file_type": "audio"}]},
     ]
     assert tiene_mensajes_de_agente(mensajes) is False
+
+
+# ---------------------------------------------------------------------------
+# Llamadas frente a notas de voz
+# ---------------------------------------------------------------------------
+
+from utils.auditoria_chats_transcripcion import es_llamada, forma_mensajes  # noqa: E402
+
+
+def test_mensaje_de_tipo_llamada_es_llamada():
+    assert es_llamada([{"message_type": 2, "content_type": "voice_call", "content": None}]) is True
+
+
+def test_atributos_de_llamada_es_llamada():
+    mensajes = [{"message_type": 1, "content": "", "content_attributes": {"call_status": "completed", "duration": 42}}]
+    assert es_llamada(mensajes) is True
+
+
+def test_texto_de_registro_de_llamada_es_llamada():
+    assert es_llamada([{"message_type": 2, "content": "Llamada entrante finalizada (2:13)"}]) is True
+    assert es_llamada([{"message_type": 2, "content": "Missed call from +1 555"}]) is True
+
+
+def test_nota_de_voz_no_es_llamada():
+    mensajes = [
+        {"message_type": 0, "content": None, "attachments": [{"file_type": "audio"}]},
+        {"message_type": 1, "content": "Te escuché, ya lo reviso", "attachments": []},
+        {"message_type": 0, "content": "¿me puedes llamar?"},
+    ]
+    assert es_llamada(mensajes) is False
+
+
+def test_forma_mensajes_sin_texto():
+    mensajes = [
+        {"message_type": 0, "content": "Mi correo es a@b.com", "content_type": "text"},
+        {"message_type": 1, "content": None, "attachments": [{"file_type": "audio", "data_url": "https://x"}],
+         "content_attributes": {"call_status": "x"}, "private": True},
+    ]
+    forma = forma_mensajes(mensajes)
+    assert forma == [
+        {"tipo": 0, "content_type": "text", "con_texto": True, "adjuntos": [], "atributos": [], "privado": False},
+        {"tipo": 1, "content_type": None, "con_texto": False, "adjuntos": ["audio"], "atributos": ["call_status"], "privado": True},
+    ]
+    assert "a@b.com" not in str(forma) and "https://x" not in str(forma)
