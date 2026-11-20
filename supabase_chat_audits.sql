@@ -57,3 +57,24 @@ alter table public.chat_audits enable row level security;
 
 -- Para tablas creadas antes de añadir la columna:
 alter table public.chat_audits add column if not exists detalle jsonb;
+
+-- Pauta QA-1.1 (noviembre 2026): manual de procedimientos, estado «clasificado» y resultados QA.
+create table if not exists public.chat_audit_manual (
+  version text not null,
+  codigo text not null,
+  titulo text not null default '',
+  texto text not null default '',
+  orden integer not null default 0,
+  primary key (version, codigo)
+);
+alter table public.chat_audit_manual enable row level security;
+
+alter table public.chat_audits add column if not exists ia_qa numeric(4,1);
+alter table public.chat_audits add column if not exists ia_estado text;
+alter table public.chat_audits add column if not exists qa_final numeric(4,1);
+alter table public.chat_audits add column if not exists estado_final text;
+alter table public.chat_audits add column if not exists revision jsonb;
+
+alter table public.chat_audits drop constraint if exists chat_audits_estado_check;
+alter table public.chat_audits add constraint chat_audits_estado_check
+  check (estado in ('pendiente', 'procesando', 'leido', 'clasificado', 'auditado', 'error', 'revisado', 'descartado'));

@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 
 TABLA_LOTES = "chat_audit_batches"
 TABLA_CHATS = "chat_audits"
+TABLA_MANUAL = "chat_audit_manual"
 
 
 class AuditoriaChatsError(Exception):
@@ -140,6 +141,29 @@ class SupabaseAuditoriaStore:
             .order("id")
         )
 
+    # Manual de procedimientos
+    def indice_manual(self, version):
+        filas = self._todas(
+            lambda: self.client.table(TABLA_MANUAL).select("codigo,titulo,orden").eq("version", version).order("orden")
+        )
+        return [{"codigo": f["codigo"], "titulo": f["titulo"]} for f in filas]
+
+    def secciones_manual(self, version, codigos):
+        if not codigos:
+            return []
+        return self._execute(
+            self.client.table(TABLA_MANUAL)
+            .select("codigo,titulo,texto,orden")
+            .eq("version", version)
+            .in_("codigo", list(codigos))
+            .order("orden")
+        )
+
+    def guardar_manual(self, version, secciones):
+        filas = [dict(s, version=version) for s in secciones]
+        for desde in range(0, len(filas), 50):
+            self._execute(self.client.table(TABLA_MANUAL).upsert(filas[desde : desde + 50], on_conflict="version,codigo"))
+
 
 class MemoriaAuditoriaStore:
     """Implementación en memoria con la misma interfaz, para pruebas."""
@@ -147,6 +171,7 @@ class MemoriaAuditoriaStore:
     def __init__(self):
         self.lotes = {}
         self.chats = {}
+        self.manual = {}
         self._contador = 0
 
     def _orden(self):
@@ -224,6 +249,19 @@ class MemoriaAuditoriaStore:
     def chats_para_historial(self, desde_iso):
         chats = [c for c in self.chats.values() if str(c.get("conversacion_fecha") or "") >= desde_iso]
         return copy.deepcopy(sorted(chats, key=lambda c: c.get("conversacion_fecha") or ""))
+
+    def indice_manual(self, version):
+        filas = sorted(self.manual.get(version, {}).values(), key=lambda s: s.get("orden", 0))
+        return [{"codigo": s["codigo"], "titulo": s["titulo"]} for s in filas]
+
+    def secciones_manual(self, version, codigos):
+        filas = [s for c, s in self.manual.get(version, {}).items() if c in set(codigos or [])]
+        return copy.deepcopy(sorted(filas, key=lambda s: s.get("orden", 0)))
+
+    def guardar_manual(self, version, secciones):
+        destino = self.manual.setdefault(version, {})
+        for seccion in secciones:
+            destino[seccion["codigo"]] = dict(seccion, version=version)
 
 
 def obtener_store():

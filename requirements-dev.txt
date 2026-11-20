@@ -1,0 +1,2 @@
+# Dependencias solo para scripts locales (no se instalan en Vercel).
+pypdf>=4
