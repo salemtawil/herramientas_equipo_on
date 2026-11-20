@@ -42,7 +42,8 @@ def obtener_config_ia():
 
 def _es_limite_diario(texto):
     texto = str(texto or "").lower()
-    return "per day" in texto or "tpd" in texto or "rpd" in texto
+    # Groq: "tokens per day (TPD)"; Gemini: "GenerateRequestsPerDayPerProjectPerModel".
+    return "per day" in texto or "perday" in texto or "tpd" in texto or "rpd" in texto
 
 
 def _segundos_espera(respuesta):

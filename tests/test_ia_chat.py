@@ -118,3 +118,22 @@ def test_contenido_no_json_lanza_respuesta_error(monkeypatch):
     monkeypatch.setattr(ia_chat.requests, "post", lambda *a, **k: _respuesta_contenido("no es json"))
     with pytest.raises(IARespuestaError):
         completar_json([], _config())
+
+
+def test_429_por_dia_gemini(monkeypatch):
+    texto = (
+        '[{"error": {"code": 429, "message": "You exceeded your current quota.", "status": "RESOURCE_EXHAUSTED", '
+        '"details": [{"violations": [{"quotaId": "GenerateRequestsPerDayPerProjectPerModel-FreeTier"}]}]}}]'
+    )
+    monkeypatch.setattr(ia_chat.requests, "post", lambda *a, **k: RespuestaFalsa(429, text=texto))
+    with pytest.raises(IARateLimitError) as error:
+        completar_json([], _config())
+    assert error.value.diario is True
+
+
+def test_429_por_minuto_gemini(monkeypatch):
+    texto = '[{"error": {"code": 429, "details": [{"violations": [{"quotaId": "GenerateRequestsPerMinutePerProjectPerModel-FreeTier"}]}]}}]'
+    monkeypatch.setattr(ia_chat.requests, "post", lambda *a, **k: RespuestaFalsa(429, text=texto))
+    with pytest.raises(IARateLimitError) as error:
+        completar_json([], _config())
+    assert error.value.diario is False
