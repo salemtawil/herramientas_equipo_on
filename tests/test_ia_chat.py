@@ -146,3 +146,58 @@ def test_404_modelo_inexistente_es_error_de_configuracion(monkeypatch):
         completar_json([], _config(model="gemini-2.5-flash"))
     assert "AUDITORIA_CHATS_AI_MODEL" in str(error.value)
     assert "gemini-2.5-flash" in str(error.value)
+
+
+def test_503_alta_demanda_es_temporal(monkeypatch):
+    from utils.ia_chat import IATemporalError
+
+    texto = '[{"error": {"code": 503, "message": "This model is currently experiencing high demand.", "status": "UNAVAILABLE"}}]'
+    monkeypatch.setattr(ia_chat.requests, "post", lambda *a, **k: RespuestaFalsa(503, text=texto))
+    with pytest.raises(IATemporalError) as error:
+        completar_json([], _config())
+    assert error.value.diario is False
+    assert error.value.esperar_segundos >= 20
+
+
+def test_timeout_es_temporal(monkeypatch):
+    from utils.ia_chat import IATemporalError
+
+    def post_lento(*a, **k):
+        raise ia_chat.requests.exceptions.ReadTimeout("lento")
+
+    monkeypatch.setattr(ia_chat.requests, "post", post_lento)
+    with pytest.raises(IATemporalError):
+        completar_json([], _config())
+
+
+def test_config_respaldo_y_razonamiento(monkeypatch):
+    monkeypatch.setenv("AUDITORIA_CHATS_AI_API_KEY", "abc")
+    monkeypatch.setenv("AUDITORIA_CHATS_AI_MODEL_RESPALDO", " gemini-lite ")
+    monkeypatch.setenv("AUDITORIA_CHATS_AI_RAZONAMIENTO", "low")
+    config = obtener_config_ia()
+    assert config["model_respaldo"] == "gemini-lite"
+    assert config["razonamiento"] == "low"
+
+
+def test_config_sin_respaldo_ni_razonamiento(monkeypatch):
+    monkeypatch.delenv("AUDITORIA_CHATS_AI_MODEL_RESPALDO", raising=False)
+    monkeypatch.delenv("AUDITORIA_CHATS_AI_RAZONAMIENTO", raising=False)
+    config = obtener_config_ia()
+    assert config["model_respaldo"] == ""
+    assert config["razonamiento"] == ""
+
+
+def test_razonamiento_y_timeout_en_la_peticion(monkeypatch):
+    llamadas = {}
+
+    def post_falso(url, headers=None, json=None, timeout=None):
+        llamadas.update(json=json, timeout=timeout)
+        return _respuesta_contenido('{"a": 1}')
+
+    monkeypatch.setattr(ia_chat.requests, "post", post_falso)
+    completar_json([], _config(razonamiento="low"))
+    assert llamadas["json"]["reasoning_effort"] == "low"
+    assert llamadas["timeout"] == 60
+
+    completar_json([], _config(razonamiento=""))
+    assert "reasoning_effort" not in llamadas["json"]

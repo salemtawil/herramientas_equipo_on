@@ -170,12 +170,21 @@ def _agente_ya_muestreado(store, lote_id, agente_id):
 
 def _muestrear_agente(store, lote, agente, chatwoot, rng):
     since, until = int(lote["since"]), int(lote["until"])
+    bandejas = [int(b) for b in (lote.get("alcance_detalle") or {}).get("bandejas") or []]
+    extra = {"inbox_ids": bandejas} if bandejas else {}
+
+    def en_alcance(conversacion):
+        if not since <= int(conversacion.get("created_at") or 0) <= until:
+            return False
+        bandeja = conversacion.get("inbox_id")
+        return not bandejas or bandeja is None or int(bandeja) in bandejas
+
     conversaciones = []
     for pagina in range(1, MAX_PAGINAS_MUESTREO + 1):
-        resultado = chatwoot.conversaciones_de_agente(agente["id"], since, until, page=pagina)
+        resultado = chatwoot.conversaciones_de_agente(agente["id"], since, until, page=pagina, **extra)
         if not resultado:
             break
-        conversaciones.extend(c for c in resultado if since <= int(c.get("created_at") or 0) <= until)
+        conversaciones.extend(c for c in resultado if en_alcance(c))
 
     # Otra pestaña pudo muestrear este agente mientras se listaban sus chats.
     if _agente_ya_muestreado(store, lote["id"], agente["id"]):
@@ -237,13 +246,38 @@ def _leer_chat(store, lote_id, chatwoot):
     return _respuesta(store, lote_id, "lectura", f"Chat #{chat['conversation_id']} leído.")
 
 
+def _llamar_ia(mensajes, config_ia):
+    """Llama al modelo principal y, si está saturado o sin cupo, al de respaldo.
+
+    Devuelve (datos, modelo usado). Si todos fallan, solo se informa límite diario cuando
+    todos lo agotaron; si alguno falló por algo temporal, se espera y se reintenta.
+    Los errores de configuración no pasan al respaldo: hay que corregirlos.
+    """
+    modelos = [config_ia["model"]]
+    respaldo = config_ia.get("model_respaldo")
+    if respaldo and respaldo != config_ia["model"]:
+        modelos.append(respaldo)
+
+    errores = []
+    for modelo in modelos:
+        try:
+            return completar_json(mensajes, dict(config_ia, model=modelo)), modelo
+        except IARateLimitError as exc:
+            errores.append(exc)
+    temporales = [e for e in errores if not e.diario]
+    raise temporales[0] if temporales else errores[0]
+
+
 def _auditar_chat(store, lote_id, config_ia):
     chat = store.tomar_siguiente(lote_id, ("leido",), "procesando")
     if not chat:
         return None
     try:
-        data = completar_json(construir_mensajes(chat.get("transcripcion_tmp") or "", chat.get("agente_nombre")), config_ia)
+        data, modelo = _llamar_ia(
+            construir_mensajes(chat.get("transcripcion_tmp") or "", chat.get("agente_nombre")), config_ia
+        )
         resultado = validar_resultado(data)
+        resultado["modelo"] = modelo
     except IARateLimitError as exc:
         store.actualizar_chat(chat["id"], {"estado": "leido"})
         if exc.diario:

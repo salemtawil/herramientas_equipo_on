@@ -416,3 +416,122 @@ def test_error_de_configuracion_no_gasta_los_chats(monkeypatch):
     assert "El modelo no existe." in pasos[-1]["mensaje"]
     assert all(c["estado"] in ("leido", "pendiente") for c in store.listar_chats(lote["id"]))
     assert all(int(c.get("intentos") or 0) == 0 for c in store.listar_chats(lote["id"]))
+
+
+class ChatwootConBandejas(ChatwootFalso):
+    def __init__(self):
+        super().__init__({})
+        self.inbox_ids = []
+
+    def conversaciones_de_agente(self, agente_id, since, until, page=1, inbox_ids=None):
+        self.inbox_ids.append(inbox_ids)
+        if page > 1:
+            return []
+        return [
+            {"id": 11, "created_at": BASE_TS, "inbox_id": 3},
+            {"id": 12, "created_at": BASE_TS, "inbox_id": 9},  # bandeja de llamadas
+        ]
+
+
+def test_muestreo_usa_solo_las_bandejas_del_lote(monkeypatch):
+    _ia_ok(monkeypatch)
+    store = MemoriaAuditoriaStore()
+    lote = motor.crear_lote(
+        store, since=date(2026, 11, 9), until=date(2026, 11, 15), alcance="agentes",
+        detalle={"agentes": ["1"], "bandejas": [3]}, chats_por_agente=5, agentes=AGENTES[:1], config_ia=CONFIG_IA,
+    )
+    chatwoot = ChatwootConBandejas()
+    motor.ejecutar_paso(store, lote["id"], chatwoot, CONFIG_IA, rng=random.Random(0))
+    assert chatwoot.inbox_ids[0] == [3]
+    assert [c["conversation_id"] for c in store.listar_chats(lote["id"])] == [11]
+
+
+def test_error_temporal_espera_sin_gastar_intentos(monkeypatch):
+    from utils.ia_chat import IATemporalError
+
+    def ia_saturada(mensajes, config, **k):
+        raise IATemporalError("Alta demanda.", esperar_segundos=30)
+
+    monkeypatch.setattr(motor, "completar_json", ia_saturada)
+    store = MemoriaAuditoriaStore()
+    lote = _crear(store, chats_por_agente=1, agentes=AGENTES[:1])
+    pasos = _correr(store, lote["id"], ChatwootFalso({1: [11]}))
+    chat = store.listar_chats(lote["id"])[0]
+    assert pasos[-1]["accion"] == "espera" and pasos[-1]["esperar_segundos"] == 30
+    assert chat["estado"] == "leido" and int(chat.get("intentos") or 0) == 0
+
+
+# ---------------------------------------------------------------------------
+# Modelo de respaldo
+# ---------------------------------------------------------------------------
+
+CONFIG_CON_RESPALDO = dict(CONFIG_IA, model="principal", model_respaldo="respaldo")
+
+
+def _ia_por_modelo(monkeypatch, comportamiento):
+    """comportamiento: {modelo: excepción o None (=responde bien)}."""
+    llamados = []
+
+    def ia(mensajes, config, **k):
+        llamados.append(config["model"])
+        error = comportamiento.get(config["model"])
+        if error:
+            raise error
+        return _resultado()
+
+    monkeypatch.setattr(motor, "completar_json", ia)
+    return llamados
+
+
+def _auditar_un_chat(config):
+    store = MemoriaAuditoriaStore()
+    lote = _crear(store, chats_por_agente=1, agentes=AGENTES[:1])
+    chatwoot = ChatwootFalso({1: [11]})
+    pasos = [motor.ejecutar_paso(store, lote["id"], chatwoot, config, rng=random.Random(0)) for _ in range(3)]
+    return store, lote, pasos
+
+
+def test_respaldo_audita_si_el_principal_esta_saturado(monkeypatch):
+    from utils.ia_chat import IATemporalError
+
+    llamados = _ia_por_modelo(monkeypatch, {"principal": IATemporalError("503")})
+    store, lote, pasos = _auditar_un_chat(CONFIG_CON_RESPALDO)
+    chat = store.listar_chats(lote["id"])[0]
+    assert llamados == ["principal", "respaldo"]
+    assert chat["estado"] == "auditado"
+    assert chat["ia_resultado"]["modelo"] == "respaldo"
+
+
+def test_respaldo_suma_cupo_cuando_el_principal_agoto_el_dia(monkeypatch):
+    llamados = _ia_por_modelo(monkeypatch, {"principal": IARateLimitError("día", diario=True)})
+    store, lote, _ = _auditar_un_chat(CONFIG_CON_RESPALDO)
+    assert llamados == ["principal", "respaldo"]
+    assert store.listar_chats(lote["id"])[0]["estado"] == "auditado"
+
+
+def test_limite_diario_solo_si_ambos_modelos_lo_agotaron(monkeypatch):
+    from utils.ia_chat import IATemporalError
+
+    _ia_por_modelo(monkeypatch, {"principal": IARateLimitError("día", diario=True), "respaldo": IATemporalError("503")})
+    store, lote, pasos = _auditar_un_chat(CONFIG_CON_RESPALDO)
+    assert pasos[-1]["accion"] == "espera"
+    assert store.obtener_lote(lote["id"])["estado"] != "limite_diario"
+
+    _ia_por_modelo(monkeypatch, {"principal": IARateLimitError("día", diario=True), "respaldo": IARateLimitError("día", diario=True)})
+    store, lote, pasos = _auditar_un_chat(CONFIG_CON_RESPALDO)
+    assert store.obtener_lote(lote["id"])["estado"] == "limite_diario"
+
+
+def test_error_de_configuracion_no_usa_respaldo(monkeypatch):
+    from utils.ia_chat import IAConfigError
+
+    llamados = _ia_por_modelo(monkeypatch, {"principal": IAConfigError("no existe")})
+    _, _, pasos = _auditar_un_chat(CONFIG_CON_RESPALDO)
+    assert llamados == ["principal"]
+    assert pasos[-1]["accion"] == "configuracion"
+
+
+def test_sin_respaldo_guarda_el_modelo_principal(monkeypatch):
+    _ia_por_modelo(monkeypatch, {})
+    store, lote, _ = _auditar_un_chat(dict(CONFIG_IA, model="principal"))
+    assert store.listar_chats(lote["id"])[0]["ia_resultado"]["modelo"] == "principal"

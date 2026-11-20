@@ -94,6 +94,8 @@ Opcionales según funcionalidad:
 - `AUDITORIA_CHATS_AI_BASE_URL` (por defecto `https://api.groq.com/openai/v1`)
 - `AUDITORIA_CHATS_AI_MODEL` (por defecto `openai/gpt-oss-120b`)
 - `AUDITORIA_CHATS_AI_API_KEY` (sin clave, la auditoría con IA queda desactivada)
+- `AUDITORIA_CHATS_AI_MODEL_RESPALDO` (opcional: modelo que se usa si el principal está saturado, tarda demasiado o agotó su cupo diario)
+- `AUDITORIA_CHATS_AI_RAZONAMIENTO` (opcional: `low`, `medium`, `high`; menos razonamiento = respuestas más rápidas. Vacío = no se envía)
 - `AUDITORIA_CHATS_AI_CUPO_DIARIO` (chats que la IA puede auditar al día; solo sirve para avisar en el selector; por defecto `20`, `0` lo oculta)
 - `CHATWOOT_BASE_URL`
 - `CHATWOOT_ACCOUNT_ID`
@@ -237,6 +239,7 @@ El conector usa la API compatible con OpenAI, así que puedes cambiar de proveed
 
 Cómo funciona:
 
+- Si la IA responde 503 (saturada) o tarda más de 60 s, el chat no se marca como error: se prueba el modelo de respaldo (si está configurado) o se espera 30 s y se reintenta. Cada modelo de Gemini tiene su propio cupo diario, así que un respaldo también suma capacidad. En el diagnóstico JSON de cada lote figura qué modelo auditó cada chat.
 - Cada lote se procesa **un paso por petición** (elegir los chats de un agente, leer un chat o auditar un chat), para no superar el tiempo máximo de Vercel. El botón «Procesar lote» repite los pasos; sin JavaScript, «Procesar siguiente» avanza uno por clic. Se puede pausar y retomar.
 - Antes de enviar un chat a la IA se ocultan correos, teléfonos y números largos. La transcripción solo se guarda mientras se procesa y se borra al terminar; para revisar se vuelve a leer en vivo desde Chatwoot.
 - Se marcan para revisión humana los chats con nota ≤ 3, cliente insatisfecho, confianza baja o error de IA, y además un 10 % al azar del resto como control.

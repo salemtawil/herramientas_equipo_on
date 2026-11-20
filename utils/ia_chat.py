@@ -9,6 +9,7 @@ import requests
 BASE_URL_DEFAULT = "https://api.groq.com/openai/v1"
 MODEL_DEFAULT = "openai/gpt-oss-120b"
 ESPERA_DEFAULT = 20
+ESPERA_TEMPORAL = 30
 
 
 class IAConfigError(Exception):
@@ -26,6 +27,13 @@ class IARateLimitError(Exception):
         self.diario = diario
 
 
+class IATemporalError(IARateLimitError):
+    """Saturación (5xx) o timeout del proveedor: se espera y se reintenta sin gastar intentos del chat."""
+
+    def __init__(self, mensaje, esperar_segundos=ESPERA_TEMPORAL):
+        super().__init__(mensaje, esperar_segundos=esperar_segundos, diario=False)
+
+
 def _env(nombre):
     return str(os.getenv(nombre) or "").strip()
 
@@ -35,6 +43,10 @@ def obtener_config_ia():
     return {
         "base_url": (_env("AUDITORIA_CHATS_AI_BASE_URL") or BASE_URL_DEFAULT).rstrip("/"),
         "model": _env("AUDITORIA_CHATS_AI_MODEL") or MODEL_DEFAULT,
+        # Se usa cuando el principal está saturado, tarda demasiado o agotó su cupo (cada modelo tiene el suyo).
+        "model_respaldo": _env("AUDITORIA_CHATS_AI_MODEL_RESPALDO"),
+        # Esfuerzo de razonamiento ("low", "medium"...); vacío = no se envía y decide el proveedor.
+        "razonamiento": _env("AUDITORIA_CHATS_AI_RAZONAMIENTO").lower(),
         "api_key": api_key,
         "activa": bool(api_key),
     }
@@ -65,7 +77,7 @@ def _parsear_contenido(contenido):
     return data
 
 
-def completar_json(mensajes, config, timeout=40):
+def completar_json(mensajes, config, timeout=60):
     if not config.get("api_key"):
         raise IAConfigError("Configura AUDITORIA_CHATS_AI_API_KEY para usar la auditoría con IA.")
 
@@ -76,10 +88,16 @@ def completar_json(mensajes, config, timeout=40):
         "temperature": 0.1,
         "response_format": {"type": "json_object"},
     }
+    if config.get("razonamiento"):
+        payload["reasoning_effort"] = config["razonamiento"]
     headers = {"Authorization": f"Bearer {config['api_key']}", "Content-Type": "application/json"}
 
     try:
         respuesta = requests.post(url, headers=headers, json=payload, timeout=timeout)
+    except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as exc:
+        raise IATemporalError(
+            f"El proveedor de IA no respondió a tiempo ({exc.__class__.__name__}); se reintentará en {ESPERA_TEMPORAL} s."
+        ) from exc
     except requests.RequestException as exc:
         raise IARespuestaError(f"No se pudo conectar con el proveedor de IA: {exc.__class__.__name__}.") from exc
 
@@ -100,6 +118,11 @@ def completar_json(mensajes, config, timeout=40):
             else "Límite por minuto de la IA alcanzado; se reintentará en unos segundos."
         )
         raise IARateLimitError(mensaje, esperar_segundos=_segundos_espera(respuesta), diario=diario)
+    if respuesta.status_code >= 500:
+        raise IATemporalError(
+            f"El proveedor de IA está saturado o con fallos ({respuesta.status_code}); "
+            f"se reintentará en {ESPERA_TEMPORAL} s."
+        )
     if respuesta.status_code >= 400:
         raise IARespuestaError(f"El proveedor de IA respondió {respuesta.status_code}: {respuesta.text[:200]}")
 

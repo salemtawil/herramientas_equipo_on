@@ -22,6 +22,7 @@
       <div class="metric">
         <div class="label">IA</div>
         <div class="value ac-config__valor">{{ ia_modelo if ia_activa else "Sin clave" }}</div>
+        {% if ia_activa and ia_respaldo %}<div class="small">Respaldo: {{ ia_respaldo }}</div>{% endif %}
       </div>
       <div class="metric">
         <div class="label">Supabase</div>
@@ -71,6 +72,21 @@
           <input type="number" id="ac-chats" name="chats_por_agente" min="1" max="{{ chats_por_agente_max }}" value="{{ chats_por_agente }}" required data-ac-chats>
         </div>
       </div>
+
+      {% if bandejas %}
+        <fieldset class="top-space ac-selector">
+          <legend class="small">Bandejas de entrada</legend>
+          <p class="small ac-selector__resumen">Solo se eligen chats de las bandejas marcadas. Las de llamadas o voz vienen desmarcadas.</p>
+          <div class="ac-grupo__agentes ac-bandejas">
+            {% for bandeja in bandejas %}
+              <label class="ac-agente">
+                <input type="checkbox" name="bandejas" value="{{ bandeja.id }}"{% if bandeja.marcada %} checked{% endif %}>
+                <span>{{ bandeja.nombre }}{% if bandeja.tipo %} <span class="small">· {{ bandeja.tipo }}</span>{% endif %}</span>
+              </label>
+            {% endfor %}
+          </div>
+        </fieldset>
+      {% endif %}
 
       <input type="hidden" name="alcance" value="agentes">
       <fieldset class="top-space ac-selector" data-ac-selector data-ac-cupo="{{ cupo_diario }}">

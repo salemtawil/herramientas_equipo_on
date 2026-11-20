@@ -337,3 +337,72 @@ def test_selector_muestra_cupo_diario(entorno, cliente, monkeypatch):
     monkeypatch.setenv("AUDITORIA_CHATS_AI_CUPO_DIARIO", "20")
     html = cliente.get("/auditoria-chats/").get_data(as_text=True)
     assert 'data-ac-cupo="20"' in html
+
+
+# ---------------------------------------------------------------------------
+# Bandejas de entrada y diagnóstico
+# ---------------------------------------------------------------------------
+
+
+class ChatwootConBandejasWeb(ChatwootFalso):
+    def listar_bandejas(self):
+        return [
+            {"id": 3, "name": "WhatsApp Soporte", "channel_type": "Channel::Whatsapp"},
+            {"id": 9, "name": "Llamadas", "channel_type": "Channel::Api"},
+            {"id": 11, "name": "Voz", "channel_type": "Channel::Voice"},
+        ]
+
+    def conversaciones_de_agente(self, agente_id, since, until, page=1, inbox_ids=None):
+        return super().conversaciones_de_agente(agente_id, since, until, page=page)
+
+
+def test_formulario_muestra_bandejas_y_desmarca_llamadas(entorno, cliente, monkeypatch):
+    monkeypatch.setattr(herramienta, "obtener_chatwoot", lambda: ChatwootConBandejasWeb())
+    html = cliente.get("/auditoria-chats/").get_data(as_text=True)
+    assert re.search(r'name="bandejas" value="3"[^>]*checked', html)
+    assert not re.search(r'name="bandejas" value="9"[^>]*checked', html)
+    assert not re.search(r'name="bandejas" value="11"[^>]*checked', html)
+    assert "WhatsApp Soporte" in html and "Llamadas" in html
+
+
+def test_crear_lote_guarda_bandejas(entorno, cliente, monkeypatch):
+    monkeypatch.setattr(herramienta, "obtener_chatwoot", lambda: ChatwootConBandejasWeb())
+    cliente.post("/auditoria-chats/lotes", data={"fecha_inicio": "2025-11-09", "fecha_fin": "2025-11-15",
+                 "alcance": "agentes", "agentes": ["1"], "bandejas": ["3"], "chats_por_agente": "2"})
+    lote = entorno.listar_lotes()[0]
+    assert lote["alcance_detalle"]["bandejas"] == [3]
+
+
+def test_crear_lote_sin_bandejas_no_crea(entorno, cliente, monkeypatch):
+    monkeypatch.setattr(herramienta, "obtener_chatwoot", lambda: ChatwootConBandejasWeb())
+    cliente.post("/auditoria-chats/lotes", data={"fecha_inicio": "2025-11-09", "fecha_fin": "2025-11-15",
+                 "alcance": "agentes", "agentes": ["1"], "chats_por_agente": "2"})
+    assert entorno.listar_lotes() == []
+
+
+def test_diagnostico_json_del_lote(entorno, cliente):
+    lote_id, chats = _lote_procesado(cliente, entorno)
+    entorno.actualizar_chat(chats[0]["id"], {"estado": "error", "ia_error": "El proveedor de IA respondió 404", "intentos": 2})
+    respuesta = cliente.get(f"/auditoria-chats/lote/{lote_id}/diagnostico")
+    assert respuesta.status_code == 200
+    assert "attachment" in respuesta.headers["Content-Disposition"]
+    datos = respuesta.get_json()
+    assert datos["lote"]["id"] == lote_id
+    assert datos["configuracion"]["ia_modelo"]
+    assert datos["progreso"]["total"] == len(chats)
+    errores = [c for c in datos["chats"] if c["estado"] == "error"]
+    assert errores[0]["ia_error"] == "El proveedor de IA respondió 404"
+    texto = respuesta.get_data(as_text=True)
+    assert "clave-secreta-prueba" not in texto
+    assert "transcripcion_tmp" not in texto and "evidencias" not in texto
+    html = cliente.get(f"/auditoria-chats/lote/{lote_id}").get_data(as_text=True)
+    assert f"/auditoria-chats/lote/{lote_id}/diagnostico" in html
+
+
+def test_diagnostico_y_revision_muestran_modelo_usado(entorno, cliente):
+    lote_id, chats = _lote_procesado(cliente, entorno)
+    datos = cliente.get(f"/auditoria-chats/lote/{lote_id}/diagnostico").get_json()
+    assert all(c["ia_modelo"] for c in datos["chats"] if c["estado"] == "auditado")
+    assert "model_respaldo" in str(datos["configuracion"]) or "ia_modelo_respaldo" in datos["configuracion"]
+    html = cliente.get(f"/auditoria-chats/chat/{chats[0]['id']}").get_data(as_text=True)
+    assert f"Auditado con {datos['chats'][0]['ia_modelo']}" in html

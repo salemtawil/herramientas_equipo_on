@@ -453,7 +453,10 @@ class ChatwootClient:
         except ValueError as exc:
             raise RuntimeError(f"Chatwoot no devolvio JSON. URL: {url}.") from exc
 
-    def conversaciones_de_agente(self, agente_id, since, until, page=1):
+    def listar_bandejas(self):
+        return _normalizar_lista_respuesta(self.get(f"/api/v1/accounts/{self.account_id}/inboxes"))
+
+    def conversaciones_de_agente(self, agente_id, since, until, page=1, inbox_ids=None):
         """Página cruda del filtro de Chatwoot, ampliada un día por cada lado.
 
         El filtro de fechas de Chatwoot es estricto y compara por día en UTC, así que
@@ -462,27 +465,19 @@ class ChatwootClient:
         tz = _obtener_timezone(_timezone())
         desde = datetime.fromtimestamp(int(since), tz).date() - timedelta(days=1)
         hasta = datetime.fromtimestamp(int(until), tz).date() + timedelta(days=2)
-        payload = {
-            "payload": [
-                {
-                    "attribute_key": "assignee_id",
-                    "filter_operator": "equal_to",
-                    "values": [int(agente_id)],
-                    "query_operator": "and",
-                },
-                {
-                    "attribute_key": "created_at",
-                    "filter_operator": "is_greater_than",
-                    "values": [desde.isoformat()],
-                    "query_operator": "and",
-                },
-                {
-                    "attribute_key": "created_at",
-                    "filter_operator": "is_less_than",
-                    "values": [hasta.isoformat()],
-                },
-            ]
-        }
+        filtros = [
+            {"attribute_key": "assignee_id", "filter_operator": "equal_to", "values": [int(agente_id)]},
+            {"attribute_key": "created_at", "filter_operator": "is_greater_than", "values": [desde.isoformat()]},
+            {"attribute_key": "created_at", "filter_operator": "is_less_than", "values": [hasta.isoformat()]},
+        ]
+        if inbox_ids:
+            filtros.append(
+                {"attribute_key": "inbox_id", "filter_operator": "equal_to", "values": [int(i) for i in inbox_ids]}
+            )
+        # Chatwoot une los filtros con el query_operator de cada uno, salvo el último.
+        for filtro in filtros[:-1]:
+            filtro["query_operator"] = "and"
+        payload = {"payload": filtros}
         respuesta = self.post(
             f"/api/v1/accounts/{self.account_id}/conversations/filter",
             json=payload,

@@ -27,6 +27,25 @@ def anonimizar(texto):
     return _RE_TELEFONO.sub(_reemplazar_telefono, texto)
 
 
+ETIQUETAS_ADJUNTO = {
+    "audio": "[nota de voz]",
+    "image": "[imagen]",
+    "video": "[video]",
+    "file": "[archivo]",
+    "location": "[ubicación]",
+    "contact": "[contacto]",
+}
+
+
+def _texto(mensaje):
+    return str(mensaje.get("content") or "").strip()
+
+
+def _etiquetas_adjuntos(mensaje):
+    adjuntos = mensaje.get("attachments") or []
+    return [ETIQUETAS_ADJUNTO.get(str(a.get("file_type") or "").lower(), "[adjunto]") for a in adjuntos]
+
+
 def mensajes_utiles(mensajes):
     utiles = []
     for mensaje in mensajes or []:
@@ -34,14 +53,15 @@ def mensajes_utiles(mensajes):
             continue
         if mensaje.get("private"):
             continue
-        if not str(mensaje.get("content") or "").strip():
+        if not _texto(mensaje) and not mensaje.get("attachments"):
             continue
         utiles.append(mensaje)
     return utiles
 
 
 def tiene_mensajes_de_agente(mensajes):
-    return any(m.get("message_type") == MENSAJE_SALIENTE for m in mensajes_utiles(mensajes))
+    """Solo cuentan las respuestas escritas del agente: un chat atendido solo con audios no es auditable."""
+    return any(m.get("message_type") == MENSAJE_SALIENTE and _texto(m) for m in mensajes_utiles(mensajes))
 
 
 def construir_transcripcion(mensajes, tz_name, max_chars=6000):
@@ -50,7 +70,8 @@ def construir_transcripcion(mensajes, tz_name, max_chars=6000):
     for mensaje in mensajes_utiles(mensajes):
         hora = datetime.fromtimestamp(int(mensaje.get("created_at") or 0), tz).strftime("%H:%M")
         autor = "Agente" if mensaje.get("message_type") == MENSAJE_SALIENTE else "Cliente"
-        contenido = " ".join(anonimizar(mensaje.get("content")).split())
+        partes = [" ".join(anonimizar(_texto(mensaje)).split())] + _etiquetas_adjuntos(mensaje)
+        contenido = " ".join(p for p in partes if p)
         lineas.append(f"[{hora}] {autor}: {contenido}")
 
     texto = "\n".join(lineas)

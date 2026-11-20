@@ -391,3 +391,29 @@ def test_mensajes_de_conversacion_pagina_con_before():
 
 def test_url_conversacion():
     assert _cliente_prueba().url_conversacion(5) == "https://chat.test/app/accounts/2/conversations/5"
+
+
+def test_listar_bandejas():
+    def get_falso(url, headers=None, params=None, timeout=None):
+        assert url == "https://chat.test/api/v1/accounts/2/inboxes"
+        return _RespuestaJson({"payload": [{"id": 3, "name": "WhatsApp", "channel_type": "Channel::Whatsapp"}]})
+
+    with patch("utils.chatwoot_reportes.requests.get", get_falso):
+        assert _cliente_prueba().listar_bandejas() == [{"id": 3, "name": "WhatsApp", "channel_type": "Channel::Whatsapp"}]
+
+
+def test_conversaciones_de_agente_filtra_por_bandejas():
+    llamadas = []
+
+    def post_falso(url, headers=None, json=None, params=None, timeout=None):
+        llamadas.append(json)
+        return _RespuestaJson({"payload": []})
+
+    with patch("utils.chatwoot_reportes.requests.post", post_falso):
+        _cliente_prueba().conversaciones_de_agente(7, 1762747200, 1763351999, inbox_ids=[3, 5])
+
+    filtros = llamadas[0]["payload"]
+    bandeja = [f for f in filtros if f["attribute_key"] == "inbox_id"]
+    assert bandeja and bandeja[0]["values"] == [3, 5] and bandeja[0]["filter_operator"] == "equal_to"
+    assert "query_operator" not in filtros[-1]
+    assert all("query_operator" in f for f in filtros[:-1])

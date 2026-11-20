@@ -67,3 +67,25 @@ def test_construir_transcripcion_recorta_a_6000():
     assert len(texto) <= 6000 + len("\n[…]\n")
     assert "\n[…]\n" in texto
     assert texto.startswith("[10:00] Cliente:")
+
+
+def test_nota_de_voz_aparece_en_la_transcripcion():
+    mensajes = [
+        {"message_type": 0, "content": None, "created_at": _ts(9, 0), "attachments": [{"file_type": "audio"}]},
+        {"message_type": 1, "content": "Hola, ¿me lo puedes escribir?", "created_at": _ts(9, 1)},
+        {"message_type": 0, "content": "", "created_at": _ts(9, 2), "attachments": [{"file_type": "image"}]},
+    ]
+    assert len(mensajes_utiles(mensajes)) == 3
+    assert construir_transcripcion(mensajes, "America/Caracas").splitlines() == [
+        "[09:00] Cliente: [nota de voz]",
+        "[09:01] Agente: Hola, ¿me lo puedes escribir?",
+        "[09:02] Cliente: [imagen]",
+    ]
+
+
+def test_chat_solo_con_audios_del_agente_no_cuenta_como_respuesta_escrita():
+    mensajes = [
+        {"message_type": 0, "content": "Hola", "created_at": _ts(9, 0)},
+        {"message_type": 1, "content": None, "created_at": _ts(9, 1), "attachments": [{"file_type": "audio"}]},
+    ]
+    assert tiene_mensajes_de_agente(mensajes) is False

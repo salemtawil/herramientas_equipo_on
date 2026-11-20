@@ -2,6 +2,7 @@
 
 import csv
 import io
+import json
 import logging
 import os
 from datetime import date, datetime, timedelta, timezone
@@ -11,7 +12,7 @@ from flask import Blueprint, Response, abort, flash, jsonify, redirect, render_t
 from utils import auditoria_chats_motor as motor
 from utils.auditoria_chats_pauta import CRITERIOS, SATISFACCION
 from utils.auditoria_chats_store import AuditoriaChatsConfigError, AuditoriaChatsError, obtener_store
-from utils.auditoria_chats_transcripcion import mensajes_utiles
+from utils.auditoria_chats_transcripcion import _etiquetas_adjuntos, mensajes_utiles
 from utils.chatwoot_reportes import ChatwootClient, _obtener_timezone, _timezone
 from utils.errores import mensaje_error_publico
 from utils.ia_chat import obtener_config_ia
@@ -84,6 +85,35 @@ def _cupo_diario():
         return CUPO_DIARIO_DEFAULT
 
 
+PALABRAS_LLAMADAS = ("llamad", "voz", "voice", "call", "telefon", "phone")
+
+
+def _es_bandeja_de_llamadas(bandeja):
+    texto = motor._normalizar_nombre(f"{bandeja.get('name', '')} {bandeja.get('channel_type', '')}")
+    return any(palabra in texto for palabra in PALABRAS_LLAMADAS)
+
+
+def _listar_bandejas(chatwoot):
+    """Bandejas de Chatwoot con una marca de si se preseleccionan (las de llamadas no)."""
+    listar = getattr(chatwoot, "listar_bandejas", None)
+    if not listar:
+        return []
+    bandejas = []
+    for bandeja in listar() or []:
+        if bandeja.get("id") is None:
+            continue
+        tipo = str(bandeja.get("channel_type") or "").replace("Channel::", "")
+        bandejas.append(
+            {
+                "id": int(bandeja["id"]),
+                "nombre": bandeja.get("name") or f"Bandeja {bandeja['id']}",
+                "tipo": tipo,
+                "marcada": not _es_bandeja_de_llamadas(bandeja),
+            }
+        )
+    return sorted(bandejas, key=lambda b: (not b["marcada"], motor._normalizar_nombre(b["nombre"])))
+
+
 def _agrupar_por_turno(agentes, turnos):
     """Agentes de Chatwoot agrupados en el orden de Turnos de trabajo, más los que no tienen turno.
 
@@ -109,7 +139,7 @@ def index():
     chatwoot, error_chatwoot = _chatwoot_o_error()
 
     turnos = obtener_turnos_configurados()
-    agentes, avisos, grupos, sin_cruce = [], [], [], []
+    agentes, avisos, grupos, sin_cruce, bandejas = [], [], [], [], []
     if chatwoot:
         try:
             agentes = sorted(
@@ -117,6 +147,7 @@ def index():
                 key=lambda a: motor._normalizar_nombre(a["nombre"]),
             )
             grupos, sin_cruce = _agrupar_por_turno(agentes, turnos)
+            bandejas = _listar_bandejas(chatwoot)
         except Exception as exc:
             logger.warning("No se pudieron listar los agentes de Chatwoot: %s", exc)
             error_chatwoot = mensaje_error_publico(exc, "No se pudieron listar los agentes de Chatwoot")
@@ -135,6 +166,7 @@ def index():
         agentes=agentes,
         grupos=grupos,
         sin_cruce=sin_cruce,
+        bandejas=bandejas,
         cupo_diario=_cupo_diario(),
         lotes=lotes,
         estados_lote=ESTADOS_LOTE,
@@ -147,6 +179,7 @@ def index():
         error_chatwoot=error_chatwoot,
         ia_activa=config_ia["activa"],
         ia_modelo=config_ia["model"],
+        ia_respaldo=config_ia["model_respaldo"],
         avisos=avisos,
         puede_crear=bool(store and chatwoot and not error_chatwoot),
     )
@@ -186,6 +219,18 @@ def crear():
     if not agentes:
         flash("No hay agentes de Chatwoot para ese alcance. Elige un turno con agentes o marca al menos uno.", "warning")
         return redirect(url_for("auditoria_chats.index"))
+
+    try:
+        disponibles = {b["id"] for b in _listar_bandejas(chatwoot)}
+    except Exception as exc:
+        flash(mensaje_error_publico(exc, "No se pudieron listar las bandejas de Chatwoot"), "warning")
+        return redirect(url_for("auditoria_chats.index"))
+    if disponibles:
+        bandejas = sorted({int(b) for b in request.form.getlist("bandejas") if str(b).isdigit()} & disponibles)
+        if not bandejas:
+            flash("Marca al menos una bandeja de entrada de chats.", "warning")
+            return redirect(url_for("auditoria_chats.index"))
+        detalle["bandejas"] = bandejas
 
     try:
         lote = motor.crear_lote(
@@ -312,7 +357,9 @@ def _mensajes_para_vista(mensajes):
                 "es_agente": es_agente,
                 "autor": remitente.get("name") or ("Agente" if es_agente else "Cliente"),
                 "hora": datetime.fromtimestamp(int(mensaje.get("created_at") or 0), tz).strftime("%d/%m %H:%M"),
-                "texto": str(mensaje.get("content") or "").strip(),
+                "texto": " ".join(
+                    p for p in [str(mensaje.get("content") or "").strip(), *_etiquetas_adjuntos(mensaje)] if p
+                ),
             }
         )
     return vista
@@ -424,6 +471,77 @@ def reintentar_errores(lote_id):
         store.actualizar_lote(lote_id, {"estado": "auditando"})
         flash(f"{len(errores)} chats vuelven a la cola. Pulsa «Procesar lote» para auditarlos.", "success")
     return redirect(url_for("auditoria_chats.ver_lote", lote_id=lote_id))
+
+
+CAMPOS_DIAGNOSTICO_CHAT = (
+    "conversation_id", "agente_id", "agente_nombre", "turno", "conversacion_fecha", "estado", "intentos",
+    "ia_error", "ia_nota", "ia_satisfaccion", "por_revisar", "motivo_revision", "nota_final", "created_at", "updated_at",
+)
+
+
+@auditoria_chats_bp.route("/auditoria-chats/lote/<lote_id>/diagnostico", methods=["GET"])
+def diagnostico(lote_id):
+    """JSON para depurar un lote: estados, errores y configuración, sin textos de clientes ni claves."""
+    store, _ = _store_o_error()
+    if not store:
+        abort(404)
+    lote = _cargar_lote_o_404(store, lote_id)
+    chats = store.listar_chats(lote_id)
+    config_ia = obtener_config_ia()
+
+    def chat_diagnostico(chat):
+        fila = {campo: chat.get(campo) for campo in CAMPOS_DIAGNOSTICO_CHAT}
+        resultado = chat.get("ia_resultado") or {}
+        fila["ia_criterios"] = resultado.get("criterios")
+        fila["ia_confianza"] = resultado.get("confianza")
+        fila["ia_modelo"] = resultado.get("modelo")
+        return fila
+
+    datos = {
+        "generado_at": datetime.now(timezone.utc).isoformat(),
+        "lote": {
+            "id": lote.get("id"),
+            "etiqueta": lote.get("etiqueta"),
+            "desde": _fecha_lote(lote.get("since")),
+            "hasta": _fecha_lote(lote.get("until")),
+            "estado": lote.get("estado"),
+            "modelo_al_crear": lote.get("modelo"),
+            "pauta_version": lote.get("pauta_version"),
+            "chats_por_agente": lote.get("chats_por_agente"),
+            "alcance": lote.get("alcance"),
+            "alcance_detalle": lote.get("alcance_detalle"),
+            "agentes": lote.get("agentes"),
+            "agentes_muestreados": lote.get("agentes_muestreados"),
+            "reservas_restantes": {k: len(v or []) for k, v in (lote.get("reservas") or {}).items()},
+        },
+        "configuracion": {
+            "ia_base_url": config_ia["base_url"],
+            "ia_modelo": config_ia["model"],
+            "ia_modelo_respaldo": config_ia["model_respaldo"],
+            "ia_razonamiento": config_ia["razonamiento"],
+            "ia_activa": config_ia["activa"],
+            "cupo_diario": _cupo_diario(),
+            "zona_horaria": _timezone(),
+        },
+        "progreso": motor._progreso(chats),
+        "errores_por_mensaje": _contar_errores(chats),
+        "chats": [chat_diagnostico(c) for c in chats],
+    }
+    nombre = f"diagnostico_lote_{lote_id[:8]}.json"
+    return Response(
+        json.dumps(datos, ensure_ascii=False, indent=2, default=str),
+        mimetype="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{nombre}"'},
+    )
+
+
+def _contar_errores(chats):
+    conteo = {}
+    for chat in chats:
+        if chat.get("ia_error"):
+            clave = str(chat["ia_error"])[:160]
+            conteo[clave] = conteo.get(clave, 0) + 1
+    return conteo
 
 
 @auditoria_chats_bp.route("/auditoria-chats/lote/<lote_id>/csv", methods=["GET"])

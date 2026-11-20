@@ -56,6 +56,7 @@
         {% endif %}
         {% if resultado %}
           <p>{{ resultado.resumen }}</p>
+          {% if resultado.modelo %}<p class="small">Auditado con {{ resultado.modelo }}</p>{% endif %}
           <div class="grid top-space">
             <div class="metric"><div class="label">Satisfacción</div><div class="value ac-config__valor">{{ etiquetas_satisfaccion.get(resultado.satisfaccion_cliente, resultado.satisfaccion_cliente) }}</div></div>
             <div class="metric"><div class="label">Resuelto</div><div class="value ac-config__valor">{{ etiquetas_resuelto.get(resultado.resuelto, resultado.resuelto) }}</div></div>
