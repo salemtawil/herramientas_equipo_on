@@ -828,8 +828,27 @@ def test_feedback_por_agente_qa_usa_criterios_corregidos():
     assert [c["codigo"] for c in fila["areas_mejora"]] == ["F2", "E2"]
     assert fila["areas_mejora"][0]["pct"] == 0.0 and fila["areas_mejora"][1]["pct"] == 50.0
     assert [c["codigo"] for c in fila["puntos_fuertes"]] == ["A1", "A2", "B1"]
-    assert fila["cumplimientos"] == ["Saluda bien"] and fila["recomendaciones"] == ["Dejar nota"]
+    assert [t["texto"] for t in fila["cumplimientos"]] == ["Saluda bien"]
+    assert [t["texto"] for t in fila["recomendaciones"]] == ["Dejar nota"]
     assert fila["comentarios"] == ["Bien resuelto"]
+
+
+def test_feedback_qa_referencia_los_chats_de_cada_area_de_mejora():
+    base = {c: "cumple" for c, _, _ in CRITERIOS_QA}
+    chats = [
+        _chat_qa(90.0, "aprobado", dict(base, E2="parcial"), id="a", cid=101),
+        _chat_qa(70.0, "necesita_mejorar", dict(base, E2="no_cumple"), id="b", cid=102),
+        _chat_qa(100.0, "aprobado", base, id="c", cid=103),
+    ]
+    chats[2]["ia_resultado"]["incumplimientos"] = ["no documenta", "Tarda en responder"]
+    [fila] = motor.feedback_por_agente_qa(chats)
+    [e2] = [c for c in fila["areas_mejora"] if c["codigo"] == "E2"]
+    assert e2["chats"] == [{"id": "a", "conversation_id": 101}, {"id": "b", "conversation_id": 102}]
+    assert fila["incumplimientos"] == [
+        {"texto": "No documenta", "chats": [
+            {"id": "a", "conversation_id": 101}, {"id": "b", "conversation_id": 102}, {"id": "c", "conversation_id": 103}]},
+        {"texto": "Tarda en responder", "chats": [{"id": "c", "conversation_id": 103}]},
+    ]
 
 
 def test_resumen_e_historial_incluyen_qa():

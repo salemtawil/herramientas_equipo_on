@@ -98,6 +98,7 @@
     {% endif %}
   </section>
 
+  {% macro chats_ref(chats) %}{% if chats %} <span class="small">· {% for ch in chats %}<a href="{{ url_for('auditoria_chats.ver_chat', chat_id=ch.id) }}">#{{ ch.conversation_id }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</span>{% endif %}{% endmacro %}
   {% if es_qa and feedback_qa %}
   <section class="card" aria-labelledby="ac-feedback-titulo">
     <div class="page-section-title">
@@ -124,7 +125,7 @@
               {% if fila.puntos_fuertes or fila.cumplimientos %}
                 <ul>
                   {% for c in fila.puntos_fuertes %}<li><strong>{{ c.codigo }} {{ c.etiqueta }}</strong> ({{ c.pct|decimal_es(0) }} %)</li>{% endfor %}
-                  {% for t in fila.cumplimientos %}<li>{{ t }}</li>{% endfor %}
+                  {% for t in fila.cumplimientos %}<li>{{ t.texto }}{{ chats_ref(t.chats) }}</li>{% endfor %}
                 </ul>
               {% else %}<p class="small">Sin puntos destacados todavía.</p>{% endif %}
             </div>
@@ -132,15 +133,15 @@
               <h4>Áreas de mejora</h4>
               {% if fila.areas_mejora or fila.incumplimientos %}
                 <ul>
-                  {% for c in fila.areas_mejora %}<li><strong>{{ c.codigo }} {{ c.etiqueta }}</strong> ({{ c.pct|decimal_es(0) }} %)</li>{% endfor %}
-                  {% for t in fila.incumplimientos %}<li>{{ t }}</li>{% endfor %}
+                  {% for c in fila.areas_mejora %}<li><strong>{{ c.codigo }} {{ c.etiqueta }}</strong> ({{ c.pct|decimal_es(0) }} %){{ chats_ref(c.chats) }}</li>{% endfor %}
+                  {% for t in fila.incumplimientos %}<li>{{ t.texto }}{{ chats_ref(t.chats) }}</li>{% endfor %}
                 </ul>
               {% else %}<p class="small">Sin áreas de mejora marcadas.</p>{% endif %}
             </div>
           </div>
           {% if fila.recomendaciones %}
             <h4>Recomendaciones</h4>
-            <ul>{% for t in fila.recomendaciones %}<li>{{ t }}</li>{% endfor %}</ul>
+            <ul>{% for t in fila.recomendaciones %}<li>{{ t.texto }}{{ chats_ref(t.chats) }}</li>{% endfor %}</ul>
           {% endif %}
           {% if fila.comentarios %}
             <h4>Comentarios del revisor</h4>

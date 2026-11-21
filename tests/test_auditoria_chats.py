@@ -585,6 +585,8 @@ def test_lote_qa_procesado_muestra_estado_feedback_y_todos_los_chats(entorno_qa,
     html = cliente.get(f"/auditoria-chats/lote/{lote_id}").get_data(as_text=True)
     assert "APROBADO" in html and "100,0" in html
     assert "Feedback por agente" in html and "Documentar la gestión" in html
+    # Cada recomendación enlaza a los chats donde se detectó
+    assert re.search(r"Documentar la gestión <span class=\"small\">· <a href=\"/auditoria-chats/chat/[^\"]+\">#\d+</a>", html)
     assert "Consulta de pausa" in html
     for chat in chats:
         assert f"#{chat['conversation_id']}" in html

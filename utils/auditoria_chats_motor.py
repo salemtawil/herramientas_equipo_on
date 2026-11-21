@@ -667,6 +667,25 @@ def feedback_por_agente(chats):
 
 
 CORTE_PUNTO_FUERTE = 80
+RESULTADOS_A_MEJORAR = ("no_cumple", "parcial")
+
+
+def _ref_chat(chat):
+    return {"id": chat.get("id"), "conversation_id": chat.get("conversation_id")}
+
+
+def _textos_con_chats(grupo, clave, maximo=MAX_TEXTOS_FEEDBACK):
+    """Textos de la IA sin duplicados (sin distinguir mayúsculas), con los chats donde aparecen."""
+    por_clave = {}
+    for chat in grupo:
+        for texto in (chat.get("ia_resultado") or {}).get(clave) or []:
+            texto = " ".join(str(texto or "").split())
+            if not texto:
+                continue
+            item = por_clave.setdefault(texto.lower(), {"texto": texto, "chats": []})
+            if _ref_chat(chat) not in item["chats"]:
+                item["chats"].append(_ref_chat(chat))
+    return list(por_clave.values())[:maximo]
 
 
 def feedback_por_agente_qa(chats):
@@ -678,14 +697,22 @@ def feedback_por_agente_qa(chats):
 
     filas = []
     for agente_id, grupo in grupos.items():
-        resultados = [c.get("ia_resultado") or {} for c in grupo]
         por_chat = [criterios_efectivos(c) for c in grupo]
         criterios = []
         for codigo, etiqueta, _ in CRITERIOS_QA:
             valores = [FACTOR_RESULTADO[r[codigo]] for r in por_chat if r.get(codigo) in FACTOR_RESULTADO]
             if valores:
                 criterios.append(
-                    {"codigo": codigo, "etiqueta": etiqueta, "pct": round(sum(valores) * 100 / len(valores), 1)}
+                    {
+                        "codigo": codigo,
+                        "etiqueta": etiqueta,
+                        "pct": round(sum(valores) * 100 / len(valores), 1),
+                        "chats": [
+                            _ref_chat(chat)
+                            for chat, r in zip(grupo, por_chat)
+                            if r.get(codigo) in RESULTADOS_A_MEJORAR
+                        ],
+                    }
                 )
         fallas_confirmadas = sum(
             1 for c in grupo for v in ((c.get("revision") or {}).get("fallas") or {}).values() if v == "confirmada"
@@ -704,9 +731,9 @@ def feedback_por_agente_qa(chats):
                 "areas_mejora": sorted(
                     (c for c in criterios if c["pct"] < CORTE_PUNTO_FUERTE), key=lambda c: c["pct"]
                 )[:MAX_CRITERIOS_FEEDBACK],
-                "cumplimientos": _textos_unicos(r.get("cumplimientos") for r in resultados),
-                "incumplimientos": _textos_unicos(r.get("incumplimientos") for r in resultados),
-                "recomendaciones": _textos_unicos(r.get("recomendaciones") for r in resultados),
+                "cumplimientos": _textos_con_chats(grupo, "cumplimientos"),
+                "incumplimientos": _textos_con_chats(grupo, "incumplimientos"),
+                "recomendaciones": _textos_con_chats(grupo, "recomendaciones"),
                 "comentarios": _textos_unicos([c.get("comentario_revisor")] for c in grupo),
             }
         )
