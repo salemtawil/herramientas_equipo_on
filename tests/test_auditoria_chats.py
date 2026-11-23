@@ -683,3 +683,13 @@ def test_informe_no_existe_para_lotes_v1(entorno, cliente):
     _crear_lote(cliente)
     lote_id = entorno.listar_lotes()[0]["id"]
     assert cliente.get(f"/auditoria-chats/lote/{lote_id}/informe").status_code == 404
+
+
+def test_diagnostico_incluye_llamadas_sin_textos(entorno_qa, cliente):
+    lote_id, _ = _lote_procesado(cliente, entorno_qa)
+    datos = cliente.get(f"/auditoria-chats/lote/{lote_id}/diagnostico").get_json(force=True)
+    assert datos["llamadas"]["estado"] == "listo"
+    assert datos["llamadas"]["por_agente"] == {"1": {"llamadas": 2, "con_detalle": 2, "sin_conversacion": 1}}
+    assert datos["llamadas"]["sin_emparejar"] == {"Luis G.": 1}
+    texto = cliente.get(f"/auditoria-chats/lote/{lote_id}/diagnostico").get_data(as_text=True)
+    assert "5559876543" not in texto and "Consulta de llegada" not in texto

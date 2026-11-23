@@ -835,6 +835,7 @@ def diagnostico(lote_id):
         "errores_por_mensaje": _contar_errores(chats),
         "descartes_por_motivo": _contar_descartes(chats),
         "bandejas": _bandejas_para_diagnostico(lote),
+        "llamadas": _llamadas_para_diagnostico(store, lote),
         "chats": [chat_diagnostico(c) for c in chats],
     }
     nombre = f"diagnostico_lote_{lote_id[:8]}.json"
@@ -843,6 +844,30 @@ def diagnostico(lote_id):
         mimetype="application/json",
         headers={"Content-Disposition": f'attachment; filename="{nombre}"'},
     )
+
+
+def _llamadas_para_diagnostico(store, lote):
+    """Estado y conteos de las llamadas de Multiadmin, sin textos ni teléfonos."""
+    if not motor.es_lote_qa(lote):
+        return None
+    por_agente = {}
+    try:
+        llamadas = store.listar_llamadas(lote["id"])
+    except AuditoriaChatsError:
+        llamadas = []
+    for llamada in llamadas:
+        fila = por_agente.setdefault(str(llamada.get("agente_id")), {"llamadas": 0, "con_detalle": 0, "sin_conversacion": 0})
+        fila["llamadas"] += 1
+        fila["con_detalle"] += 1 if llamada.get("detalle_ok") else 0
+        fila["sin_conversacion"] += 1 if llamada.get("sin_conversacion") else 0
+    return {
+        "estado": lote.get("llamadas_estado") or "pendiente",
+        "error": lote.get("llamadas_error"),
+        "progreso": lote.get("llamadas_progreso"),
+        "por_agente": por_agente,
+        "sin_emparejar": lote.get("llamadas_sin_emparejar") or {},
+        "resumen_ia": {k: ("error" if (v or {}).get("error") else (v or {}).get("modelo")) for k, v in (lote.get("feedback_llamadas") or {}).items()},
+    }
 
 
 def _contar_descartes(chats):
