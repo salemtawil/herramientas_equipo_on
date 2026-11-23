@@ -66,3 +66,21 @@ def test_base_url_configurable(monkeypatch):
     sesion = SesionFalsa([Respuesta(200, {"items": []})])
     ml.listar_llamadas(1, 2, sesion=sesion)
     assert sesion.llamadas[0]["url"] == "https://otra.test/projects/compinche/call-analysis"
+
+
+class RespuestaNoJson(Respuesta):
+    def json(self):
+        raise ValueError("no es JSON")
+
+
+def test_respuesta_que_no_es_json_se_convierte_en_error_controlado():
+    sesion = SesionFalsa([RespuestaNoJson(200)])
+    with pytest.raises(ml.MultiadminLlamadasError):
+        ml.listar_llamadas(1, 2, sesion=sesion)
+
+
+def test_error_guarda_el_codigo_http():
+    sesion = SesionFalsa([Respuesta(404)])
+    with pytest.raises(ml.MultiadminLlamadasError) as error:
+        ml.detalle_llamada("a", "b", sesion=sesion)
+    assert error.value.status == 404

@@ -15,8 +15,13 @@ RUTA_LLAMADAS = "/projects/compinche/call-analysis"
 TIMEOUT = 60
 
 
+TIMEOUT_DETALLE = 15
+
+
 class MultiadminLlamadasError(Exception):
-    pass
+    def __init__(self, mensaje, status=None):
+        super().__init__(mensaje)
+        self.status = status
 
 
 def _base_url():
@@ -35,13 +40,13 @@ def _headers(token):
     return headers
 
 
-def _get(params, sesion=None):
+def _get(params, sesion=None, timeout=TIMEOUT):
     sesion = sesion or requests
     url = _base_url() + RUTA_LLAMADAS
     try:
-        respuesta = sesion.get(url, headers=_headers(_token()), params=params, timeout=TIMEOUT)
+        respuesta = sesion.get(url, headers=_headers(_token()), params=params, timeout=timeout)
         if respuesta.status_code in (401, 403):
-            respuesta = sesion.get(url, headers=_headers(_token(forzar=True)), params=params, timeout=TIMEOUT)
+            respuesta = sesion.get(url, headers=_headers(_token(forzar=True)), params=params, timeout=timeout)
     except MultiadminLlamadasError:
         raise
     except requests.RequestException as exc:
@@ -49,8 +54,13 @@ def _get(params, sesion=None):
     except RuntimeError as exc:  # sin tokens configurados
         raise MultiadminLlamadasError(f"No se pudo obtener el acceso a Multiadmin: {exc}") from exc
     if not respuesta.ok:
-        raise MultiadminLlamadasError(f"Multiadmin respondió {respuesta.status_code} al pedir las llamadas.")
-    return respuesta.json()
+        raise MultiadminLlamadasError(
+            f"Multiadmin respondió {respuesta.status_code} al pedir las llamadas.", status=respuesta.status_code
+        )
+    try:
+        return respuesta.json()
+    except ValueError as exc:
+        raise MultiadminLlamadasError("Multiadmin devolvió una respuesta que no es JSON.") from exc
 
 
 def listar_llamadas(desde_ms, hasta_ms, sesion=None):
@@ -62,7 +72,7 @@ def listar_llamadas(desde_ms, hasta_ms, sesion=None):
 
 def detalle_llamada(call_id, record_key, sesion=None):
     """Detalle de una llamada: rúbrica, coaching, puntos clave y analítica."""
-    data = _get({"callId": call_id, "recordKey": record_key}, sesion)
+    data = _get({"callId": call_id, "recordKey": record_key}, sesion, timeout=TIMEOUT_DETALLE)
     if not isinstance(data, dict):
         raise MultiadminLlamadasError("Multiadmin devolvió un detalle de llamada no válido.")
     return data

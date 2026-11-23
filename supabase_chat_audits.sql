@@ -121,3 +121,5 @@ alter table public.chat_audit_batches add column if not exists llamadas_progreso
 alter table public.chat_audit_batches add column if not exists llamadas_error text;
 alter table public.chat_audit_batches add column if not exists feedback_llamadas jsonb;
 alter table public.chat_audit_batches add column if not exists llamadas_sin_emparejar jsonb;
+
+alter table public.chat_audit_calls add column if not exists detalle_error text;

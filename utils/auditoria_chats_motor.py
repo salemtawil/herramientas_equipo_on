@@ -516,6 +516,11 @@ def _traer_dia(store, lote, multiadmin):
     guardados = {n: v.get("chatwoot_agente_id") for n, v in store.emparejamientos().items()}
     nombres = {str(i.get("agentNumber") or "").strip() for i in items} - {""}
     mapa = emparejar(lote.get("agentes") or [], nombres, guardados)
+    # Se guarda el emparejamiento automático la primera vez: así un nombre no cambia de dueño
+    # entre días cuando aparece otro agente con el mismo primer nombre.
+    for nombre, agente_id in mapa.items():
+        if nombre not in guardados:
+            store.guardar_emparejamiento(nombre, agente_id, manual=False)
 
     filas, sin_emparejar = [], dict(lote.get("llamadas_sin_emparejar") or {})
     for item in items:
@@ -540,7 +545,15 @@ def _detallar(store, lote, multiadmin):
         return _respuesta(store, lote["id"], "llamadas", "Detalle de llamadas completo.")
     tanda = pendientes[:DETALLES_POR_PASO]
     for llamada in tanda:
-        detalle = multiadmin.detalle_llamada(llamada["linea"], llamada["record_key"])
+        try:
+            detalle = multiadmin.detalle_llamada(llamada["linea"], llamada["record_key"])
+        except MultiadminLlamadasError as exc:
+            # Una llamada sin detalle (404, borrada…) no debe bloquear las demás; los errores del
+            # servidor o de conexión sí detienen el paso y se pueden reanudar.
+            if exc.status is None or exc.status >= 500 or exc.status in (401, 403):
+                raise
+            store.actualizar_llamada(llamada["id"], {"detalle_ok": True, "detalle_error": str(exc)})
+            continue
         store.actualizar_llamada(llamada["id"], cambios_detalle(detalle))
     return _respuesta(store, lote["id"], "llamadas", f"Detalle de {len(tanda)} llamadas ({len(pendientes) - len(tanda)} por leer).")
 
@@ -598,6 +611,23 @@ def _paso_llamadas(store, lote, multiadmin, config_ia, chats_pendientes):
     if estado == "resumiendo" and not chats_pendientes:
         return _resumir_agente(store, lote, config_ia)
     return None
+
+
+def reanudar_llamadas(store, lote_id):
+    """Tras un error, sigue donde quedó: no vuelve a traer los días ya traídos."""
+    lote = store.obtener_lote(lote_id) or {}
+    dia = int((lote.get("llamadas_progreso") or {}).get("dia") or 0)
+    estado = "detallando" if dia >= len(_dias_lote(lote)) else "trayendo"
+    store.actualizar_lote(lote_id, {"llamadas_estado": estado, "llamadas_error": None})
+
+
+def emparejar_a_mano(store, lote_id, nombre, agente_id):
+    """Asigna un nombre de Multiadmin a un agente y rehace las llamadas de los agentes afectados."""
+    afectados = {int(l["agente_id"]) for l in store.listar_llamadas(lote_id) if l.get("agent_number") == nombre}
+    store.guardar_emparejamiento(nombre, agente_id, manual=True)
+    for anterior in afectados - {int(agente_id)}:
+        reiniciar_llamadas(store, lote_id, agente_id=anterior)
+    reiniciar_llamadas(store, lote_id, agente_id=agente_id)
 
 
 def reiniciar_llamadas(store, lote_id, agente_id=None):

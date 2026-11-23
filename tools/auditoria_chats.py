@@ -472,8 +472,12 @@ def traer_llamadas(lote_id):
     lote = _cargar_lote_o_404(store, lote_id)
     if not motor.es_lote_qa(lote):
         abort(404)
-    motor.reiniciar_llamadas(store, lote_id)
-    flash("Se volverán a traer las llamadas de Multiadmin. Pulsa «Procesar lote».", "success")
+    if lote.get("llamadas_estado") == "error":
+        motor.reanudar_llamadas(store, lote_id)
+        flash("Se retomará la carga de llamadas donde quedó. Pulsa «Procesar lote».", "success")
+    else:
+        motor.reiniciar_llamadas(store, lote_id)
+        flash("Se volverán a traer las llamadas de Multiadmin. Pulsa «Procesar lote».", "success")
     return redirect(url_for("auditoria_chats.ver_lote", lote_id=lote_id))
 
 
@@ -492,8 +496,7 @@ def emparejar_agente(lote_id):
     if not motor.es_lote_qa(lote) or not nombre or agente_id not in ids_lote:
         flash("Elige el agente y el nombre de Multiadmin que le corresponde.", "warning")
         return redirect(url_for("auditoria_chats.ver_lote", lote_id=lote_id))
-    store.guardar_emparejamiento(nombre, agente_id, manual=True)
-    motor.reiniciar_llamadas(store, lote_id, agente_id=agente_id)
+    motor.emparejar_a_mano(store, lote_id, nombre, agente_id)
     flash(f"«{nombre}» quedó emparejado. Pulsa «Procesar lote» para traer sus llamadas.", "success")
     return redirect(url_for("auditoria_chats.ver_lote", lote_id=lote_id))
 

@@ -995,3 +995,79 @@ def test_reiniciar_llamadas_de_un_agente_y_retomar_lote_terminado(monkeypatch):
     assert pasos[-1]["accion"] == "fin"
     assert store.obtener_lote(lote["id"])["llamadas_estado"] == "listo"
     assert len(store.listar_llamadas(lote["id"])) == 1
+
+
+def test_emparejamiento_automatico_se_mantiene_entre_dias(monkeypatch):
+    store = _store_qa()
+    monkeypatch.setattr(motor, "completar_json", IAFalsaLlamadas())
+    lote = motor.crear_lote(
+        store, since=date(2026, 11, 9), until=date(2026, 11, 10), alcance="agentes", detalle={},
+        chats_por_agente=1, agentes=[{"id": 1, "nombre": "Juan", "turno": "Mañana"}], config_ia=CONFIG_IA,
+        pauta_version=PAUTA_VERSION_QA,
+    )
+    multiadmin = MultiadminFalso([
+        [_llamada_ma("r1", "Juan Pérez", 501)],
+        [_llamada_ma("r2", "Juan Pérez", 502), _llamada_ma("r3", "Juan López", 503)],
+    ])
+    _correr_con(store, lote["id"], ChatwootFalso({1: [101]}), multiadmin)
+    assert sorted(l["record_key"] for l in store.listar_llamadas(lote["id"])) == ["r1", "r2"]
+    assert store.emparejamientos()["Juan Pérez"] == {"chatwoot_agente_id": 1, "manual": False}
+
+
+class MultiadminConDetalleRoto(MultiadminFalso):
+    def __init__(self, por_dia, codigo):
+        super().__init__(por_dia)
+        self.codigo = codigo
+
+    def detalle_llamada(self, call_id, record_key):
+        if record_key == "roto":
+            raise MultiadminLlamadasError("Multiadmin respondió con error.", status=self.codigo)
+        return super().detalle_llamada(call_id, record_key)
+
+
+def test_detalle_inexistente_de_una_llamada_no_bloquea_las_demas(monkeypatch):
+    store = _store_qa()
+    monkeypatch.setattr(motor, "completar_json", IAFalsaLlamadas())
+    lote = _crear_qa_dos_dias(store)
+    multiadmin = MultiadminConDetalleRoto([[_llamada_ma("roto", "Ana Pérez", 501), _llamada_ma("r2", "Ana Pérez", 502)], []], 404)
+    pasos = _correr_con(store, lote["id"], ChatwootFalso({1: [101]}), multiadmin)
+    assert pasos[-1]["accion"] == "fin"
+    assert store.obtener_lote(lote["id"])["llamadas_estado"] == "listo"
+    rotas = [l for l in store.listar_llamadas(lote["id"]) if l["record_key"] == "roto"]
+    assert rotas[0]["detalle_ok"] is True and rotas[0]["detalle_error"]
+
+
+def test_reanudar_tras_error_conserva_lo_traido(monkeypatch):
+    store = _store_qa()
+    monkeypatch.setattr(motor, "completar_json", IAFalsaLlamadas())
+    lote = _crear_qa_dos_dias(store)
+    multiadmin = MultiadminConDetalleRoto([[_llamada_ma("roto", "Ana Pérez", 501)], []], 503)
+    _correr_con(store, lote["id"], ChatwootFalso({1: [101]}), multiadmin)
+    assert store.obtener_lote(lote["id"])["llamadas_estado"] == "error"
+    pedidos = len(multiadmin.dias_pedidos)
+    motor.reanudar_llamadas(store, lote["id"])
+    assert store.obtener_lote(lote["id"])["llamadas_estado"] == "detallando"
+    multiadmin.codigo = 404
+    _correr_con(store, lote["id"], ChatwootFalso({1: [101]}), multiadmin)
+    assert len(multiadmin.dias_pedidos) == pedidos  # no vuelve a traer los días
+    assert store.obtener_lote(lote["id"])["llamadas_estado"] == "listo"
+
+
+def test_emparejar_a_mano_mueve_las_llamadas_del_dueno_anterior(monkeypatch):
+    store = _store_qa()
+    monkeypatch.setattr(motor, "completar_json", IAFalsaLlamadas())
+    lote = motor.crear_lote(
+        store, since=date(2026, 11, 9), until=date(2026, 11, 9), alcance="agentes", detalle={},
+        chats_por_agente=1, agentes=[{"id": 1, "nombre": "Juan", "turno": "M"}, {"id": 2, "nombre": "Pedro", "turno": "M"}],
+        config_ia=CONFIG_IA, pauta_version=PAUTA_VERSION_QA,
+    )
+    multiadmin = MultiadminFalso([[_llamada_ma("r1", "Juan Pérez", 501)]])
+    _correr_con(store, lote["id"], ChatwootFalso({1: [101], 2: [102]}), multiadmin)
+    assert store.listar_llamadas(lote["id"])[0]["agente_id"] == 1
+    motor.emparejar_a_mano(store, lote["id"], "Juan Pérez", 2)
+    assert store.listar_llamadas(lote["id"]) == []
+    feedback = store.obtener_lote(lote["id"])["feedback_llamadas"]
+    assert "1" not in feedback and "2" not in feedback
+    multiadmin.dias_pedidos.clear()
+    _correr_con(store, lote["id"], ChatwootFalso({1: [101], 2: [102]}), multiadmin)
+    assert store.listar_llamadas(lote["id"])[0]["agente_id"] == 2
