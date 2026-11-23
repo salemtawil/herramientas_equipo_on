@@ -8,6 +8,8 @@ from datetime import datetime, timezone
 TABLA_LOTES = "chat_audit_batches"
 TABLA_CHATS = "chat_audits"
 TABLA_MANUAL = "chat_audit_manual"
+TABLA_LLAMADAS = "chat_audit_calls"
+TABLA_EMPAREJAMIENTOS = "chat_audit_agentes_llamadas"
 
 
 class AuditoriaChatsError(Exception):
@@ -164,6 +166,54 @@ class SupabaseAuditoriaStore:
         for desde in range(0, len(filas), 50):
             self._execute(self.client.table(TABLA_MANUAL).upsert(filas[desde : desde + 50], on_conflict="version,codigo"))
 
+    # Llamadas de Multiadmin
+    def guardar_llamadas(self, lote_id, filas):
+        filas = [dict(f, batch_id=lote_id) for f in filas]
+        for desde in range(0, len(filas), 200):
+            self._execute(
+                self.client.table(TABLA_LLAMADAS).upsert(
+                    filas[desde : desde + 200], on_conflict="batch_id,record_key", ignore_duplicates=True
+                )
+            )
+
+    def listar_llamadas(self, lote_id, solo_sin_detalle=False):
+        def query():
+            q = self.client.table(TABLA_LLAMADAS).select("*").eq("batch_id", lote_id)
+            if solo_sin_detalle:
+                q = q.eq("detalle_ok", False)
+            return q.order("fecha").order("id")
+
+        return self._todas(query)
+
+    def actualizar_llamada(self, llamada_id, cambios):
+        return self._uno(self.client.table(TABLA_LLAMADAS).update(cambios).eq("id", llamada_id))
+
+    def borrar_llamadas(self, lote_id, agente_id=None):
+        query = self.client.table(TABLA_LLAMADAS).delete().eq("batch_id", lote_id)
+        if agente_id is not None:
+            query = query.eq("agente_id", agente_id)
+        self._execute(query)
+
+    def emparejamientos(self):
+        filas = self._todas(lambda: self.client.table(TABLA_EMPAREJAMIENTOS).select("*").order("agent_number"))
+        return {
+            f["agent_number"]: {"chatwoot_agente_id": f.get("chatwoot_agente_id"), "manual": bool(f.get("manual"))}
+            for f in filas
+        }
+
+    def guardar_emparejamiento(self, agent_number, chatwoot_agente_id, manual=False):
+        self._execute(
+            self.client.table(TABLA_EMPAREJAMIENTOS).upsert(
+                {
+                    "agent_number": agent_number,
+                    "chatwoot_agente_id": chatwoot_agente_id,
+                    "manual": bool(manual),
+                    "updated_at": _ahora_iso(),
+                },
+                on_conflict="agent_number",
+            )
+        )
+
 
 class MemoriaAuditoriaStore:
     """Implementación en memoria con la misma interfaz, para pruebas."""
@@ -172,6 +222,8 @@ class MemoriaAuditoriaStore:
         self.lotes = {}
         self.chats = {}
         self.manual = {}
+        self.llamadas = {}
+        self.emparejados = {}
         self._contador = 0
 
     def _orden(self):
@@ -201,6 +253,7 @@ class MemoriaAuditoriaStore:
         self.lotes.pop(lote_id, None)
         for chat_id in [c["id"] for c in self.chats.values() if c.get("batch_id") == lote_id]:
             del self.chats[chat_id]
+        self.borrar_llamadas(lote_id)
 
     def conversaciones_auditadas(self, ids):
         existentes = {int(c["conversation_id"]) for c in self.chats.values()}
@@ -262,6 +315,37 @@ class MemoriaAuditoriaStore:
         destino = self.manual.setdefault(version, {})
         for seccion in secciones:
             destino[seccion["codigo"]] = dict(seccion, version=version)
+
+    def guardar_llamadas(self, lote_id, filas):
+        for fila in filas:
+            clave = (lote_id, fila["record_key"])
+            if clave not in self.llamadas:
+                self.llamadas[clave] = dict(fila, id=str(uuid.uuid4()), batch_id=lote_id, _orden=self._orden())
+
+    def listar_llamadas(self, lote_id, solo_sin_detalle=False):
+        filas = [
+            f
+            for (lote, _), f in self.llamadas.items()
+            if lote == lote_id and not (solo_sin_detalle and f.get("detalle_ok"))
+        ]
+        return copy.deepcopy(sorted(filas, key=lambda f: (f.get("fecha") or "", f["_orden"])))
+
+    def actualizar_llamada(self, llamada_id, cambios):
+        for fila in self.llamadas.values():
+            if fila["id"] == llamada_id:
+                fila.update(copy.deepcopy(cambios))
+                return copy.deepcopy(fila)
+        return None
+
+    def borrar_llamadas(self, lote_id, agente_id=None):
+        for clave in [k for k, f in self.llamadas.items() if k[0] == lote_id and agente_id in (None, f.get("agente_id"))]:
+            del self.llamadas[clave]
+
+    def emparejamientos(self):
+        return copy.deepcopy(self.emparejados)
+
+    def guardar_emparejamiento(self, agent_number, chatwoot_agente_id, manual=False):
+        self.emparejados[agent_number] = {"chatwoot_agente_id": chatwoot_agente_id, "manual": bool(manual)}
 
 
 def obtener_store():

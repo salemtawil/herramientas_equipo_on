@@ -78,3 +78,46 @@ alter table public.chat_audits add column if not exists revision jsonb;
 alter table public.chat_audits drop constraint if exists chat_audits_estado_check;
 alter table public.chat_audits add constraint chat_audits_estado_check
   check (estado in ('pendiente', 'procesando', 'leido', 'clasificado', 'auditado', 'error', 'revisado', 'descartado'));
+
+-- Llamadas analizadas en Multiadmin (noviembre 2026). Sin teléfono del cliente ni transcripción.
+create table if not exists public.chat_audit_calls (
+  id uuid primary key default gen_random_uuid(),
+  batch_id uuid not null references public.chat_audit_batches(id) on delete cascade,
+  agente_id bigint not null,
+  record_key text not null,
+  linea text,
+  ticket_id bigint,
+  agent_number text,
+  fecha timestamptz,
+  duracion_seg integer,
+  tipo text,
+  intencion text,
+  motivo text,
+  puntaje numeric(5,2),
+  sentimiento_agente text,
+  sentimiento_cliente text,
+  sin_conversacion boolean not null default false,
+  detalle_ok boolean not null default false,
+  analitica jsonb,
+  rubrica jsonb,
+  puntos_clave jsonb,
+  coaching jsonb,
+  created_at timestamptz not null default now(),
+  unique (batch_id, record_key)
+);
+create index if not exists chat_audit_calls_lote_idx on public.chat_audit_calls (batch_id, agente_id);
+alter table public.chat_audit_calls enable row level security;
+
+create table if not exists public.chat_audit_agentes_llamadas (
+  agent_number text primary key,
+  chatwoot_agente_id bigint,
+  manual boolean not null default false,
+  updated_at timestamptz not null default now()
+);
+alter table public.chat_audit_agentes_llamadas enable row level security;
+
+alter table public.chat_audit_batches add column if not exists llamadas_estado text not null default 'pendiente';
+alter table public.chat_audit_batches add column if not exists llamadas_progreso jsonb;
+alter table public.chat_audit_batches add column if not exists llamadas_error text;
+alter table public.chat_audit_batches add column if not exists feedback_llamadas jsonb;
+alter table public.chat_audit_batches add column if not exists llamadas_sin_emparejar jsonb;
