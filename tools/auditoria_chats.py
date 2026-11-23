@@ -365,6 +365,62 @@ def ver_lote(lote_id):
     )
 
 
+LOGO_INFORME = "informe-logo.svg"
+LOGO_INFORME_DEFAULT = "system-logos/compinche_48.svg"
+
+
+def _logo_informe():
+    propio = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "static", LOGO_INFORME)
+    return LOGO_INFORME if os.path.exists(propio) else LOGO_INFORME_DEFAULT
+
+
+@auditoria_chats_bp.route("/auditoria-chats/lote/<lote_id>/informe", methods=["GET"])
+def informe(lote_id):
+    """Informe imprimible del lote (mensajes y llamadas) para guardar como PDF."""
+    store, _ = _store_o_error()
+    if not store:
+        abort(404)
+    lote = _cargar_lote_o_404(store, lote_id)
+    if not motor.es_lote_qa(lote):
+        abort(404)
+    chats = store.listar_chats(lote_id)
+    auditados = [c for c in chats if c.get("estado") in motor.ESTADOS_AUDITADOS]
+    contexto = _contexto_llamadas(store, lote, chats)
+    llamadas = store.listar_llamadas(lote_id)
+    nombres = {int(a["id"]): a.get("nombre", "") for a in lote.get("agentes") or []}
+    estados = {clave: 0 for clave in ESTADOS_QA}
+    for chat in auditados:
+        estado = motor.estado_efectivo(chat)
+        if estado in estados:
+            estados[estado] += 1
+    puntajes = [float(l["puntaje"]) for l in llamadas if l.get("puntaje") is not None]
+    qas = [q for q in (motor.qa_efectivo(c) for c in auditados) if q is not None]
+
+    return render_template(
+        "auditoria_chats_informe.html",
+        lote=lote,
+        fecha_lote=_fecha_lote,
+        generado=datetime.now(_obtener_timezone(_timezone())).strftime("%d/%m/%Y %H:%M"),
+        logo=_logo_informe(),
+        estados_qa=ESTADOS_QA,
+        estado_efectivo=motor.estado_efectivo,
+        qa_efectivo=motor.qa_efectivo,
+        total={
+            "chats": len(auditados),
+            "qa_medio": round(sum(qas) / len(qas), 1) if qas else None,
+            "estados": estados,
+            "llamadas": len(llamadas),
+            "puntaje_llamadas": round(sum(puntajes) / len(puntajes), 1) if puntajes else None,
+            "sin_conversacion": sum(1 for l in llamadas if l.get("sin_conversacion")),
+        },
+        chats_auditados=sorted(auditados, key=lambda c: (c.get("agente_nombre") or "", c.get("conversacion_fecha") or "")),
+        llamadas=sorted(llamadas, key=lambda l: (nombres.get(int(l["agente_id"]), ""), l.get("fecha") or "")),
+        nombres=nombres,
+        url_chatwoot=_url_ticket(),
+        **contexto,
+    )
+
+
 def _url_ticket():
     chatwoot, _ = _chatwoot_o_error()
     return chatwoot.url_conversacion if chatwoot else None

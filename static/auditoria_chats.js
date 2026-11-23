@@ -219,9 +219,17 @@
     });
   }
 
+  // Informe del lote: el botón abre la impresión del navegador («Guardar como PDF»).
+  function iniciarImpresion() {
+    document.querySelectorAll("[data-ac-imprimir]").forEach((boton) => {
+      boton.addEventListener("click", () => window.print());
+    });
+  }
+
   document.addEventListener("DOMContentLoaded", () => {
     iniciarSelector();
     iniciarProcesamiento();
     iniciarRevisor();
+    iniciarImpresion();
   });
 })();

@@ -660,3 +660,26 @@ def test_emparejar_y_traer_llamadas(entorno_qa, cliente):
     # Agente que no es del lote: no se guarda
     cliente.post(f"/auditoria-chats/lote/{lote_id}/emparejar", data={"agent_number": "X", "agente_id": "99"})
     assert "X" not in entorno_qa.emparejamientos()
+
+
+def test_informe_pdf_del_lote_qa(entorno_qa, cliente):
+    lote_id, _ = _lote_procesado(cliente, entorno_qa)
+    lote_html = cliente.get(f"/auditoria-chats/lote/{lote_id}").get_data(as_text=True)
+    assert f"/auditoria-chats/lote/{lote_id}/informe" in lote_html
+    respuesta = cliente.get(f"/auditoria-chats/lote/{lote_id}/informe")
+    assert respuesta.status_code == 200
+    html = respuesta.get_data(as_text=True)
+    assert "Informe de auditoría de calidad" in html
+    assert "system-logos/compinche_48.svg" in html or "informe-logo.svg" in html
+    assert "auditoria_informe.css" in html and "data-ac-imprimir" in html
+    for texto in ("Ana Pérez", "Atención por mensajes", "Atención por llamadas", "Atiende con calma", "Anexo"):
+        assert texto in html
+    assert "5559876543" not in html
+    assert not re.search(r"<script(?![^>]*\bsrc=)[^>]*>", html)
+    assert ' style="' not in html and " onclick=" not in html
+
+
+def test_informe_no_existe_para_lotes_v1(entorno, cliente):
+    _crear_lote(cliente)
+    lote_id = entorno.listar_lotes()[0]["id"]
+    assert cliente.get(f"/auditoria-chats/lote/{lote_id}/informe").status_code == 404

@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Informe de auditoría · {{ lote.etiqueta }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='auditoria_informe.css', v=asset_version('auditoria_informe.css')) }}">
+</head>
+<body class="informe">
+{% from "_ac_macros.html" import chats_ref, tickets_ref, feedback_mensajes, feedback_llamadas with context %}
+
+<nav class="informe-barra" aria-label="Acciones del informe">
+  <a href="{{ url_for('auditoria_chats.ver_lote', lote_id=lote.id) }}">← Volver al lote</a>
+  <button type="button" data-ac-imprimir>Descargar PDF</button>
+  <span>En la ventana de impresión elige «Guardar como PDF».</span>
+</nav>
+
+<section class="portada">
+  <img class="portada__logo" src="{{ url_for('static', filename=logo) }}" alt="Compinche">
+  <p class="portada__marca">Compinche · Customer Service</p>
+  <h1>Informe de auditoría de calidad</h1>
+  <p class="portada__periodo">{{ fecha_lote(lote.since) }} – {{ fecha_lote(lote.until) }}</p>
+  <dl class="portada__datos">
+    <div><dt>Agentes</dt><dd>{{ (lote.agentes or [])|map(attribute='nombre')|join(', ') }}</dd></div>
+    <div><dt>Canales</dt><dd>Mensajes (Chatwoot, rúbrica QA-1.1) y llamadas (Análisis de llamadas de Multiadmin)</dd></div>
+    <div><dt>Generado</dt><dd>{{ generado }}</dd></div>
+  </dl>
+</section>
+
+<section class="seccion">
+  <h2>Resumen general</h2>
+  <div class="kpis">
+    <div class="kpi"><span class="kpi__valor">{{ total.chats }}</span><span class="kpi__etiqueta">chats auditados</span></div>
+    <div class="kpi"><span class="kpi__valor">{{ total.qa_medio|decimal_es if total.qa_medio is not none else "—" }}</span><span class="kpi__etiqueta">QA medio de mensajes</span></div>
+    <div class="kpi"><span class="kpi__valor">{{ total.llamadas }}</span><span class="kpi__etiqueta">llamadas analizadas</span></div>
+    <div class="kpi"><span class="kpi__valor">{{ total.puntaje_llamadas|decimal_es if total.puntaje_llamadas is not none else "—" }}</span><span class="kpi__etiqueta">puntaje medio de llamadas</span></div>
+    <div class="kpi"><span class="kpi__valor">{{ total.sin_conversacion }}</span><span class="kpi__etiqueta">llamadas de buzón o sin conversación</span></div>
+  </div>
+  <p class="estados">
+    {% for clave, texto in estados_qa.items() %}<span class="estado estado--{{ clave }}">{{ texto }}: {{ total.estados[clave] }}</span>{% endfor %}
+  </p>
+  <table class="tabla">
+    <thead><tr><th>Agente</th><th>Chats</th><th>QA mensajes</th><th>Llamadas</th><th>Puntaje llamadas</th><th>Buzón / sin conversación</th></tr></thead>
+    <tbody>
+      {% for bloque in feedback_agentes %}
+        <tr>
+          <td>{{ bloque.nombre }}</td>
+          <td>{{ bloque.chats.auditados if bloque.chats else 0 }}</td>
+          <td>{{ bloque.chats.qa_media|decimal_es if bloque.chats else "—" }}</td>
+          <td>{{ bloque.llamadas.llamadas if bloque.llamadas else 0 }}</td>
+          <td>{{ bloque.llamadas.puntaje_medio|decimal_es if bloque.llamadas else "—" }}</td>
+          <td>{{ bloque.llamadas.sin_conversacion if bloque.llamadas else 0 }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="nota">El QA de mensajes y el puntaje de llamadas usan rúbricas distintas y no se combinan.</p>
+</section>
+
+{% for bloque in feedback_agentes %}
+<section class="seccion agente">
+  <h2>{{ bloque.nombre }}</h2>
+  <div class="canales">
+    <div class="canal">
+      <h3>Atención por mensajes</h3>
+      {% if bloque.chats %}{{ feedback_mensajes(bloque.chats, estados_qa) }}{% else %}<p class="nota">Sin chats auditados.</p>{% endif %}
+    </div>
+    <div class="canal">
+      <h3>Atención por llamadas</h3>
+      {% if bloque.llamadas %}{{ feedback_llamadas(bloque.llamadas, bloque.resumen_llamadas, url_ticket) }}{% else %}<p class="nota">Sin llamadas en el rango.</p>{% endif %}
+    </div>
+  </div>
+</section>
+{% endfor %}
+
+<section class="seccion anexo">
+  <h2>Anexo A · Chats auditados</h2>
+  <table class="tabla tabla--compacta">
+    <thead><tr><th>Chat</th><th>Agente</th><th>Estado</th><th>QA</th><th>Motivo</th></tr></thead>
+    <tbody>
+      {% for chat in chats_auditados %}
+        {% set e = estado_efectivo(chat) %}
+        {% set q = qa_efectivo(chat) %}
+        <tr>
+          <td>{% if url_chatwoot %}<a href="{{ url_chatwoot(chat.conversation_id) }}">#{{ chat.conversation_id }}</a>{% else %}#{{ chat.conversation_id }}{% endif %}</td>
+          <td>{{ chat.agente_nombre }}</td>
+          <td>{% if e %}<span class="estado estado--{{ e }}">{{ estados_qa[e] }}</span>{% endif %}</td>
+          <td>{{ q|decimal_es if q is not none else "—" }}</td>
+          <td>{{ ((chat.detalle or {}).get("clasificacion") or {}).get("motivo_principal", "") }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h2>Anexo B · Llamadas analizadas</h2>
+  <table class="tabla tabla--compacta">
+    <thead><tr><th>Ticket</th><th>Agente</th><th>Fecha</th><th>Tipo</th><th>Duración</th><th>Puntaje</th><th>Motivo</th></tr></thead>
+    <tbody>
+      {% for l in llamadas %}
+        <tr>
+          <td>{% if url_chatwoot and l.ticket_id %}<a href="{{ url_chatwoot(l.ticket_id) }}">#{{ l.ticket_id }}</a>{% else %}#{{ l.ticket_id }}{% endif %}</td>
+          <td>{{ nombres.get(l.agente_id|int, "") }}</td>
+          <td>{{ (l.fecha or "")[:10] }}</td>
+          <td>{{ "Saliente" if ((l.tipo or "")|lower).startswith(("out", "sal")) else "Entrante" }}{% if l.sin_conversacion %} · buzón / sin conversación{% endif %}</td>
+          <td>{{ (l.duracion_seg or 0) // 60 }}m{{ (l.duracion_seg or 0) % 60 }}s</td>
+          <td>{{ l.puntaje|decimal_es if l.puntaje is not none else "—" }}</td>
+          <td>{{ l.motivo }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<script src="{{ url_for('static', filename='auditoria_chats.js', v=asset_version('auditoria_chats.js')) }}" defer></script>
+</body>
+</html>

@@ -337,6 +337,7 @@
       <div><h2 id="ac-acciones-titulo">Exportar y gestionar</h2></div>
     </div>
     <div class="acciones-barra">
+      {% if es_qa %}<a class="btn" href="{{ url_for('auditoria_chats.informe', lote_id=lote.id) }}">Informe PDF</a>{% endif %}
       <a class="btn secondary" href="{{ url_for('auditoria_chats.exportar_csv', lote_id=lote.id) }}">Descargar CSV</a>
       <a class="btn secondary" href="{{ url_for('auditoria_chats.diagnostico', lote_id=lote.id) }}">Descargar diagnóstico (JSON)</a>
       <form method="post" action="{{ url_for('auditoria_chats.borrar_lote', lote_id=lote.id) }}" data-confirm="Se borrará el lote y todas sus auditorías y revisiones. Sus chats podrán volver a elegirse en otro lote. No se puede deshacer." data-confirm-accept="Borrar lote">
