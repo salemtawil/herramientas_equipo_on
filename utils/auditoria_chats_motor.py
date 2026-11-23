@@ -11,7 +11,16 @@ from utils.auditoria_chats_pauta import (
     requiere_revision,
     validar_resultado,
 )
+from utils import multiadmin_llamadas
 from utils.auditoria_chats_manual import codigos_para, seleccionar_secciones, version_manual
+from utils.auditoria_llamadas import (
+    cambios_detalle,
+    construir_mensajes_resumen_llamadas,
+    emparejar,
+    validar_resumen_llamadas,
+)
+from utils.auditoria_llamadas import normalizar_resumen as normalizar_llamada_resumen
+from utils.multiadmin_llamadas import MultiadminLlamadasError
 from utils.auditoria_chats_rubrica import FACTOR as FACTOR_RESULTADO
 from utils.auditoria_chats_rubrica import (
     CRITERIOS_QA,
@@ -471,14 +480,160 @@ def _finalizar(store, lote_id, chats, rng):
     return _respuesta(store, lote_id, "fin", "Lote terminado.")
 
 
-def ejecutar_paso(store, lote_id, chatwoot, config_ia, rng=None):
+# ---------------------------------------------------------------------------
+# Llamadas de Multiadmin (solo lotes QA-1.1)
+# ---------------------------------------------------------------------------
+
+LLAMADAS_TERMINADAS = ("listo", "error")
+DETALLES_POR_PASO = 15
+SEGUNDOS_DIA = 86400
+
+
+def llamadas_pendientes(lote):
+    return es_lote_qa(lote) and (lote.get("llamadas_estado") or "pendiente") not in LLAMADAS_TERMINADAS
+
+
+def _dias_lote(lote):
+    inicio, fin = int(lote["since"]), int(lote["until"])
+    return [(d, min(d + SEGUNDOS_DIA - 1, fin)) for d in range(inicio, fin + 1, SEGUNDOS_DIA)]
+
+
+def _error_llamadas(store, lote_id, exc):
+    store.actualizar_lote(lote_id, {"llamadas_estado": "error", "llamadas_error": str(exc)})
+    return _respuesta(store, lote_id, "llamadas", f"No se pudieron traer las llamadas: {exc}")
+
+
+def _traer_dia(store, lote, multiadmin):
+    progreso = dict(lote.get("llamadas_progreso") or {})
+    dias = _dias_lote(lote)
+    dia = int(progreso.get("dia") or 0)
+    if dia >= len(dias):
+        store.actualizar_lote(lote["id"], {"llamadas_estado": "detallando"})
+        return _respuesta(store, lote["id"], "llamadas", "Llamadas del rango listas; leyendo su detalle.")
+
+    desde, hasta = dias[dia]
+    items = multiadmin.listar_llamadas(desde * 1000, hasta * 1000 + 999)
+    guardados = {n: v.get("chatwoot_agente_id") for n, v in store.emparejamientos().items()}
+    nombres = {str(i.get("agentNumber") or "").strip() for i in items} - {""}
+    mapa = emparejar(lote.get("agentes") or [], nombres, guardados)
+
+    filas, sin_emparejar = [], dict(lote.get("llamadas_sin_emparejar") or {})
+    for item in items:
+        nombre = str(item.get("agentNumber") or "").strip()
+        if nombre in mapa:
+            filas.append(dict(normalizar_llamada_resumen(item), agente_id=mapa[nombre]))
+        elif nombre and guardados.get(nombre) is None:
+            sin_emparejar[nombre] = int(sin_emparejar.get(nombre) or 0) + 1
+    store.guardar_llamadas(lote["id"], filas)
+    progreso["dia"] = dia + 1
+    store.actualizar_lote(
+        lote["id"],
+        {"llamadas_estado": "trayendo", "llamadas_progreso": progreso, "llamadas_sin_emparejar": sin_emparejar},
+    )
+    return _respuesta(store, lote["id"], "llamadas", f"Llamadas del día {dia + 1} de {len(dias)}: {len(filas)} de los agentes del lote.")
+
+
+def _detallar(store, lote, multiadmin):
+    pendientes = store.listar_llamadas(lote["id"], solo_sin_detalle=True)
+    if not pendientes:
+        store.actualizar_lote(lote["id"], {"llamadas_estado": "resumiendo"})
+        return _respuesta(store, lote["id"], "llamadas", "Detalle de llamadas completo.")
+    tanda = pendientes[:DETALLES_POR_PASO]
+    for llamada in tanda:
+        detalle = multiadmin.detalle_llamada(llamada["linea"], llamada["record_key"])
+        store.actualizar_llamada(llamada["id"], cambios_detalle(detalle))
+    return _respuesta(store, lote["id"], "llamadas", f"Detalle de {len(tanda)} llamadas ({len(pendientes) - len(tanda)} por leer).")
+
+
+def _resumir_agente(store, lote, config_ia):
+    feedback = dict(lote.get("feedback_llamadas") or {})
+    llamadas = store.listar_llamadas(lote["id"])
+    nombres = {int(a["id"]): a.get("nombre", "") for a in lote.get("agentes") or []}
+    por_agente = {}
+    for llamada in llamadas:
+        por_agente.setdefault(int(llamada["agente_id"]), []).append(llamada)
+    pendientes = [a for a in por_agente if str(a) not in feedback]
+    if not pendientes or not config_ia.get("activa"):
+        store.actualizar_lote(lote["id"], {"llamadas_estado": "listo"})
+        return None
+
+    agente_id = pendientes[0]
+    propias = por_agente[agente_id]
+    progreso = dict(lote.get("llamadas_progreso") or {})
+    intentos = dict(progreso.get("intentos") or {})
+    try:
+        data, modelo = _llamar_ia(construir_mensajes_resumen_llamadas(nombres.get(agente_id, ""), propias), config_ia)
+        resumen = validar_resumen_llamadas(data, {l["ticket_id"] for l in propias if l.get("ticket_id") is not None})
+        resumen["modelo"] = modelo
+    except IARateLimitError as exc:
+        if exc.diario:
+            store.actualizar_lote(lote["id"], {"estado": "limite_diario"})
+            return _respuesta(store, lote["id"], "auditoria", str(exc))
+        return _respuesta(store, lote["id"], "espera", str(exc), esperar_segundos=exc.esperar_segundos)
+    except IAConfigError as exc:
+        return _respuesta(store, lote["id"], "configuracion", str(exc))
+    except (ValueError, IARespuestaError) as exc:
+        intentos[str(agente_id)] = int(intentos.get(str(agente_id)) or 0) + 1
+        if intentos[str(agente_id)] < MAX_INTENTOS_IA:
+            progreso["intentos"] = intentos
+            store.actualizar_lote(lote["id"], {"llamadas_progreso": progreso})
+            return _respuesta(store, lote["id"], "auditoria", f"Resumen de llamadas: se reintenta ({exc}).")
+        resumen = {"error": str(exc)}
+
+    feedback[str(agente_id)] = resumen
+    store.actualizar_lote(lote["id"], {"feedback_llamadas": feedback})
+    return _respuesta(store, lote["id"], "auditoria", f"Resumen de llamadas de {nombres.get(agente_id, agente_id)} listo.")
+
+
+def _paso_llamadas(store, lote, multiadmin, config_ia, chats_pendientes):
+    """Un paso de llamadas o None si no hay nada que hacer ahora (los chats van primero en el resumen)."""
+    estado = lote.get("llamadas_estado") or "pendiente"
+    try:
+        if estado in ("pendiente", "trayendo"):
+            return _traer_dia(store, lote, multiadmin)
+        if estado == "detallando":
+            return _detallar(store, lote, multiadmin)
+    except MultiadminLlamadasError as exc:
+        return _error_llamadas(store, lote["id"], exc)
+    if estado == "resumiendo" and not chats_pendientes:
+        return _resumir_agente(store, lote, config_ia)
+    return None
+
+
+def reiniciar_llamadas(store, lote_id, agente_id=None):
+    """Vuelve a traer las llamadas (todas o las de un agente) y rehace el resumen afectado."""
+    lote = store.obtener_lote(lote_id) or {}
+    store.borrar_llamadas(lote_id, agente_id)
+    feedback = dict(lote.get("feedback_llamadas") or {})
+    if agente_id is None:
+        feedback = {}
+    else:
+        feedback.pop(str(agente_id), None)
+    store.actualizar_lote(
+        lote_id,
+        {
+            "llamadas_estado": "pendiente",
+            "llamadas_progreso": None,
+            "llamadas_error": None,
+            "llamadas_sin_emparejar": {},
+            "feedback_llamadas": feedback,
+        },
+    )
+
+
+def ejecutar_paso(store, lote_id, chatwoot, config_ia, rng=None, multiadmin=None):
     rng = rng or random.Random()
+    multiadmin = multiadmin or multiadmin_llamadas
     lote = store.obtener_lote(lote_id)
     if not lote:
         raise AuditoriaChatsError("El lote no existe.")
     if lote.get("estado") in ("completado", "con_errores") and not any(
         c.get("estado") in ESTADOS_PENDIENTES for c in store.listar_chats(lote_id)
     ):
+        if llamadas_pendientes(lote):
+            respuesta = _paso_llamadas(store, lote, multiadmin, config_ia, chats_pendientes=False)
+            if respuesta:
+                return respuesta
         return _respuesta(store, lote_id, "fin", "Lote terminado.")
     if lote.get("estado") == "limite_diario":
         store.actualizar_lote(lote_id, {"estado": "auditando"})
@@ -497,6 +652,11 @@ def ejecutar_paso(store, lote_id, chatwoot, config_ia, rng=None):
 
     if lote.get("estado") == "muestreando":
         store.actualizar_lote(lote_id, {"estado": "auditando"})
+
+    if es_lote_qa(lote) and (lote.get("llamadas_estado") or "pendiente") in ("pendiente", "trayendo", "detallando"):
+        respuesta = _paso_llamadas(store, lote, multiadmin, config_ia, chats_pendientes=True)
+        if respuesta:
+            return respuesta
 
     if config_ia.get("activa"):
         # Otra pestaña puede llevarse el último chat leído: entonces se sigue con la lectura.
@@ -519,6 +679,10 @@ def ejecutar_paso(store, lote_id, chatwoot, config_ia, rng=None):
         return _respuesta(
             store, lote_id, "configuracion", "Configura AUDITORIA_CHATS_AI_API_KEY para auditar los chats leídos."
         )
+    if llamadas_pendientes(lote):
+        respuesta = _paso_llamadas(store, store.obtener_lote(lote_id), multiadmin, config_ia, chats_pendientes=False)
+        if respuesta:
+            return respuesta
     return _finalizar(store, lote_id, chats, rng)
 
 

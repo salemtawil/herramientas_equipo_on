@@ -4,6 +4,7 @@ Nunca se guarda el teléfono del cliente, la transcripción ni el audio. Los tex
 Multiadmin se anonimizan antes de guardarse.
 """
 
+import json
 import re
 import unicodedata
 from datetime import datetime, timezone
@@ -130,3 +131,144 @@ def emparejar(agentes_lote, nombres_multiadmin, guardados):
         if len(candidatos) == 1 and candidatos[0] not in guardados and candidatos[0] not in resultado:
             resultado[candidatos[0]] = int(agente["id"])
     return resultado
+
+
+# ---------------------------------------------------------------------------
+# Métricas y resumen con IA por agente
+# ---------------------------------------------------------------------------
+
+MAX_PEORES = 5
+MAX_CRITERIOS_BAJOS = 3
+MAX_PUNTOS = 5
+MAX_TEXTO_RESUMEN = 12000
+
+
+def _media(valores):
+    valores = [v for v in valores if v is not None]
+    return round(sum(valores) / len(valores), 1) if valores else None
+
+
+def _es_saliente(tipo):
+    return str(tipo or "").lower().startswith(("out", "sal"))
+
+
+def resumen_llamadas_por_agente(llamadas):
+    grupos = {}
+    for llamada in llamadas:
+        grupos.setdefault(llamada.get("agente_id"), []).append(llamada)
+    filas = []
+    for agente_id, grupo in grupos.items():
+        por_criterio = {}
+        for llamada in grupo:
+            for item in llamada.get("rubrica") or []:
+                if item.get("pct") is not None:
+                    por_criterio.setdefault(item.get("nombre"), []).append(float(item["pct"]))
+        criterios = sorted(
+            ({"nombre": n, "pct": _media(v)} for n, v in por_criterio.items()), key=lambda c: c["pct"]
+        )
+        filas.append(
+            {
+                "agente_id": agente_id,
+                "llamadas": len(grupo),
+                "puntaje_medio": _media(float(l["puntaje"]) for l in grupo if l.get("puntaje") is not None),
+                "sin_conversacion": sum(1 for l in grupo if l.get("sin_conversacion")),
+                "salientes": sum(1 for l in grupo if _es_saliente(l.get("tipo"))),
+                "entrantes": sum(1 for l in grupo if not _es_saliente(l.get("tipo"))),
+                "peores": sorted(grupo, key=lambda l: (l.get("puntaje") is None, l.get("puntaje") or 0))[:MAX_PEORES],
+                "criterios_bajos": criterios[:MAX_CRITERIOS_BAJOS],
+            }
+        )
+    return sorted(filas, key=lambda f: str(f["agente_id"]))
+
+
+def _linea_llamada(llamada):
+    coaching = llamada.get("coaching") or {}
+    bajos = sorted((i for i in llamada.get("rubrica") or [] if i.get("pct") is not None), key=lambda i: i["pct"])[:3]
+    partes = [
+        f"Ticket {llamada.get('ticket_id')} · puntaje {llamada.get('puntaje')} · "
+        f"{'saliente' if _es_saliente(llamada.get('tipo')) else 'entrante'} · {llamada.get('duracion_seg')} s"
+        + (" · BUZÓN DE VOZ / SIN CONVERSACIÓN" if llamada.get("sin_conversacion") else ""),
+        f"Motivo: {llamada.get('motivo') or ''}",
+    ]
+    if coaching.get("aciertos"):
+        partes.append("Aciertos: " + "; ".join(coaching["aciertos"]))
+    if coaching.get("mejoras"):
+        partes.append("Mejoras: " + "; ".join(coaching["mejoras"]))
+    if coaching.get("proximas_acciones"):
+        partes.append("Próximas acciones: " + "; ".join(coaching["proximas_acciones"]))
+    if bajos:
+        partes.append(
+            "Criterios más bajos: " + "; ".join(f"{i['nombre']} {i['pct']:g} % ({i.get('justificacion') or ''})" for i in bajos)
+        )
+    return "\n".join(partes)
+
+
+def construir_mensajes_resumen_llamadas(agente_nombre, llamadas):
+    """Mensajes para que la IA resuma el coaching de todas las llamadas de un agente."""
+    ordenadas = sorted(llamadas, key=lambda l: (l.get("puntaje") is None, l.get("puntaje") or 0))
+    bloques, largo = [], 0
+    for llamada in ordenadas:
+        bloque = _linea_llamada(llamada)
+        if largo + len(bloque) > MAX_TEXTO_RESUMEN:
+            break
+        bloques.append(bloque)
+        largo += len(bloque) + 2
+    esquema = {
+        "puntos_fuertes": [{"texto": "...", "tickets": [123]}],
+        "areas_mejora": [{"texto": "...", "tickets": [123]}],
+        "recomendaciones": [{"texto": "...", "tickets": [123]}],
+        "buzon_voz": {"evaluacion": "...", "tickets": [123]},
+        "resumen": "Máximo 2 frases.",
+    }
+    sistema = (
+        "Eres coach de calidad del equipo de soporte telefónico de Compinche. Recibes llamadas de un agente que "
+        "otra IA ya auditó (puntaje, motivo, coaching y criterios más bajos). Resume el feedback para el agente:\n"
+        f"- puntos_fuertes y areas_mejora: hasta {MAX_PUNTOS} cada uno, los patrones que se repiten, concretos y "
+        "accionables, cada uno con los tickets donde se ve.\n"
+        f"- recomendaciones: hasta {MAX_PUNTOS} acciones concretas con sus tickets.\n"
+        "- buzon_voz: si hay llamadas de buzón de voz o sin conversación, evalúa si el agente deja un mensaje "
+        "adecuado (motivo claro, cómo devolver el contacto, tono). Si no hubo, usa null.\n"
+        "- No consideres área de mejora que el agente no diga su nombre al presentarse.\n"
+        "- Usa solo números de ticket que aparezcan en los datos.\n"
+        "Responde en español y SOLO con un objeto JSON con esta forma:\n"
+        f"{json.dumps(esquema, ensure_ascii=False)}"
+    )
+    usuario = f"Agente: {agente_nombre}\nLlamadas analizadas: {len(llamadas)}\n\n" + "\n\n".join(bloques)
+    return [{"role": "system", "content": sistema}, {"role": "user", "content": usuario}]
+
+
+def _tickets(valores, validos):
+    salida = []
+    for valor in valores if isinstance(valores, list) else [valores]:
+        digitos = re.sub(r"\D", "", str(valor or ""))
+        if digitos and int(digitos) in validos and int(digitos) not in salida:
+            salida.append(int(digitos))
+    return salida
+
+
+def _puntos(valores, validos):
+    salida = []
+    for item in valores if isinstance(valores, list) else []:
+        if isinstance(item, str):
+            item = {"texto": item}
+        if not isinstance(item, dict) or not str(item.get("texto") or "").strip():
+            continue
+        salida.append({"texto": _texto(item["texto"]), "tickets": _tickets(item.get("tickets") or [], validos)})
+    return salida[:MAX_PUNTOS]
+
+
+def validar_resumen_llamadas(data, tickets_validos):
+    if not isinstance(data, dict):
+        raise ValueError("La respuesta de la IA no es un objeto.")
+    buzon = data.get("buzon_voz")
+    if isinstance(buzon, dict) and str(buzon.get("evaluacion") or "").strip():
+        buzon = {"evaluacion": _texto(buzon["evaluacion"]), "tickets": _tickets(buzon.get("tickets") or [], tickets_validos)}
+    else:
+        buzon = None
+    return {
+        "puntos_fuertes": _puntos(data.get("puntos_fuertes"), tickets_validos),
+        "areas_mejora": _puntos(data.get("areas_mejora"), tickets_validos),
+        "recomendaciones": _puntos(data.get("recomendaciones"), tickets_validos),
+        "buzon_voz": buzon,
+        "resumen": _texto(data.get("resumen")),
+    }

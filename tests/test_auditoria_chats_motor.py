@@ -872,3 +872,126 @@ def test_filas_csv_qa():
     assert fila["Motivo"] == "Pausa" and fila["Procedimientos"] == "P03"
     assert fila["A1 Identificación del problema"] == "Cumple"
     assert fila["Comentario"] == "'=HYPERLINK(1)"
+
+
+# --- Llamadas de Multiadmin en lotes QA ---
+
+from utils.multiadmin_llamadas import MultiadminLlamadasError  # noqa: E402
+
+
+def _llamada_ma(record, agente, ticket, puntaje=80.0, ts=BASE_TS, buzon=False):
+    return {
+        "callId": "compinche1", "recordKey": record, "ticketId": str(ticket), "agentNumber": agente,
+        "customerNumber": "+15550001111", "createdAt": ts * 1000, "durationSec": 120,
+        "metadata": {"callType": "inbound", "isVoicemail": buzon}, "analytics": {"issueType": "Consulta"},
+        "scores": {"overall": puntaje}, "sentiment": {"agent": "positivo", "customer": "neutral"},
+    }
+
+
+class MultiadminFalso:
+    def __init__(self, por_dia, falla=False):
+        self.por_dia = por_dia  # lista de listas, una por día
+        self.falla = falla
+        self.dias_pedidos = []
+        self.detalles = 0
+
+    def listar_llamadas(self, desde_ms, hasta_ms):
+        if self.falla:
+            raise MultiadminLlamadasError("Multiadmin respondió 500 al pedir las llamadas.")
+        self.dias_pedidos.append((desde_ms, hasta_ms))
+        indice = len(self.dias_pedidos) - 1
+        return self.por_dia[indice] if indice < len(self.por_dia) else []
+
+    def detalle_llamada(self, call_id, record_key):
+        self.detalles += 1
+        return {"rubric": {"items": [{"name": "Empatia", "percentScore": 50, "weightPct": 10, "notes": "n"}]},
+                "coaching": {"topWins": ["Cordial"], "topImprovements": ["Pasos"], "nextActions": ["Confirmar"]},
+                "keyPoints": [], "analytics": {}}
+
+
+class IAFalsaLlamadas(IAFalsaQA):
+    def __call__(self, mensajes, config, **kwargs):
+        if "coach de calidad" in mensajes[0]["content"]:
+            self.llamadas.append("resumen_llamadas")
+            return {"puntos_fuertes": [{"texto": "Cordial", "tickets": [501, 999]}], "areas_mejora": [],
+                    "recomendaciones": [], "buzon_voz": None, "resumen": "Bien."}
+        return super().__call__(mensajes, config, **kwargs)
+
+
+def _crear_qa_dos_dias(store):
+    return motor.crear_lote(
+        store, since=date(2026, 11, 9), until=date(2026, 11, 10), alcance="agentes", detalle={},
+        chats_por_agente=1, agentes=AGENTES[:1], config_ia=CONFIG_IA, pauta_version=PAUTA_VERSION_QA,
+    )
+
+
+def _correr_con(store, lote_id, chatwoot, multiadmin, maximo=100):
+    pasos = []
+    for _ in range(maximo):
+        paso = motor.ejecutar_paso(store, lote_id, chatwoot, CONFIG_IA, rng=random.Random(0), multiadmin=multiadmin)
+        pasos.append(paso)
+        if paso["accion"] in ("fin", "espera", "configuracion"):
+            break
+    return pasos
+
+
+def test_lote_qa_trae_llamadas_solo_de_sus_agentes_y_las_resume(monkeypatch):
+    store = _store_qa()
+    ia = IAFalsaLlamadas()
+    monkeypatch.setattr(motor, "completar_json", ia)
+    lote = _crear_qa_dos_dias(store)
+    multiadmin = MultiadminFalso([
+        [_llamada_ma("r1", "Ana Pérez", 501), _llamada_ma("r2", "Otro Agente", 502)],
+        [_llamada_ma("r3", "Ana Pérez", 503, buzon=True)],
+    ])
+    pasos = _correr_con(store, lote["id"], ChatwootFalso({1: [101]}), multiadmin)
+    assert pasos[-1]["accion"] == "fin"
+    assert len(multiadmin.dias_pedidos) == 2
+    llamadas = store.listar_llamadas(lote["id"])
+    assert sorted(l["record_key"] for l in llamadas) == ["r1", "r3"]
+    assert all(l["agente_id"] == 1 and l["detalle_ok"] for l in llamadas)
+    assert [l["sin_conversacion"] for l in sorted(llamadas, key=lambda l: l["record_key"])] == [False, True]
+    final = store.obtener_lote(lote["id"])
+    assert final["llamadas_estado"] == "listo"
+    assert final["llamadas_sin_emparejar"] == {"Otro Agente": 1}
+    assert final["feedback_llamadas"]["1"]["puntos_fuertes"] == [{"texto": "Cordial", "tickets": [501]}]
+    assert ia.llamadas.count("resumen_llamadas") == 1
+    assert ia.llamadas.index("resumen_llamadas") == len(ia.llamadas) - 1  # el resumen va después de los chats
+
+
+def test_error_de_multiadmin_no_bloquea_los_chats(monkeypatch):
+    store = _store_qa()
+    monkeypatch.setattr(motor, "completar_json", IAFalsaLlamadas())
+    lote = _crear_qa_dos_dias(store)
+    pasos = _correr_con(store, lote["id"], ChatwootFalso({1: [101]}), MultiadminFalso([], falla=True))
+    assert pasos[-1]["accion"] == "fin"
+    final = store.obtener_lote(lote["id"])
+    assert final["llamadas_estado"] == "error" and "500" in final["llamadas_error"]
+    assert all(c["estado"] == "auditado" for c in store.listar_chats(lote["id"]))
+
+
+def test_lote_v1_no_toca_llamadas(monkeypatch):
+    store = MemoriaAuditoriaStore()
+    _ia_ok(monkeypatch)
+    lote = _crear(store, chats_por_agente=1, agentes=AGENTES[:1])
+    multiadmin = MultiadminFalso([[_llamada_ma("r1", "Ana Pérez", 501)]])
+    _correr_con(store, lote["id"], ChatwootFalso({1: [101]}), multiadmin)
+    assert multiadmin.dias_pedidos == [] and store.listar_llamadas(lote["id"]) == []
+
+
+def test_reiniciar_llamadas_de_un_agente_y_retomar_lote_terminado(monkeypatch):
+    store = _store_qa()
+    monkeypatch.setattr(motor, "completar_json", IAFalsaLlamadas())
+    lote = _crear_qa_dos_dias(store)
+    multiadmin = MultiadminFalso([[_llamada_ma("r1", "Ana Pérez", 501)], []])
+    _correr_con(store, lote["id"], ChatwootFalso({1: [101]}), multiadmin)
+    motor.reiniciar_llamadas(store, lote["id"], agente_id=1)
+    reiniciado = store.obtener_lote(lote["id"])
+    assert reiniciado["llamadas_estado"] == "pendiente" and "1" not in reiniciado["feedback_llamadas"]
+    assert store.listar_llamadas(lote["id"]) == []
+    multiadmin.dias_pedidos.clear()
+    multiadmin.por_dia = [[_llamada_ma("r1", "Ana Pérez", 501)], []]
+    pasos = _correr_con(store, lote["id"], ChatwootFalso({1: [101]}), multiadmin)
+    assert pasos[-1]["accion"] == "fin"
+    assert store.obtener_lote(lote["id"])["llamadas_estado"] == "listo"
+    assert len(store.listar_llamadas(lote["id"])) == 1

@@ -88,3 +88,51 @@ def test_store_memoria_llamadas_y_emparejamientos():
     assert [l["agente_id"] for l in store.listar_llamadas(lote["id"])] == [1]
     store.guardar_emparejamiento("Julio", 1, manual=True)
     assert store.emparejamientos() == {"Julio": {"chatwoot_agente_id": 1, "manual": True}}
+
+
+# --- Resumen con IA de las llamadas ---
+
+def _fila(ticket, puntaje, agente_id=1, sin_conv=False, rubrica=None, coaching=None):
+    return {
+        "agente_id": agente_id, "ticket_id": ticket, "puntaje": puntaje, "tipo": "inbound", "duracion_seg": 120,
+        "motivo": f"Motivo {ticket}", "sin_conversacion": sin_conv, "detalle_ok": True,
+        "rubrica": rubrica or [{"nombre": "Empatia", "peso": 12, "pct": 75, "justificacion": "ok"},
+                               {"nombre": "Claridad", "peso": 10, "pct": 50, "justificacion": "repetitivo"}],
+        "coaching": coaching or {"aciertos": ["Cordial"], "mejoras": ["Pasos breves"], "proximas_acciones": ["Confirmar"]},
+    }
+
+
+def test_resumen_llamadas_por_agente_metricas_peores_y_criterios_bajos():
+    filas = [_fila(1, 90), _fila(2, 60), _fila(3, 100, sin_conv=True), _fila(4, 80, agente_id=2)]
+    filas[1]["tipo"] = "outbound"
+    [a1, a2] = al.resumen_llamadas_por_agente(filas)
+    assert a1["agente_id"] == 1 and a1["llamadas"] == 3 and a1["puntaje_medio"] == 83.3
+    assert a1["sin_conversacion"] == 1 and a1["entrantes"] == 2 and a1["salientes"] == 1
+    assert [p["ticket_id"] for p in a1["peores"]] == [2, 1, 3]
+    assert a1["criterios_bajos"][0] == {"nombre": "Claridad", "pct": 50.0}
+    assert a2["llamadas"] == 1
+
+
+def test_mensajes_resumen_priorizan_las_peores_y_marcan_buzon():
+    filas = [_fila(1, 95), _fila(2, 40), _fila(3, 100, sin_conv=True)]
+    mensajes = al.construir_mensajes_resumen_llamadas("Julio", filas)
+    usuario = mensajes[1]["content"]
+    assert usuario.index("Ticket 2") < usuario.index("Ticket 1")
+    assert "buzón" in usuario.lower() and "Pasos breves" in usuario and "Claridad 50" in usuario
+    assert "JSON" in mensajes[0]["content"]
+
+
+def test_validar_resumen_descarta_tickets_inexistentes_y_limita():
+    data = {
+        "puntos_fuertes": [{"texto": "Cordial", "tickets": [1, "2", 99]}],
+        "areas_mejora": [{"texto": f"Mejora {i}", "tickets": [1]} for i in range(8)],
+        "recomendaciones": [{"texto": "Resumir en pasos", "tickets": ["#2"]}],
+        "buzon_voz": {"evaluacion": "Deja mensaje claro", "tickets": [3, 77]},
+        "resumen": "Buen agente.",
+    }
+    r = al.validar_resumen_llamadas(data, {1, 2, 3})
+    assert r["puntos_fuertes"] == [{"texto": "Cordial", "tickets": [1, 2]}]
+    assert len(r["areas_mejora"]) == 5
+    assert r["recomendaciones"][0]["tickets"] == [2]
+    assert r["buzon_voz"] == {"evaluacion": "Deja mensaje claro", "tickets": [3]}
+    assert al.validar_resumen_llamadas({"resumen": "x"}, set())["buzon_voz"] is None
