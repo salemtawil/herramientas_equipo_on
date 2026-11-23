@@ -548,15 +548,45 @@ def _evaluacion_qa_ruta(resultado="cumple"):
 
 
 def _ia_qa_ruta(mensajes, config, **kwargs):
+    if "coach de calidad" in mensajes[0]["content"]:
+        return {"puntos_fuertes": [{"texto": "Atiende con calma", "tickets": [7001]}],
+                "areas_mejora": [{"texto": "Resumir los pasos", "tickets": [7001]}], "recomendaciones": [],
+                "buzon_voz": {"evaluacion": "Deja un mensaje claro", "tickets": [7002]}, "resumen": "Buen trato."}
     if "INSTRUCCIONES DE RESPUESTA" in mensajes[0]["content"]:
         return _evaluacion_qa_ruta()
     return {"motivo_principal": "Consulta de pausa", "procedimientos": ["P03"], "secciones_extra": [], "servicio": "Compinche"}
 
 
+class MultiadminRuta:
+    """Una llamada normal de Ana y un buzón de voz; Luis no aparece (otro nombre en Multiadmin)."""
+
+    dias = 0
+
+    def listar_llamadas(self, desde_ms, hasta_ms):
+        MultiadminRuta.dias += 1
+        if MultiadminRuta.dias > 1:
+            return []
+        base = {"callId": "compinche1", "customerNumber": "+15559876543", "createdAt": desde_ms + 1000,
+                "metadata": {"callType": "inbound"}, "analytics": {"issueType": "Consulta de llegada"},
+                "sentiment": {"agent": "positivo", "customer": "neutral"}}
+        return [
+            dict(base, recordKey="r1", ticketId="7001", agentNumber="Ana Pérez", durationSec=300, scores={"overall": 82.5}),
+            dict(base, recordKey="r2", ticketId="7002", agentNumber="Ana Pérez", durationSec=35, scores={"overall": 100},
+                 metadata={"callType": "outbound", "isVoicemail": True}),
+            dict(base, recordKey="r3", ticketId="7003", agentNumber="Luis G.", durationSec=200, scores={"overall": 70}),
+        ]
+
+    def detalle_llamada(self, call_id, record_key):
+        return {"rubric": {"items": [{"name": "Claridad", "percentScore": 50, "weightPct": 10, "notes": "repetitivo"}]},
+                "coaching": {"topWins": ["Cordial"], "topImprovements": ["Pasos"], "nextActions": []}, "keyPoints": []}
+
+
 @pytest.fixture
 def entorno_qa(entorno, monkeypatch):
+    MultiadminRuta.dias = 0
     monkeypatch.setattr(herramienta, "PAUTA_LOTES_NUEVOS", "QA-1.1")
     monkeypatch.setattr(herramienta.motor, "completar_json", _ia_qa_ruta)
+    monkeypatch.setattr(herramienta, "obtener_multiadmin", lambda: MultiadminRuta())
     monkeypatch.delenv("AUDITORIA_CHATS_MANUAL_VERSION", raising=False)
     entorno.guardar_manual("3.0", [
         {"codigo": c, "titulo": f"Sección {c}", "texto": f"Texto {c}", "orden": i}
@@ -601,3 +631,32 @@ def test_csv_e_historial_qa(entorno_qa, cliente, monkeypatch):
     monkeypatch.setattr(herramienta, "_desde_historial", lambda: "2000-01-01T00:00:00+00:00")
     html = cliente.get("/auditoria-chats/historial").get_data(as_text=True)
     assert "QA 100,0" in html
+
+
+def test_lote_qa_muestra_llamadas_y_feedback_por_canal(entorno_qa, cliente):
+    lote_id, _ = _lote_procesado(cliente, entorno_qa)
+    lote = entorno_qa.obtener_lote(lote_id)
+    assert lote["llamadas_estado"] == "listo"
+    html = cliente.get(f"/auditoria-chats/lote/{lote_id}").get_data(as_text=True)
+    assert "Atención por mensajes" in html and "Atención por llamadas" in html
+    assert "Atiende con calma" in html and "Deja un mensaje claro" in html and "Claridad" in html
+    assert "https://chat.test/app/accounts/2/conversations/7001" in html
+    assert "+15559876543" not in html and "5559876543" not in html
+    # Luis no tiene llamadas: se ofrece emparejarlo con el nombre de Multiadmin sin emparejar
+    assert "Luis G." in html and 'name="agent_number"' in html
+    contenido = html[html.index('id="contenido-principal"'):]
+    assert ' style="' not in contenido
+
+
+def test_emparejar_y_traer_llamadas(entorno_qa, cliente):
+    lote_id, _ = _lote_procesado(cliente, entorno_qa)
+    respuesta = cliente.post(f"/auditoria-chats/lote/{lote_id}/emparejar", data={"agent_number": "Luis G.", "agente_id": "2"})
+    assert respuesta.status_code == 302
+    assert entorno_qa.emparejamientos()["Luis G."] == {"chatwoot_agente_id": 2, "manual": True}
+    assert entorno_qa.obtener_lote(lote_id)["llamadas_estado"] == "trayendo"
+    cliente.post(f"/auditoria-chats/lote/{lote_id}/llamadas")
+    assert entorno_qa.obtener_lote(lote_id)["llamadas_estado"] == "trayendo"
+    assert entorno_qa.listar_llamadas(lote_id) == []
+    # Agente que no es del lote: no se guarda
+    cliente.post(f"/auditoria-chats/lote/{lote_id}/emparejar", data={"agent_number": "X", "agente_id": "99"})
+    assert "X" not in entorno_qa.emparejamientos()

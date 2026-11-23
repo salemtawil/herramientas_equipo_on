@@ -612,7 +612,8 @@ def reiniciar_llamadas(store, lote_id, agente_id=None):
     store.actualizar_lote(
         lote_id,
         {
-            "llamadas_estado": "pendiente",
+            # «trayendo» (no «pendiente»): el lote deja de verse terminado y el bucle de pasos las trae.
+            "llamadas_estado": "trayendo",
             "llamadas_progreso": None,
             "llamadas_error": None,
             "llamadas_sin_emparejar": {},

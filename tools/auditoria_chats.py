@@ -23,6 +23,8 @@ from utils.auditoria_chats_rubrica import (
     resultados_criterios,
 )
 from utils.auditoria_chats_manual import version_manual
+from utils import multiadmin_llamadas
+from utils.auditoria_llamadas import resumen_llamadas_por_agente
 from utils.auditoria_chats_store import AuditoriaChatsConfigError, AuditoriaChatsError, obtener_store
 from utils.auditoria_chats_transcripcion import _etiquetas_adjuntos, _mensajes_v2, mensajes_utiles
 from utils.chatwoot_reportes import ChatwootClient, _obtener_timezone, _timezone
@@ -44,6 +46,20 @@ ESTADOS_LOTE = {
 
 def obtener_chatwoot():
     return ChatwootClient(timeout=15)
+
+
+def obtener_multiadmin():
+    return multiadmin_llamadas
+
+
+ESTADOS_LLAMADAS = {
+    "pendiente": "Sin traer",
+    "trayendo": "Trayendo llamadas…",
+    "detallando": "Leyendo el detalle de las llamadas…",
+    "resumiendo": "Resumiendo las llamadas con IA…",
+    "listo": "Listas",
+    "error": "Error al traer las llamadas",
+}
 
 
 @auditoria_chats_bp.app_template_filter("decimal_es")
@@ -319,9 +335,13 @@ def ver_lote(lote_id):
     progreso = motor._progreso(chats)
     porcentaje = round(progreso["auditados"] * 100 / progreso["total"]) if progreso["total"] else 0
     terminado = lote.get("estado") in ("completado", "con_errores") and not progreso["pendientes"]
+    contexto_llamadas = _contexto_llamadas(store, lote, chats) if motor.es_lote_qa(lote) else {}
+    if contexto_llamadas.get("llamadas_en_curso"):
+        terminado = False
 
     return render_template(
         "auditoria_chats_lote.html",
+        **contexto_llamadas,
         lote=lote,
         estado_texto=ESTADOS_LOTE.get(lote.get("estado"), lote.get("estado")),
         fecha_lote=_fecha_lote,
@@ -345,6 +365,83 @@ def ver_lote(lote_id):
     )
 
 
+def _url_ticket():
+    chatwoot, _ = _chatwoot_o_error()
+    return chatwoot.url_conversacion if chatwoot else None
+
+
+def _contexto_llamadas(store, lote, chats):
+    """Llamadas de Multiadmin y feedback por agente de mensajes y llamadas (lotes QA-1.1)."""
+    try:
+        llamadas = store.listar_llamadas(lote["id"])
+    except AuditoriaChatsError as exc:
+        logger.warning("No se pudieron leer las llamadas del lote: %s", exc)
+        llamadas = []
+    metricas = {int(m["agente_id"]): m for m in resumen_llamadas_por_agente(llamadas)}
+    resumen_ia = lote.get("feedback_llamadas") or {}
+    feedback_chats = {int(f["agente_id"]): f for f in motor.feedback_por_agente_qa(chats)}
+    estado = lote.get("llamadas_estado") or "pendiente"
+
+    feedback_agentes = []
+    for agente in lote.get("agentes") or []:
+        agente_id = int(agente["id"])
+        bloque = {
+            "agente_id": agente_id,
+            "nombre": agente.get("nombre", ""),
+            "chats": feedback_chats.get(agente_id),
+            "llamadas": metricas.get(agente_id),
+            "resumen_llamadas": resumen_ia.get(str(agente_id)),
+        }
+        if bloque["chats"] or bloque["llamadas"]:
+            feedback_agentes.append(bloque)
+
+    return {
+        "llamadas_estado": estado,
+        "llamadas_estado_texto": ESTADOS_LLAMADAS.get(estado, estado),
+        "llamadas_en_curso": estado in ("trayendo", "detallando", "resumiendo"),
+        "llamadas_error": lote.get("llamadas_error"),
+        "llamadas_metricas": [dict(m, nombre=next((a.get("nombre") for a in lote.get("agentes") or [] if int(a["id"]) == m["agente_id"]), "")) for m in metricas.values()],
+        "agentes_sin_llamadas": [a for a in lote.get("agentes") or [] if int(a["id"]) not in metricas],
+        "llamadas_sin_emparejar": lote.get("llamadas_sin_emparejar") or {},
+        "feedback_agentes": feedback_agentes,
+        "url_ticket": _url_ticket(),
+    }
+
+
+@auditoria_chats_bp.route("/auditoria-chats/lote/<lote_id>/llamadas", methods=["POST"])
+def traer_llamadas(lote_id):
+    store, _ = _store_o_error()
+    if not store:
+        abort(404)
+    lote = _cargar_lote_o_404(store, lote_id)
+    if not motor.es_lote_qa(lote):
+        abort(404)
+    motor.reiniciar_llamadas(store, lote_id)
+    flash("Se volverán a traer las llamadas de Multiadmin. Pulsa «Procesar lote».", "success")
+    return redirect(url_for("auditoria_chats.ver_lote", lote_id=lote_id))
+
+
+@auditoria_chats_bp.route("/auditoria-chats/lote/<lote_id>/emparejar", methods=["POST"])
+def emparejar_agente(lote_id):
+    store, _ = _store_o_error()
+    if not store:
+        abort(404)
+    lote = _cargar_lote_o_404(store, lote_id)
+    nombre = " ".join(str(request.form.get("agent_number") or "").split())
+    try:
+        agente_id = int(request.form.get("agente_id", ""))
+    except ValueError:
+        agente_id = None
+    ids_lote = {int(a["id"]) for a in lote.get("agentes") or []}
+    if not motor.es_lote_qa(lote) or not nombre or agente_id not in ids_lote:
+        flash("Elige el agente y el nombre de Multiadmin que le corresponde.", "warning")
+        return redirect(url_for("auditoria_chats.ver_lote", lote_id=lote_id))
+    store.guardar_emparejamiento(nombre, agente_id, manual=True)
+    motor.reiniciar_llamadas(store, lote_id, agente_id=agente_id)
+    flash(f"«{nombre}» quedó emparejado. Pulsa «Procesar lote» para traer sus llamadas.", "success")
+    return redirect(url_for("auditoria_chats.ver_lote", lote_id=lote_id))
+
+
 @auditoria_chats_bp.route("/auditoria-chats/lote/<lote_id>/paso", methods=["POST"])
 def paso(lote_id):
     store, error_store = _store_o_error()
@@ -354,7 +451,9 @@ def paso(lote_id):
     else:
         _cargar_lote_o_404(store, lote_id)
         try:
-            resultado = motor.ejecutar_paso(store, lote_id, chatwoot, obtener_config_ia())
+            resultado = motor.ejecutar_paso(
+                store, lote_id, chatwoot, obtener_config_ia(), multiadmin=obtener_multiadmin()
+            )
         except AuditoriaChatsError as exc:
             logger.warning("Fallo en un paso de auditoría de chats: %s", exc)
             resultado = {

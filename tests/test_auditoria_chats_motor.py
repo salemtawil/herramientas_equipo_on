@@ -987,7 +987,7 @@ def test_reiniciar_llamadas_de_un_agente_y_retomar_lote_terminado(monkeypatch):
     _correr_con(store, lote["id"], ChatwootFalso({1: [101]}), multiadmin)
     motor.reiniciar_llamadas(store, lote["id"], agente_id=1)
     reiniciado = store.obtener_lote(lote["id"])
-    assert reiniciado["llamadas_estado"] == "pendiente" and "1" not in reiniciado["feedback_llamadas"]
+    assert reiniciado["llamadas_estado"] == "trayendo" and "1" not in reiniciado["feedback_llamadas"]
     assert store.listar_llamadas(lote["id"]) == []
     multiadmin.dias_pedidos.clear()
     multiadmin.por_dia = [[_llamada_ma("r1", "Ana Pérez", 501)], []]

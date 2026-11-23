@@ -98,55 +98,84 @@
     {% endif %}
   </section>
 
-  {% macro chats_ref(chats) %}{% if chats %} <span class="small">· {% for ch in chats %}<a href="{{ url_for('auditoria_chats.ver_chat', chat_id=ch.id) }}">#{{ ch.conversation_id }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</span>{% endif %}{% endmacro %}
-  {% if es_qa and feedback_qa %}
+  {% from "_ac_macros.html" import chats_ref, tickets_ref, feedback_mensajes, feedback_llamadas with context %}
+  {% if es_qa %}
+  <section class="card" aria-labelledby="ac-llamadas-titulo">
+    <div class="page-section-title">
+      <div>
+        <h2 id="ac-llamadas-titulo">Llamadas</h2>
+        <p class="small">Todas las llamadas analizadas en Multiadmin de los agentes del lote en sus fechas, incluidas las de buzón de voz.</p>
+      </div>
+      <span class="hero-badge hero-badge-soft">{{ llamadas_estado_texto }}</span>
+    </div>
+    {% if llamadas_error %}<div class="warning">{{ llamadas_error }}</div>{% endif %}
+    {% if llamadas_metricas %}
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Agente</th><th>Llamadas</th><th>Puntaje medio</th><th>Buzón o sin conversación</th><th>Entrantes</th><th>Salientes</th><th>Menor puntaje</th></tr></thead>
+          <tbody>
+            {% for m in llamadas_metricas %}
+              <tr>
+                <td>{{ m.nombre }}</td>
+                <td>{{ m.llamadas }}</td>
+                <td>{{ m.puntaje_medio|decimal_es }}</td>
+                <td>{{ m.sin_conversacion }}</td>
+                <td>{{ m.entrantes }}</td>
+                <td>{{ m.salientes }}</td>
+                <td>{% for l in m.peores %}{% if url_ticket %}<a href="{{ url_ticket(l.ticket_id) }}" target="_blank" rel="noopener noreferrer">#{{ l.ticket_id }}</a>{% else %}#{{ l.ticket_id }}{% endif %} ({{ l.puntaje|decimal_es(0) }}){% if not loop.last %}, {% endif %}{% endfor %}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% elif llamadas_estado == "listo" %}
+      <p class="small">No se encontraron llamadas de estos agentes en las fechas del lote.</p>
+    {% endif %}
+
+    {% if agentes_sin_llamadas and llamadas_sin_emparejar and llamadas_estado in ("listo", "error") %}
+      <h3 class="top-space">Agentes sin llamadas</h3>
+      <p class="small">Si el agente aparece en Multiadmin con otro nombre, empárejalo y se traerán sus llamadas.</p>
+      {% for agente in agentes_sin_llamadas %}
+        <form method="post" action="{{ url_for('auditoria_chats.emparejar_agente', lote_id=lote.id) }}" class="acciones-barra top-space">
+          <input type="hidden" name="agente_id" value="{{ agente.id }}">
+          <label class="small" for="ac-emparejar-{{ agente.id }}">{{ agente.nombre }} es en Multiadmin</label>
+          <select id="ac-emparejar-{{ agente.id }}" name="agent_number" required>
+            <option value="">Elegir…</option>
+            {% for nombre, cantidad in llamadas_sin_emparejar|dictsort %}<option value="{{ nombre }}">{{ nombre }} ({{ cantidad }} llamadas)</option>{% endfor %}
+          </select>
+          <button type="submit" class="btn secondary">Emparejar</button>
+        </form>
+      {% endfor %}
+    {% endif %}
+
+    {% if terminado or llamadas_estado == "error" %}
+      <form method="post" action="{{ url_for('auditoria_chats.traer_llamadas', lote_id=lote.id) }}" class="top-space">
+        <button type="submit" class="btn secondary">{% if llamadas_estado == "pendiente" %}Traer llamadas{% else %}Volver a traer las llamadas{% endif %}</button>
+      </form>
+    {% endif %}
+  </section>
+  {% endif %}
+
+  {% if es_qa and feedback_agentes %}
   <section class="card" aria-labelledby="ac-feedback-titulo">
     <div class="page-section-title">
       <div>
         <h2 id="ac-feedback-titulo">Feedback por agente</h2>
-        <p class="small">Lo que hace bien y lo que debe mejorar según la rúbrica QA-1.1. El porcentaje es el cumplimiento del criterio en sus chats (cumple = 100 %, parcial = 50 %), sin contar los no verificables.</p>
+        <p class="small">Mensajes: rúbrica QA-1.1 (el porcentaje es el cumplimiento del criterio en sus chats, sin contar los no verificables). Llamadas: auditoría de Multiadmin resumida con IA.</p>
       </div>
     </div>
     <div class="ac-feedback">
-      {% for fila in feedback_qa %}
+      {% for bloque in feedback_agentes %}
         <article class="ac-feedback__agente">
-          <header class="ac-feedback__cabecera">
-            <h3>{{ fila.agente_nombre }}</h3>
-            <p class="small">{{ fila.auditados }} chats · QA medio {{ fila.qa_media|decimal_es }}{% if fila.fallas_confirmadas %} · {{ fila.fallas_confirmadas }} falla(s) crítica(s) confirmada(s){% endif %}</p>
-          </header>
-          <p class="ac-feedback__valoraciones">
-            {% for clave, texto in estados_qa.items() %}
-              <span class="ac-valoracion ac-valoracion--{{ clave }}">{{ texto }}: {{ fila.estados[clave] }}</span>
-            {% endfor %}
-          </p>
-          <div class="ac-feedback__columnas">
-            <div>
-              <h4>Puntos fuertes</h4>
-              {% if fila.puntos_fuertes or fila.cumplimientos %}
-                <ul>
-                  {% for c in fila.puntos_fuertes %}<li><strong>{{ c.codigo }} {{ c.etiqueta }}</strong> ({{ c.pct|decimal_es(0) }} %)</li>{% endfor %}
-                  {% for t in fila.cumplimientos %}<li>{{ t.texto }}{{ chats_ref(t.chats) }}</li>{% endfor %}
-                </ul>
-              {% else %}<p class="small">Sin puntos destacados todavía.</p>{% endif %}
-            </div>
-            <div>
-              <h4>Áreas de mejora</h4>
-              {% if fila.areas_mejora or fila.incumplimientos %}
-                <ul>
-                  {% for c in fila.areas_mejora %}<li><strong>{{ c.codigo }} {{ c.etiqueta }}</strong> ({{ c.pct|decimal_es(0) }} %){{ chats_ref(c.chats) }}</li>{% endfor %}
-                  {% for t in fila.incumplimientos %}<li>{{ t.texto }}{{ chats_ref(t.chats) }}</li>{% endfor %}
-                </ul>
-              {% else %}<p class="small">Sin áreas de mejora marcadas.</p>{% endif %}
-            </div>
+          <header class="ac-feedback__cabecera"><h3>{{ bloque.nombre }}</h3></header>
+          <div class="ac-canal">
+            <h4>Atención por mensajes</h4>
+            {% if bloque.chats %}{{ feedback_mensajes(bloque.chats, estados_qa) }}{% else %}<p class="small">Sin chats auditados.</p>{% endif %}
           </div>
-          {% if fila.recomendaciones %}
-            <h4>Recomendaciones</h4>
-            <ul>{% for t in fila.recomendaciones %}<li>{{ t.texto }}{{ chats_ref(t.chats) }}</li>{% endfor %}</ul>
-          {% endif %}
-          {% if fila.comentarios %}
-            <h4>Comentarios del revisor</h4>
-            <ul>{% for t in fila.comentarios %}<li>{{ t }}</li>{% endfor %}</ul>
-          {% endif %}
+          <div class="ac-canal">
+            <h4>Atención por llamadas</h4>
+            {% if bloque.llamadas %}{{ feedback_llamadas(bloque.llamadas, bloque.resumen_llamadas, url_ticket) }}{% else %}<p class="small">Sin llamadas en el rango.</p>{% endif %}
+          </div>
         </article>
       {% endfor %}
     </div>

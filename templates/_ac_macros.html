@@ -1,0 +1,74 @@
+{# Macros compartidas por la página del lote y el informe de la auditoría de chats. #}
+{% macro chats_ref(chats) %}{% if chats %} <span class="small">· {% for ch in chats %}<a href="{{ url_for('auditoria_chats.ver_chat', chat_id=ch.id) }}">#{{ ch.conversation_id }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</span>{% endif %}{% endmacro %}
+
+{% macro tickets_ref(tickets, url_ticket) %}{% if tickets %} <span class="small">· {% for t in tickets %}{% if url_ticket %}<a href="{{ url_ticket(t) }}" target="_blank" rel="noopener noreferrer">#{{ t }}</a>{% else %}#{{ t }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}</span>{% endif %}{% endmacro %}
+
+{% macro feedback_mensajes(fila, estados_qa) %}
+  <p class="small">{{ fila.auditados }} chats · QA medio {{ fila.qa_media|decimal_es }}{% if fila.fallas_confirmadas %} · {{ fila.fallas_confirmadas }} falla(s) crítica(s) confirmada(s){% endif %}</p>
+  <p class="ac-feedback__valoraciones">
+    {% for clave, texto in estados_qa.items() %}
+      <span class="ac-valoracion ac-valoracion--{{ clave }}">{{ texto }}: {{ fila.estados[clave] }}</span>
+    {% endfor %}
+  </p>
+  <div class="ac-feedback__columnas">
+    <div>
+      <h5>Puntos fuertes</h5>
+      {% if fila.puntos_fuertes or fila.cumplimientos %}
+        <ul>
+          {% for c in fila.puntos_fuertes %}<li><strong>{{ c.codigo }} {{ c.etiqueta }}</strong> ({{ c.pct|decimal_es(0) }} %)</li>{% endfor %}
+          {% for t in fila.cumplimientos %}<li>{{ t.texto }}{{ chats_ref(t.chats) }}</li>{% endfor %}
+        </ul>
+      {% else %}<p class="small">Sin puntos destacados todavía.</p>{% endif %}
+    </div>
+    <div>
+      <h5>Áreas de mejora</h5>
+      {% if fila.areas_mejora or fila.incumplimientos %}
+        <ul>
+          {% for c in fila.areas_mejora %}<li><strong>{{ c.codigo }} {{ c.etiqueta }}</strong> ({{ c.pct|decimal_es(0) }} %){{ chats_ref(c.chats) }}</li>{% endfor %}
+          {% for t in fila.incumplimientos %}<li>{{ t.texto }}{{ chats_ref(t.chats) }}</li>{% endfor %}
+        </ul>
+      {% else %}<p class="small">Sin áreas de mejora marcadas.</p>{% endif %}
+    </div>
+  </div>
+  {% if fila.recomendaciones %}
+    <h5>Recomendaciones</h5>
+    <ul>{% for t in fila.recomendaciones %}<li>{{ t.texto }}{{ chats_ref(t.chats) }}</li>{% endfor %}</ul>
+  {% endif %}
+  {% if fila.comentarios %}
+    <h5>Comentarios del revisor</h5>
+    <ul>{% for t in fila.comentarios %}<li>{{ t }}</li>{% endfor %}</ul>
+  {% endif %}
+{% endmacro %}
+
+{% macro feedback_llamadas(metricas, resumen, url_ticket) %}
+  <p class="small">{{ metricas.llamadas }} llamadas · puntaje medio {{ metricas.puntaje_medio|decimal_es }} · {{ metricas.entrantes }} entrantes, {{ metricas.salientes }} salientes · {{ metricas.sin_conversacion }} de buzón o sin conversación</p>
+  {% if resumen and resumen.error %}
+    <p class="small">No se pudo generar el resumen con IA: {{ resumen.error }}</p>
+  {% elif resumen %}
+    {% if resumen.resumen %}<p>{{ resumen.resumen }}</p>{% endif %}
+    <div class="ac-feedback__columnas">
+      <div>
+        <h5>Puntos fuertes</h5>
+        {% if resumen.puntos_fuertes %}<ul>{% for t in resumen.puntos_fuertes %}<li>{{ t.texto }}{{ tickets_ref(t.tickets, url_ticket) }}</li>{% endfor %}</ul>
+        {% else %}<p class="small">Sin puntos destacados.</p>{% endif %}
+      </div>
+      <div>
+        <h5>Áreas de mejora</h5>
+        <ul>
+          {% for c in metricas.criterios_bajos %}<li><strong>{{ c.nombre }}</strong> ({{ c.pct|decimal_es(0) }} %)</li>{% endfor %}
+          {% for t in resumen.areas_mejora %}<li>{{ t.texto }}{{ tickets_ref(t.tickets, url_ticket) }}</li>{% endfor %}
+        </ul>
+      </div>
+    </div>
+    {% if resumen.buzon_voz %}
+      <h5>Buzón de voz</h5>
+      <p>{{ resumen.buzon_voz.evaluacion }}{{ tickets_ref(resumen.buzon_voz.tickets, url_ticket) }}</p>
+    {% endif %}
+    {% if resumen.recomendaciones %}
+      <h5>Recomendaciones</h5>
+      <ul>{% for t in resumen.recomendaciones %}<li>{{ t.texto }}{{ tickets_ref(t.tickets, url_ticket) }}</li>{% endfor %}</ul>
+    {% endif %}
+  {% else %}
+    <p class="small">El resumen con IA de las llamadas estará listo al terminar el lote.</p>
+  {% endif %}
+{% endmacro %}
