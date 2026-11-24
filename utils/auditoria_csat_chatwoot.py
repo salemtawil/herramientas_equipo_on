@@ -146,6 +146,9 @@ def fusionar_guardado(filas, negativos_guardados):
             valor = guardado.get(clave)
             if valor is not None:
                 fila[clave] = valor
+        if _texto(fila.get("ia_justificable")):
+            fila["ia_estado"] = fila.get("ia_estado") or "sugerida"
+            fila["ia_fuente"] = fila.get("ia_fuente") or "guardado"
         fila["justificable"] = _texto(guardado.get("decision_final"))
         fila["motivo_inconformidad"] = _texto(guardado.get("motivo_final"))
         fila["comentario_auditor"] = _texto(guardado.get("nota_auditor"))

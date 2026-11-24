@@ -251,6 +251,11 @@ def parsear_fecha(valor):
     if not texto:
         return None
 
+    try:
+        return datetime.fromisoformat(texto)
+    except ValueError:
+        pass
+
     fecha = pd.to_datetime(texto, errors="coerce", dayfirst=True)
     if pd.isna(fecha):
         fecha = pd.to_datetime(texto, errors="coerce", dayfirst=False)

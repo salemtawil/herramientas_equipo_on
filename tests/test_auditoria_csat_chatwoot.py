@@ -92,6 +92,7 @@ def test_fusionar_conserva_decision_humana():
     assert f["justificable"] == "SÍ" and f["csat_flag"] == "excluida_por_justificable_si"
     assert f["estado_auditoria"] == "SÍ" and f["comentario_auditor"] == "n"
     assert f["motivo_inconformidad"] == "CAPTCHA" and f["ia_confianza"] == 80.0
+    assert f["ia_estado"] == "sugerida" and f["ia_fuente"] == "guardado"
 
 
 def test_fusionar_ignora_no_negativos_y_desconocidos():

@@ -119,5 +119,20 @@ class AuditoriaCsatPropuestaIaTests(unittest.TestCase):
         self.assertEqual([], llamadas)
 
 
+class ParsearFechaIsoTests(unittest.TestCase):
+    def test_iso_con_zona_horaria_sin_advertencias(self):
+        import warnings
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            fecha = csat.parsear_fecha("2023-11-14T18:13:20-04:00")
+        self.assertEqual((2023, 11, 14, 18, 13), (fecha.year, fecha.month, fecha.day, fecha.hour, fecha.minute))
+        self.assertEqual(-4 * 3600, fecha.utcoffset().total_seconds())
+
+    def test_fecha_csv_sigue_dia_primero(self):
+        fecha = csat.parsear_fecha("05/11/2023 10:00")
+        self.assertEqual((2023, 11, 5), (fecha.year, fecha.month, fecha.day))
+
+
 if __name__ == "__main__":
     unittest.main()
