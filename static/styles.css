@@ -5113,3 +5113,36 @@ th {
   background: rgba(100, 116, 139, 0.15);
   font-size: 0.75rem;
 }
+
+.auditoria-csat-page .csat-periodo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px;
+  align-items: end;
+}
+
+.auditoria-csat-page .csat-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  min-width: 0;
+}
+
+.auditoria-csat-page .csat-link--block {
+  display: block;
+  margin-top: 4px;
+}
+
+.csat-test-banner {
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--warning-border);
+  border-radius: var(--radius-md);
+  background: var(--warning-bg);
+  color: var(--warning-text);
+  overflow-wrap: anywhere;
+}
+
+.csat-test-banner strong {
+  display: block;
+}

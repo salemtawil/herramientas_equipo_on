@@ -275,11 +275,31 @@ python scripts/cargar_manual_auditoria.py "Manual de Procedimientos.pdf" --versi
 - «Informe PDF» abre un informe con portada, resumen general, una página por agente (mensajes y llamadas) y anexos; «Descargar PDF» abre la impresión del navegador para «Guardar como PDF». Para usar el logo completo de la empresa, guarda el archivo como `static/informe-logo.svg`.
 - `MULTIADMIN_ADMIN_API_URL` (opcional, por defecto `https://admin-api.compi.sh`).
 
+## Auditoría CSAT
+
+`/auditoria-csat` trae las encuestas CSAT de Chatwoot de un período, la IA propone si cada negativo (1–2) es atribuible al agente y una persona confirma o corrige. El CSAT ajustado solo descuenta los negativos con decisión confirmada «SÍ (no atribuible al agente)».
+
+Puesta en marcha:
+
+1. Ejecuta `supabase_csat_audits.sql` en el editor SQL de Supabase (crea `csat_audit_periods` y `csat_audit_negatives`).
+2. Usa las variables que ya existen: `CHATWOOT_BASE_URL`, `CHATWOOT_ACCOUNT_ID`, `CHATWOOT_API_ACCESS_TOKEN`, `CHATWOOT_TIMEZONE`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` y la IA de CSAT (`OPENAI_API_KEY` o `CSAT_AI_PROVIDER=ollama`). No hay variables nuevas.
+
+Cómo funciona:
+
+- **Traer de Chatwoot**: elige el período (Semana pasada, Esta semana, Últimos 7 días, Mes pasado, Este mes o Personalizado con fecha inicio y fin) y pulsa «Traer encuestas de Chatwoot». «Hoy» se toma en `CHATWOOT_TIMEZONE`.
+- **Guardado automático**: fuera del modo prueba, el período se guarda en Supabase al traerlo y en cada acción (guardar decisiones, auditar con IA, aceptar propuestas). Solo se guardan el resumen y los negativos con su decisión; no se guardan transcripciones ni datos de contacto. Los períodos con fecha fin de hace más de 12 semanas se borran al guardar.
+- **Re-traer un período ya guardado** actualiza los conteos desde Chatwoot, conserva las decisiones de los negativos que siguen siéndolo y borra los que ya no vuelven o subieron a 3+.
+- **Auditorías guardadas**: la lista muestra período, CSAT real, ajustado y pendientes. «Abrir» vuelve a traer el período de Chatwoot y aplica las decisiones guardadas.
+- **Modo prueba (no se guarda)**: todo funciona igual, pero el estado vive solo en el almacenamiento temporal de 24 h y nunca toca Supabase. La pantalla muestra «Modo prueba — nada de esto se guarda». En Vercel ese estado temporal puede perderse entre peticiones.
+- **Ver conversación**: cada negativo abre la conversación traída en vivo de Chatwoot, anonimizada y sin guardarla, con enlace «Abrir en Chatwoot». Al auditar con IA, la conversación se trae solo para los negativos que va a revisar la IA en ese clic (`OPENAI_CSAT_MAX_CASES`).
+- Si Supabase no está configurado, la pantalla sigue funcionando: usa el modo prueba o el CSV.
+- **Cargar CSV manualmente** sigue disponible como opción secundaria; ese modo no se guarda.
+
 ## Limitaciones conocidas
 
 - `usuarios_a_sheets` y `auditoria_salientes` guardan estado temporal firmado. Si el estado es pequeño, viaja inline; si crece, se apoya en almacenamiento temporal del runtime.
 - `auditoria_csat` guarda su análisis temporal en almacenamiento efímero del runtime.
-- `auditoria_csat` puede auditar negativas pendientes con IA si `OPENAI_API_KEY` está configurada o si `CSAT_AI_PROVIDER=ollama` apunta a un Ollama local. La IA usa transcripción del CSV cuando existe; si el CSV solo trae un link privado, audita con el comentario disponible hasta conectar una API backend que entregue el transcript completo.
+- `auditoria_csat` puede auditar negativas pendientes con IA si `OPENAI_API_KEY` está configurada o si `CSAT_AI_PROVIDER=ollama` apunta a un Ollama local. En modo Chatwoot la IA lee la conversación traída de Chatwoot; con CSV usa la transcripción del CSV cuando existe y, si solo trae un link privado, audita con el comentario disponible.
 - `informe_semanal_cs` genera informes con Gemini si `GEMINI_API_KEY` está configurada y `WEEKLY_REPORT_AI_PROVIDER=gemini`. También puede usar OpenAI u Ollama. Si no hay proveedor de IA, devuelve una base editable con las secciones obligatorias. En esta V1 extrae texto de PDF, TXT, Markdown, CSV, JSON y logs; imágenes y hojas de cálculo quedan marcadas como recibidas sin extracción.
 - Ollama local no corre dentro de Vercel ni puede usar el `127.0.0.1` de una computadora personal desde producción. Para Vercel, usa OpenAI u otro proveedor cloud, o expón un servidor Ollama propio con URL segura y accesible desde Vercel.
 - `usuarios_activos` puede consultar la API nueva de Multiadmin si hay token o credenciales configuradas; sin esas variables cae al endpoint Lambda legado. El diagnóstico de promo de Compinche y los datos completos de Multiadmin dependen de credenciales/tokens.

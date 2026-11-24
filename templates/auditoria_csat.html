@@ -9,7 +9,7 @@
     <div class="page-section-title">
       <div>
         <h1>Auditoría CSAT de conversaciones</h1>
-        <p>Replica el flujo manual actual: carga CSV del período, audita negativas o cualquier rating, recalcula CSAT y exporta tanto el archivo auditado como un reporte listo para IA.</p>
+        <p>Trae las encuestas CSAT de Chatwoot del período (o carga un CSV), audita las negativas, recalcula el CSAT y exporta tanto el archivo auditado como un reporte listo para IA.</p>
       </div>
       <span class="hero-badge">V1 operativa</span>
     </div>
@@ -40,14 +40,98 @@
     {% endif %}
   </section>
 
+  {% if contexto and contexto.prueba %}
+    <div class="csat-test-banner" role="status"><strong>Modo prueba — nada de esto se guarda</strong> Las decisiones viven solo en el estado temporal de 24 h y no aparecen en las auditorías guardadas.</div>
+  {% endif %}
+
   <section class="card">
     <div class="page-section-title">
       <div>
-        <h2>Cargar CSV del período</h2>
-        <p class="small">La herramienta espera la estructura operativa actual y completa vacíos si faltan columnas. No agrega persistencia compleja entre sesiones.</p>
+        <h2>Traer de Chatwoot</h2>
+        <p class="small">Elige el período y trae todas las encuestas CSAT de Chatwoot. Las fechas solo se usan con «Personalizado». Fuera del modo prueba, la auditoría del período se guarda (resumen y negativos, sin transcripciones ni datos de contacto).</p>
       </div>
-      <span class="hero-badge hero-badge-soft">1 archivo</span>
+      <span class="hero-badge hero-badge-soft">Chatwoot</span>
     </div>
+
+    <form method="post" data-processing-message="Trayendo encuestas CSAT de Chatwoot...">
+      <input type="hidden" name="accion" value="traer_chatwoot">
+      <div class="csat-periodo-grid">
+        <div>
+          <label class="small" for="csat-tipo-periodo">Período</label>
+          <select id="csat-tipo-periodo" name="tipo_periodo">
+            {% for valor, etiqueta in tipos_periodo %}
+              <option value="{{ valor }}" {% if formulario.tipo_periodo == valor %}selected{% endif %}>{{ etiqueta }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="small" for="csat-fecha-inicio">Fecha inicio (personalizado)</label>
+          <input id="csat-fecha-inicio" type="date" name="fecha_inicio" value="{{ formulario.fecha_inicio }}">
+        </div>
+        <div>
+          <label class="small" for="csat-fecha-fin">Fecha fin (personalizado)</label>
+          <input id="csat-fecha-fin" type="date" name="fecha_fin" value="{{ formulario.fecha_fin }}">
+        </div>
+        <label class="csat-check">
+          <input type="checkbox" name="prueba" value="1" {% if formulario.prueba %}checked{% endif %}>
+          <span>Modo prueba (no se guarda)</span>
+        </label>
+        <div>
+          <button type="submit">Traer encuestas de Chatwoot</button>
+        </div>
+      </div>
+    </form>
+  </section>
+
+  <section class="card">
+    <div class="page-section-title">
+      <div>
+        <h2>Auditorías guardadas</h2>
+        <p class="small">Períodos guardados en las últimas 12 semanas. Al abrir uno se vuelve a traer de Chatwoot y se aplican las decisiones guardadas.</p>
+      </div>
+      <span class="hero-badge hero-badge-soft">{{ periodos_guardados|length }} períodos</span>
+    </div>
+
+    {% if aviso_guardadas %}
+      <div class="warning">{{ aviso_guardadas }}</div>
+    {% elif periodos_guardados %}
+      <div class="table-wrap">
+        <table class="tabla-compacta">
+          <thead>
+            <tr>
+              <th>Período</th>
+              <th>Encuestas</th>
+              <th>CSAT real</th>
+              <th>CSAT ajustado</th>
+              <th>Pendientes</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for periodo in periodos_guardados %}
+              <tr>
+                <td>{{ periodo.periodo_texto }}</td>
+                <td>{{ periodo.total_encuestas }}</td>
+                <td>{{ periodo.csat_real }}%</td>
+                <td>{{ periodo.csat_ajustado }}%</td>
+                <td>{{ periodo.negativos_pendientes }}</td>
+                <td><a class="csat-link" href="{{ url_for('auditoria_csat.auditoria_csat', period_id=periodo.id) }}">Abrir</a></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="small empty-state">Todavía no hay auditorías guardadas.</p>
+    {% endif %}
+  </section>
+
+  <details class="card seccion-desplegable">
+    <summary class="titulo-desplegable">
+      <span>Cargar CSV manualmente</span>
+      <span class="small">No se guarda; usa el estado temporal de 24 h</span>
+    </summary>
+    <p class="small">La herramienta espera la estructura operativa actual del CSV exportado de Chatwoot y completa vacíos si faltan columnas.</p>
 
     <form method="post" enctype="multipart/form-data" data-processing-message="Leyendo CSV y armando la auditoría CSAT...">
       <input type="hidden" name="accion" value="analizar_csv">
@@ -61,7 +145,7 @@
         </div>
       </div>
     </form>
-  </section>
+  </details>
 
   {% if contexto %}
     {% set metricas = contexto.metricas %}
@@ -71,7 +155,7 @@
           <h2>Resumen inicial automático</h2>
           <p class="small">Periodo, distribución del rating y CSAT base antes de aplicar decisiones del auditor.</p>
         </div>
-        <span class="hero-badge hero-badge-soft">{{ metricas.periodo }}</span>
+        <span class="hero-badge hero-badge-soft">{{ contexto.periodo_texto or metricas.periodo }}</span>
       </div>
 
       <div class="csat-summary-grid">
@@ -86,6 +170,8 @@
 
     <form method="post" data-processing-message="Actualizando auditoría CSAT...">
       <input type="hidden" name="analysis_id" value="{{ contexto.analysis_id }}">
+      <input type="hidden" name="period_id" value="{{ contexto.period_id }}">
+      {% if contexto.prueba %}<input type="hidden" name="prueba" value="1">{% endif %}
 
       <section class="card">
         <div class="page-section-title">
@@ -101,6 +187,11 @@
             <button type="submit" class="btn secondary" name="accion" value="descargar_reporte_ia">Descargar reporte para IA</button>
           </div>
         </div>
+
+        {% if metricas.negativos_pendientes %}
+          <div class="warning top-space">{{ metricas.negativos_pendientes }} negativos sin confirmar — el ajustado aún no es definitivo</div>
+        {% endif %}
+        <p class="small top-space">Auditados a mano: {{ contexto.auditados_humana }} · Aceptados de la IA: {{ contexto.aceptados_ia }}</p>
 
         <div class="csat-rule-box top-space">
           <strong>Auditoría asistida por IA</strong>
@@ -233,6 +324,9 @@
                       <a class="csat-link" href="{{ fila.enlace_conversacion }}" target="_blank" rel="noopener noreferrer">Abrir conversación</a>
                     {% else %}
                       Sin enlace
+                    {% endif %}
+                    {% if fila.tipo_rating == 'Negativo' and fila.conversation_id %}
+                      <a class="csat-link csat-link--block" href="{{ url_for('auditoria_csat.conversacion_csat', conversation_id=fila.conversation_id) }}" target="_blank" rel="noopener">Ver conversación</a>
                     {% endif %}
                   </td>
                   <td>{{ fila.nombre_contacto or 'Sin nombre' }}</td>

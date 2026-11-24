@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block title %}Conversación #{{ conversation_id }} · Auditoría CSAT{% endblock %}
+{% block page_name %}Auditoría CSAT{% endblock %}
+
+{% block content %}
+<div class="page-stack auditoria-csat-page">
+  <section class="card page-hero">
+    <div class="page-section-title">
+      <div>
+        <h1>Conversación #{{ conversation_id }}</h1>
+        <p class="small">Traída en vivo de Chatwoot y anonimizada. No se guarda: vuelve a la pestaña de la auditoría para decidir.</p>
+      </div>
+      {% if url_chatwoot %}<a class="btn secondary" href="{{ url_chatwoot }}" target="_blank" rel="noopener noreferrer">Abrir en Chatwoot</a>{% endif %}
+    </div>
+  </section>
+
+  <section class="card" aria-labelledby="csat-conversacion-titulo">
+    <div class="page-section-title">
+      <div><h2 id="csat-conversacion-titulo">Mensajes</h2></div>
+      <span class="hero-badge hero-badge-soft">{{ lineas|length }} mensajes</span>
+    </div>
+    {% if error %}<div class="warning">{{ error }}</div>{% endif %}
+    {% if lineas %}
+      <div class="ac-transcripcion">
+        {% for linea in lineas %}
+          <div class="ac-mensaje{% if linea.es_agente %} ac-mensaje--agente{% endif %}">
+            <span class="ac-mensaje__texto">{{ linea.texto }}</span>
+          </div>
+        {% endfor %}
+      </div>
+    {% elif not error %}
+      <p class="small">La conversación no tiene mensajes visibles.</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}
