@@ -152,6 +152,10 @@
       if (formularioPaso) formularioPaso.hidden = true;
       if (estado) estado.textContent = "Procesando…";
 
+      // Un corte del servidor (p. ej. 504 por tiempo) no detiene el lote: se reintenta unas veces.
+      const MAX_FALLOS_SEGUIDOS = 4;
+      const ESPERA_TRAS_FALLO = 20;
+      let fallosSeguidos = 0;
       while (!pausado) {
         let datos;
         try {
@@ -163,10 +167,20 @@
           if (!respuesta.ok) throw new Error("HTTP " + respuesta.status);
           datos = await respuesta.json();
           if (!datos || typeof datos !== "object") throw new Error("respuesta vacía");
+          fallosSeguidos = 0;
         } catch (error) {
-          textoMensaje.textContent = "No se pudo avanzar el lote (" + error.message + "). Vuelve a intentarlo.";
-          terminar(false);
-          return;
+          fallosSeguidos += 1;
+          if (fallosSeguidos >= MAX_FALLOS_SEGUIDOS) {
+            textoMensaje.textContent = "No se pudo avanzar el lote (" + error.message + "). Vuelve a intentarlo.";
+            terminar(false);
+            return;
+          }
+          await esperar(ESPERA_TRAS_FALLO, (s) => {
+            textoMensaje.textContent =
+              "El servidor no respondió (" + error.message + "). Reintento " + fallosSeguidos + " de " +
+              (MAX_FALLOS_SEGUIDOS - 1) + " en " + Math.max(s, 0) + " s.";
+          });
+          continue;
         }
 
         mostrarProgreso(datos);

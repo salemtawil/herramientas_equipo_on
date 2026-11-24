@@ -1071,3 +1071,49 @@ def test_emparejar_a_mano_mueve_las_llamadas_del_dueno_anterior(monkeypatch):
     multiadmin.dias_pedidos.clear()
     _correr_con(store, lote["id"], ChatwootFalso({1: [101], 2: [102]}), multiadmin)
     assert store.listar_llamadas(lote["id"])[0]["agente_id"] == 2
+
+
+# --- Respaldo de la IA dentro del tiempo máximo de Vercel ---
+
+from utils.ia_chat import IATemporalError  # noqa: E402
+
+CONFIG_RESPALDO = dict(CONFIG_IA, model="principal", model_respaldo="respaldo")
+
+
+def test_llamar_ia_reparte_el_tiempo_para_que_entre_el_respaldo(monkeypatch):
+    llamadas = []
+
+    def ia(mensajes, config, timeout=60):
+        llamadas.append((config["model"], timeout))
+        if config["model"] == "principal":
+            raise IATemporalError("El proveedor de IA está saturado o con fallos (503).")
+        return {"ok": True}
+
+    monkeypatch.setattr(motor, "completar_json", ia)
+    datos, modelo = motor._llamar_ia([], CONFIG_RESPALDO)
+    assert modelo == "respaldo" and datos == {"ok": True}
+    assert [m for m, _ in llamadas] == ["principal", "respaldo"]
+    assert sum(t for _, t in llamadas) <= motor.PRESUPUESTO_IA_SEGUNDOS < 60
+
+
+def test_sin_respaldo_usa_todo_el_presupuesto(monkeypatch):
+    tiempos = []
+    monkeypatch.setattr(motor, "completar_json", lambda m, c, timeout=60: tiempos.append(timeout) or {"ok": 1})
+    motor._llamar_ia([], CONFIG_IA)
+    assert tiempos == [motor.PRESUPUESTO_IA_SEGUNDOS]
+
+
+def test_si_fallan_ambos_el_mensaje_nombra_los_dos_modelos(monkeypatch):
+    def ia(mensajes, config, timeout=60):
+        if config["model"] == "principal":
+            raise IATemporalError("El proveedor de IA está saturado o con fallos (503); se reintentará en 30 s.")
+        raise IARateLimitError("Límite diario de la IA alcanzado; retoma mañana.", diario=True)
+
+    monkeypatch.setattr(motor, "completar_json", ia)
+    try:
+        motor._llamar_ia([], CONFIG_RESPALDO)
+    except IARateLimitError as exc:
+        assert not exc.diario
+        assert "principal" in str(exc) and "respaldo" in str(exc) and "503" in str(exc)
+    else:
+        raise AssertionError("Debía fallar")

@@ -47,13 +47,16 @@ from utils.auditoria_chats_transcripcion import (
     tiene_mensajes_de_agente,
 )
 from utils.chatwoot_reportes import _obtener_timezone, _timezone
-from utils.ia_chat import IAConfigError, IARateLimitError, IARespuestaError, completar_json
+from utils.ia_chat import IAConfigError, IARateLimitError, IARespuestaError, IATemporalError, completar_json
 
 CHATS_POR_AGENTE_DEFAULT = 10
 CHATS_POR_AGENTE_MAX = 20
 MAX_PAGINAS_MUESTREO = 10
 MAX_INTENTOS_IA = 2
-SEGUNDOS_PROCESANDO_ABANDONADO = 120
+# Un paso nunca dura más de 60 s (límite de Vercel): pasado ese margen, el chat «procesando» quedó abandonado.
+SEGUNDOS_PROCESANDO_ABANDONADO = 75
+# Tiempo total para llamar a la IA en un paso (principal + respaldo), por debajo del límite de Vercel.
+PRESUPUESTO_IA_SEGUNDOS = 50
 PORCENTAJE_CONTROL = 0.10
 
 ESTADOS_PENDIENTES = ("pendiente", "leido", "clasificado", "procesando")
@@ -327,14 +330,22 @@ def _llamar_ia(mensajes, config_ia):
     if respaldo and respaldo != config_ia["model"]:
         modelos.append(respaldo)
 
+    # Vercel corta la petición a los 60 s: si el principal se quedaba esperando 60 s, el respaldo
+    # nunca llegaba a intentarse y el chat quedaba «procesando». Se reparte el tiempo entre ambos.
+    timeout = PRESUPUESTO_IA_SEGUNDOS // len(modelos)
     errores = []
     for modelo in modelos:
         try:
-            return completar_json(mensajes, dict(config_ia, model=modelo)), modelo
+            return completar_json(mensajes, dict(config_ia, model=modelo), timeout=timeout), modelo
         except IARateLimitError as exc:
-            errores.append(exc)
-    temporales = [e for e in errores if not e.diario]
-    raise temporales[0] if temporales else errores[0]
+            errores.append((modelo, exc))
+    temporales = [e for _, e in errores if not e.diario]
+    if len(errores) == 1:
+        raise errores[0][1]
+    detalle = " · ".join(f"{modelo}: {exc}" for modelo, exc in errores)
+    if temporales:
+        raise IATemporalError(f"Ningún modelo respondió ({detalle})", esperar_segundos=temporales[0].esperar_segundos)
+    raise IARateLimitError(f"Todos los modelos agotaron su cupo diario ({detalle})", diario=True)
 
 
 def _manejar_error_ia(store, lote_id, chat, exc, estado_previo):
