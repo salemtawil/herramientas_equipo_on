@@ -91,11 +91,12 @@
         <div class="page-section-title">
           <div>
             <h2>Resumen de auditoría</h2>
-            <p class="small">El CSAT actualizado excluye solo las negativas marcadas como SÍ justificable. TAL VEZ no cambia el cálculo en esta V1.</p>
+            <p class="small">El CSAT actualizado excluye solo las negativas con decisión confirmada SÍ (no atribuible al agente); las propuestas de la IA no cuentan hasta que las aceptes o las decidas tú. TAL VEZ no cambia el cálculo en esta V1.</p>
           </div>
           <div class="csat-action-bar">
             <button type="submit" name="accion" value="guardar_auditoria">Actualizar resumen</button>
             <button type="submit" class="btn secondary" name="accion" value="auditar_con_ia" {% if not contexto.ia_disponible %}disabled{% endif %}>Auditar pendientes con IA</button>
+            <button type="submit" class="btn secondary" name="accion" value="aceptar_propuestas_ia">Aceptar propuestas de la IA</button>
             <button type="submit" class="btn secondary" name="accion" value="descargar_csv_auditado">Descargar CSV auditado</button>
             <button type="submit" class="btn secondary" name="accion" value="descargar_reporte_ia">Descargar reporte para IA</button>
           </div>
@@ -104,7 +105,7 @@
         <div class="csat-rule-box top-space">
           <strong>Auditoría asistida por IA</strong>
           {% if contexto.ia_disponible %}
-            <p class="small top-space">La IA usa {{ contexto.ia_provider }} / {{ contexto.ia_modelo }} y audita solo negativas pendientes. Si el CSV incluye transcripción, la revisa; si solo hay link, usa el comentario disponible y baja la confianza.</p>
+            <p class="small top-space">La IA usa {{ contexto.ia_provider }} / {{ contexto.ia_modelo }} y audita solo negativas pendientes. Solo propone: la decisión queda pendiente hasta que la confirmes o uses «Aceptar propuestas de la IA». Si el CSV incluye transcripción, la revisa; si solo hay link, usa el comentario disponible y baja la confianza.</p>
           {% else %}
             <p class="small top-space">Configura OPENAI_API_KEY o usa CSAT_AI_PROVIDER=ollama en local para habilitar el botón. Las credenciales se usan solo en backend.</p>
           {% endif %}
@@ -123,7 +124,7 @@
 
         <div class="csat-rule-box top-space">
           <strong>Regla de cálculo usada</strong>
-          <p class="small top-space">CSAT original = positivas / ratings válidos. CSAT actualizado = positivas / (ratings válidos menos negativas con SÍ justificable). Las negativas con NO siguen contando. TAL VEZ permanece dentro del cálculo hasta definición posterior.</p>
+          <p class="small top-space">CSAT original = positivas / ratings válidos. CSAT actualizado = positivas / (ratings válidos menos negativas con SÍ justificable). Solo cuentan las decisiones confirmadas por una persona; las propuestas de la IA no excluyen nada. Las negativas con NO siguen contando. TAL VEZ permanece dentro del cálculo hasta definición posterior.</p>
         </div>
       </section>
 
@@ -241,6 +242,7 @@
                   <td>
                     {% if fila.ia_estado %}
                       <div class="csat-ai-note">
+                        <strong>Propuesta IA: {{ fila.ia_justificable or 'sin propuesta' }}{% if fila.ia_motivo %} · {{ fila.ia_motivo }}{% endif %}</strong>
                         <strong>Confianza {{ fila.ia_confianza }}%</strong>
                         <span>{{ fila.ia_explicacion }}</span>
                         {% if fila.ia_evidencia %}
@@ -256,9 +258,14 @@
                     <select name="justificable__{{ fila.row_id }}" data-row-estado>
                       <option value="" {% if not fila.justificable %}selected{% endif %}>Pendiente</option>
                       {% for opcion in contexto.justificable_options %}
-                        <option value="{{ opcion }}" {% if fila.justificable == opcion %}selected{% endif %}>{{ opcion }}</option>
+                        <option value="{{ opcion }}" {% if fila.justificable == opcion %}selected{% endif %}>{{ 'SÍ (no atribuible al agente)' if opcion == 'SÍ' else opcion }}</option>
                       {% endfor %}
                     </select>
+                    {% if fila.origen_decision == 'humana' %}
+                      <span class="csat-origin-badge">Decisión humana</span>
+                    {% elif fila.origen_decision == 'ia_aceptada' %}
+                      <span class="csat-origin-badge">Propuesta IA aceptada</span>
+                    {% endif %}
                   </td>
                   <td>
                     <textarea name="comentario_auditor__{{ fila.row_id }}" placeholder="Contexto del auditor">{{ fila.comentario_auditor }}</textarea>

@@ -406,6 +406,9 @@ def construir_filas_desde_dataframe(df, columnas_resueltas):
                 "ia_modelo": "",
                 "ia_fecha": "",
                 "ia_fuente": "",
+                "ia_justificable": "",
+                "ia_motivo": "",
+                "origen_decision": "",
             }
         )
         filas.append(item)
@@ -716,18 +719,18 @@ def aplicar_resultado_ia(fila, resultado, modelo):
     explicacion = limitar_texto(resultado.get("explicacion"), 900)
     evidencia = limitar_texto(resultado.get("evidencia"), 700)
 
-    fila["justificable"] = justificable
-    fila["comentario_auditor"] = f"IA: {explicacion}" if explicacion else "IA: sin explicación"
-    fila["motivo_inconformidad"] = motivo
-    fila["estado_auditoria"] = justificable
-    fila["csat_flag"] = calcular_flag_csat(fila.get("tipo_rating"), justificable)
+    fila["ia_justificable"] = justificable
+    fila["ia_motivo"] = motivo
     fila["ia_estado"] = "sugerida"
     fila["ia_confianza"] = formatear_porcentaje(confianza * 100)
     fila["ia_explicacion"] = explicacion
     fila["ia_evidencia"] = evidencia
     fila["ia_modelo"] = modelo
     fila["ia_fecha"] = datetime.utcnow().isoformat()
-    fila["ia_fuente"] = "transcripcion_csv" if fila.get("transcripcion_conversacion") else "comentario_csv_sin_transcript"
+    if fila.get("survey_id") and fila.get("transcripcion_conversacion"):
+        fila["ia_fuente"] = "transcripcion_chatwoot"
+    else:
+        fila["ia_fuente"] = "transcripcion_csv" if fila.get("transcripcion_conversacion") else "comentario_csv_sin_transcript"
 
 
 def auditar_estado_con_ia(estado):
@@ -738,7 +741,8 @@ def auditar_estado_con_ia(estado):
     candidatos = [
         fila for fila in estado.get("rows", [])
         if fila.get("tipo_rating") == "Negativo"
-        and not fila.get("justificable")
+        and not fila.get("ia_justificable")
+        and fila.get("origen_decision") != "humana"
     ][:config["max_cases"]]
 
     if not candidatos:
@@ -796,13 +800,36 @@ def actualizar_estado_desde_formulario(estado, form):
         if motivo and motivo not in MOTIVOS_INCONFORMIDAD:
             motivo = ""
 
+        cambio = (
+            justificable != fila.get("justificable", "")
+            or motivo != fila.get("motivo_inconformidad", "")
+            or comentario_auditor != fila.get("comentario_auditor", "")
+        )
+
         fila["justificable"] = justificable
         fila["comentario_auditor"] = comentario_auditor
         fila["motivo_inconformidad"] = motivo
         fila["estado_auditoria"] = justificable or "pendiente"
         fila["csat_flag"] = calcular_flag_csat(fila.get("tipo_rating"), justificable)
+        if cambio:
+            fila["origen_decision"] = "humana" if justificable else ""
 
     return estado
+
+
+def aceptar_propuestas_ia(estado):
+    aceptadas = 0
+    for fila in estado.get("rows", []):
+        propuesta = fila.get("ia_justificable")
+        if not propuesta or fila.get("justificable"):
+            continue
+        fila["justificable"] = propuesta
+        fila["motivo_inconformidad"] = fila.get("ia_motivo", "")
+        fila["origen_decision"] = "ia_aceptada"
+        fila["estado_auditoria"] = propuesta
+        fila["csat_flag"] = calcular_flag_csat(fila.get("tipo_rating"), propuesta)
+        aceptadas += 1
+    return aceptadas
 
 
 def inferir_periodo(filas):
@@ -1106,6 +1133,9 @@ def construir_dataframe_exportable(filas, columnas_originales):
                 "ia_modelo": fila.get("ia_modelo", ""),
                 "ia_fecha": fila.get("ia_fecha", ""),
                 "ia_fuente": fila.get("ia_fuente", ""),
+                "ia_justificable": fila.get("ia_justificable", ""),
+                "ia_motivo": fila.get("ia_motivo", ""),
+                "origen_decision": fila.get("origen_decision", ""),
             }
         )
         registros.append(item)
@@ -1195,6 +1225,8 @@ def construir_reporte_ia_markdown(estado):
                     f"- Motivo: {fila.get('motivo_inconformidad') or 'sin motivo'}",
                     f"- Comentario cliente: {fila.get('comentario') or 'sin comentario'}",
                     f"- Comentario auditor: {fila.get('comentario_auditor') or 'sin comentario'}",
+                    f"- Propuesta IA: {fila.get('ia_justificable') or 'sin propuesta'} | {fila.get('ia_motivo') or 'sin motivo'}",
+                    f"- Origen de la decisión: {fila.get('origen_decision') or 'sin decidir'}",
                     f"- Link: {fila.get('enlace_conversacion') or 'sin enlace'}",
                     "",
                 ]
@@ -1262,6 +1294,14 @@ def auditoria_csat():
                             mensaje = f"IA auditó {auditadas} negativa(s) pendiente(s). Revisa y confirma o corrige la tabla."
                         if advertencias_ia:
                             advertencia = " ".join(advertencias_ia)
+                        contexto_analisis = construir_contexto_analisis(estado)
+                    elif accion == "aceptar_propuestas_ia":
+                        aceptadas = aceptar_propuestas_ia(estado)
+                        guardar_analisis(estado)
+                        if aceptadas:
+                            mensaje = f"Se aceptaron {aceptadas} propuesta(s) de la IA como decisión confirmada."
+                        else:
+                            advertencia = "No hay propuestas de la IA pendientes de aceptar."
                         contexto_analisis = construir_contexto_analisis(estado)
                     elif accion == "descargar_csv_auditado":
                         df_export = construir_dataframe_exportable(

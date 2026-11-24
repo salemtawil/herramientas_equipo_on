@@ -5104,3 +5104,12 @@ th {
   margin: 10px 0 4px;
   font-size: 0.9rem;
 }
+
+.csat-origin-badge {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(100, 116, 139, 0.15);
+  font-size: 0.75rem;
+}
