@@ -10,6 +10,7 @@ from datetime import date, datetime, timedelta, timezone
 
 TABLA_PERIODOS = "csat_audit_periods"
 TABLA_NEGATIVOS = "csat_audit_negatives"
+RETENCION_SEMANAS = 12
 
 CAMPOS_RESUMEN = (
     "total_encuestas",
@@ -45,6 +46,14 @@ def _fila_periodo(tipo_periodo, inicio, fin, resumen):
         if campo in (resumen or {}):
             fila[campo] = copy.deepcopy(resumen[campo])
     return fila
+
+
+def _uuid_valido(valor):
+    try:
+        uuid.UUID(str(valor))
+    except ValueError:
+        return False
+    return True
 
 
 def _fecha_corte(hoy, semanas):
@@ -99,6 +108,8 @@ class SupabaseCsatStore:
         return self._uno(self.client.table(TABLA_PERIODOS).upsert(fila, on_conflict="fecha_inicio,fecha_fin"))
 
     def obtener_periodo(self, period_id):
+        if not _uuid_valido(period_id):
+            return None
         return self._uno(self.client.table(TABLA_PERIODOS).select("*").eq("id", period_id).limit(1))
 
     def buscar_periodo(self, inicio, fin):
@@ -146,7 +157,7 @@ class SupabaseCsatStore:
             )
 
     # Retención
-    def borrar_vencidos(self, hoy, semanas=12):
+    def borrar_vencidos(self, hoy, semanas=RETENCION_SEMANAS):
         """Borra períodos terminados hace más de `semanas`; sus negativos caen por cascade."""
         borrados = self._execute(
             self.client.table(TABLA_PERIODOS).delete().lt("fecha_fin", _fecha_corte(hoy, semanas))
@@ -173,7 +184,7 @@ class MemoriaCsatStore:
         return copy.deepcopy(periodo)
 
     def obtener_periodo(self, period_id):
-        periodo = self.periodos.get(period_id)
+        periodo = self.periodos.get(period_id) if _uuid_valido(period_id) else None
         return copy.deepcopy(periodo) if periodo else None
 
     def buscar_periodo(self, inicio, fin):
@@ -196,7 +207,7 @@ class MemoriaCsatStore:
             nuevos[int(fila["survey_id"])] = dict(copy.deepcopy(fila), period_id=period_id, updated_at=_ahora_iso())
         self.negativos_por_periodo[period_id] = nuevos
 
-    def borrar_vencidos(self, hoy, semanas=12):
+    def borrar_vencidos(self, hoy, semanas=RETENCION_SEMANAS):
         corte = _fecha_corte(hoy, semanas)
         vencidos = [pid for pid, p in self.periodos.items() if p["fecha_fin"] < corte]
         for pid in vencidos:
