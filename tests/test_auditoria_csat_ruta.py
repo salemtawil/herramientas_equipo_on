@@ -255,14 +255,18 @@ def test_auditar_con_ia_carga_transcripcion_solo_de_candidatos(cliente, store, c
     monkeypatch.setattr(herramienta, "auditar_lote_con_proveedor", ia_falsa)
     html = _traer(cliente).get_data(as_text=True)
     period_id = _hidden(html, "period_id")
-    cliente.post(
+    guardado = cliente.post(
         "/auditoria-csat",
         data={
-            "accion": "auditar_con_ia",
+            "accion": "guardar_auditoria",
             "analysis_id": _hidden(html, "analysis_id"),
             "period_id": period_id,
             "justificable__2": "NO",
         },
+    ).get_data(as_text=True)
+    cliente.post(
+        "/auditoria-csat",
+        data={"accion": "auditar_con_ia", "analysis_id": _hidden(guardado, "analysis_id"), "period_id": period_id},
     )
     assert vistos == [("1", True)]
     assert chatwoot.mensajes_pedidos == [501]
@@ -459,3 +463,104 @@ def test_ver_estado_no_borra_decisiones(cliente, store, chatwoot):
     ).get_data(as_text=True)
     assert re.search(r'<option value="NO"\s+selected', vista)
     assert store.negativos(_hidden(html, "period_id"))[0]["decision_final"] == "NO"
+
+
+# --- Acción decidir: una decisión a la vez ---
+JSON = {"Accept": "application/json"}
+
+
+def _decidir(cliente, analysis_id, period_id, row_id, justificable="SÍ", json=True, **extra):
+    datos = {
+        "accion": "decidir",
+        "analysis_id": analysis_id,
+        "period_id": period_id,
+        "row_id": row_id,
+        "justificable": justificable,
+        "motivo": herramienta.MOTIVOS_INCONFORMIDAD[0],
+        "nota": "n",
+    }
+    datos.update(extra)
+    return cliente.post("/auditoria-csat", data=datos, headers=JSON if json else {})
+
+
+def _dos_negativos(cliente, chatwoot):
+    chatwoot.encuestas = [enc(1, rating=1), enc(2, rating=1)]
+    html = _traer(cliente).get_data(as_text=True)
+    return _hidden(html, "analysis_id"), _hidden(html, "period_id")
+
+
+def test_decidir_json_guarda_una_fila(cliente, store, chatwoot):
+    aid, pid = _dos_negativos(cliente, chatwoot)
+    r = _decidir(cliente, aid, pid, "1", motivo="CAPTCHA")
+    datos = r.get_json()
+    assert datos["ok"] and datos["ficha"]["confirmada"]
+    assert datos["kpis"]["por_confirmar"] == 1
+    assert datos["pestanas"]["confirmados"] == 1
+    por_id = {str(n["survey_id"]): n for n in store.negativos(pid)}
+    assert por_id["1"]["decision_final"] == "SÍ" and por_id["1"]["origen_decision"] == "humana"
+    assert not por_id["2"].get("decision_final")
+
+
+def test_dos_decisiones_encadenadas(cliente, store, chatwoot):
+    aid, pid = _dos_negativos(cliente, chatwoot)
+    primera = _decidir(cliente, aid, pid, "1").get_json()
+    segunda = _decidir(cliente, primera["analysis_id"], pid, "2", "NO").get_json()
+    assert segunda["ok"] and segunda["pestanas"]["confirmados"] == 2
+    por_id = {str(n["survey_id"]): n for n in store.negativos(pid)}
+    assert por_id["1"]["decision_final"] == "SÍ" and por_id["2"]["decision_final"] == "NO"
+
+
+def test_decidir_invalido_no_cambia_nada(cliente, store, chatwoot):
+    chatwoot.encuestas = [enc(1, rating=1), enc(2, rating=5)]
+    html = _traer(cliente).get_data(as_text=True)
+    aid, pid = _hidden(html, "analysis_id"), _hidden(html, "period_id")
+    antes = store.negativos(pid)
+    for row_id, justificable in (("999", "SÍ"), ("2", "SÍ"), ("1", "")):
+        datos = _decidir(cliente, aid, pid, row_id, justificable).get_json()
+        assert datos["ok"] is False and datos["error"] and datos["analysis_id"] == aid
+    assert store.negativos(pid) == antes
+    assert _decidir(cliente, aid, pid, "1").get_json()["ok"]
+
+
+def test_decidir_sin_js_recarga_con_ficha_confirmada(cliente, store, chatwoot):
+    aid, pid = _dos_negativos(cliente, chatwoot)
+    r = _decidir(cliente, aid, pid, "1", json=False)
+    assert r.status_code == 200 and "Confirmado" in r.get_data(as_text=True)
+
+
+def test_decidir_con_supabase_caido_conserva_la_decision(cliente, store, chatwoot, monkeypatch):
+    aid, pid = _dos_negativos(cliente, chatwoot)
+
+    def falla(*args, **kwargs):
+        raise RuntimeError("supabase caído")
+
+    monkeypatch.setattr(store, "reemplazar_negativos", falla)
+    datos = _decidir(cliente, aid, pid, "1").get_json()
+    assert datos["ok"] and datos["advertencia"]
+    with app.app_context():
+        estado = herramienta.cargar_analisis(datos["analysis_id"])
+    assert next(f for f in estado["rows"] if f["row_id"] == "1")["justificable"] == "SÍ"
+
+
+def test_acciones_sin_filas_no_borran_decisiones(cliente, store, chatwoot):
+    aid, pid = _dos_negativos(cliente, chatwoot)
+    datos = _decidir(cliente, aid, pid, "1").get_json()
+    r = cliente.post(
+        "/auditoria-csat",
+        data={"accion": "aceptar_propuestas_ia", "analysis_id": datos["analysis_id"], "period_id": pid},
+    )
+    assert store.negativos(pid)[0]["decision_final"] == "SÍ"
+    r = cliente.post(
+        "/auditoria-csat",
+        data={"accion": "descargar_csv_auditado", "analysis_id": _hidden(r.get_data(as_text=True), "analysis_id"), "period_id": pid},
+    )
+    assert r.status_code == 200 and "SÍ" in r.get_data(as_text=True)
+    assert store.negativos(pid)[0]["decision_final"] == "SÍ"
+
+
+def test_decidir_no_aplica_retencion(cliente, store, chatwoot, monkeypatch):
+    aid, pid = _dos_negativos(cliente, chatwoot)
+    llamadas = []
+    monkeypatch.setattr(store, "borrar_vencidos", lambda hoy: llamadas.append(hoy))
+    assert _decidir(cliente, aid, pid, "1").get_json()["ok"]
+    assert llamadas == []

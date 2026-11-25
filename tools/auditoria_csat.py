@@ -22,7 +22,7 @@ from utils.auditoria_csat_chatwoot import (
 )
 from utils.auditoria_csat_informe import bloque_desde_estado
 from utils.auditoria_csat_store import AuditoriaCsatConfigError
-from utils.auditoria_csat_vista import construir_vista
+from utils.auditoria_csat_vista import TEXTO_DECISION, construir_vista
 from utils.chatwoot_reportes import ChatwootClient, _obtener_timezone, _timezone, construir_rango_chatwoot_fechas
 from utils.csat_periodos import TIPOS_PERIODO, formatear_periodo, resolver_periodo
 from utils.archivos import _leer_csv_desde_bytes
@@ -805,6 +805,55 @@ def actualizar_estado_desde_formulario(estado, form):
     return estado
 
 
+def aplicar_decision(estado, row_id, justificable, motivo, nota):
+    """Aplica la decisión humana a UN negativo. Devuelve '' si aplicó o el error en español."""
+    fila = next(
+        (
+            f
+            for f in estado.get("rows", [])
+            if str(f.get("row_id")) == str(row_id) and f.get("tipo_rating") == "Negativo"
+        ),
+        None,
+    )
+    if fila is None:
+        return "No se encontró ese negativo."
+    decision = normalizar_justificable(justificable)
+    if not decision:
+        return "Elige una decisión válida."
+    motivo = limpiar_texto(motivo)
+    if motivo not in MOTIVOS_INCONFORMIDAD:
+        motivo = ""
+    fila["justificable"] = decision
+    fila["motivo_inconformidad"] = motivo
+    fila["comentario_auditor"] = limpiar_texto(nota)[:500]
+    fila["origen_decision"] = "humana"
+    fila["estado_auditoria"] = decision
+    fila["csat_flag"] = calcular_flag_csat(fila.get("tipo_rating"), decision)
+    return ""
+
+
+def estado_decision(estado, row_id):
+    return next(
+        (f.get("justificable", "") for f in estado.get("rows", []) if str(f.get("row_id")) == str(row_id)), ""
+    )
+
+
+def respuesta_decision(estado, row_id, ok, error, advertencia, analysis_id):
+    filas = estado.get("rows", []) if estado else []
+    vista = construir_vista(filas, construir_metricas(filas))
+    ficha = next((f for f in vista["fichas"] if str(f.get("row_id")) == str(row_id)), None)
+    return {
+        "ok": ok,
+        "error": error,
+        "advertencia": advertencia,
+        "analysis_id": analysis_id,
+        "ficha": ficha,
+        "kpis": vista["kpis"],
+        "pasos": vista["pasos"],
+        "pestanas": vista["pestanas"],
+    }
+
+
 def aceptar_propuestas_ia(estado):
     aceptadas = 0
     for fila in estado.get("rows", []):
@@ -1308,14 +1357,15 @@ def construir_estado_chatwoot(filas, tipo_periodo, inicio, fin, prueba):
     }
 
 
-def sincronizar_periodo(estado):
+def sincronizar_periodo(estado, retencion=True):
     """Guarda resumen y negativos del período en Supabase. Nunca en modo prueba."""
     if not es_modo_guardado(estado):
         return
     store = obtener_store_csat()
     filas = estado.get("rows", [])
     # La retención va antes del guardado para no borrar el período recién guardado.
-    store.borrar_vencidos(hoy_chatwoot())
+    if retencion:
+        store.borrar_vencidos(hoy_chatwoot())
     periodo = store.guardar_periodo(
         estado.get("tipo_periodo") or "personalizado",
         _fecha_de_periodo(estado["fecha_inicio"]),
@@ -1326,12 +1376,12 @@ def sincronizar_periodo(estado):
     estado["period_id"] = periodo["id"]
 
 
-def persistir_estado(estado):
+def persistir_estado(estado, retencion=True):
     """Guarda el estado temporal y, si corresponde, lo sincroniza. Devuelve una advertencia o ''."""
     advertencia = ""
     if es_modo_guardado(estado):
         try:
-            sincronizar_periodo(estado)
+            sincronizar_periodo(estado, retencion=retencion)
         except AuditoriaCsatConfigError as exc:
             advertencia = mensaje_store_no_configurado(exc)
         except Exception as exc:
@@ -1514,6 +1564,7 @@ def auditoria_csat():
         "prueba": bool(limpiar_texto(request.values.get("prueba"))),
     }
 
+    accion = ""
     try:
         if request.method == "POST":
             accion = limpiar_texto(request.form.get("accion")) or "analizar_csv"
@@ -1539,8 +1590,33 @@ def auditoria_csat():
                 elif accion == "ver_estado":
                     # Solo muestra el estado recibido (p. ej. al terminar la auditoría con IA), sin tocar decisiones.
                     contexto_analisis = construir_contexto_analisis(estado)
+                elif accion == "decidir":
+                    row_id = limpiar_texto(request.form.get("row_id"))
+                    error = aplicar_decision(
+                        estado,
+                        row_id,
+                        request.form.get("justificable"),
+                        request.form.get("motivo"),
+                        request.form.get("nota"),
+                    )
+                    analysis_id = limpiar_texto(request.form.get("analysis_id"))
+                    if not error:
+                        advertencia = persistir_estado(estado, retencion=False)
+                        analysis_id = estado.get("analysis_id") or analysis_id
+                    if quiere_json():
+                        return jsonify(
+                            respuesta_decision(
+                                estado, row_id, not error, error, "" if error else advertencia, analysis_id
+                            )
+                        )
+                    if error:
+                        advertencia = error
+                    else:
+                        mensaje = f"Confirmado: {TEXTO_DECISION.get(estado_decision(estado, row_id), '')}."
+                    contexto_analisis = construir_contexto_analisis(estado)
                 else:
-                    estado = actualizar_estado_desde_formulario(estado, request.form)
+                    if accion == "guardar_auditoria":
+                        estado = actualizar_estado_desde_formulario(estado, request.form)
                     advertencia = persistir_estado(estado)
 
                     if accion == "guardar_auditoria":
@@ -1601,6 +1677,19 @@ def auditoria_csat():
     except Exception as exc:
         logger.exception("Error procesando auditoria_csat")
         advertencia = mensaje_error_publico(exc, "No se pudo procesar la auditoría CSAT")
+
+    if request.method == "POST" and accion == "decidir" and quiere_json():
+        # Fallo antes de poder decidir (estado perdido, Supabase no configurado, etc.).
+        return jsonify(
+            respuesta_decision(
+                estado,
+                limpiar_texto(request.form.get("row_id")),
+                False,
+                advertencia or "No se pudo guardar la decisión.",
+                "",
+                limpiar_texto(request.form.get("analysis_id")),
+            )
+        )
 
     if request.method == "POST" and quiere_json():
         # El paso a paso de la IA espera JSON también cuando algo falla antes de auditar.
