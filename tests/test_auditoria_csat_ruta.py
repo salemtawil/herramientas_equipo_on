@@ -245,7 +245,7 @@ def test_retraer_borra_negativo_que_subio(cliente, store, chatwoot):
 
 def test_auditar_con_ia_carga_transcripcion_solo_de_candidatos(cliente, store, chatwoot, monkeypatch):
     chatwoot.encuestas = [enc(1, rating=1), enc(2, rating=2), enc(3, rating=5)]
-    monkeypatch.setenv("OPENAI_API_KEY", "clave-de-prueba")
+    monkeypatch.setenv("AUDITORIA_CHATS_AI_API_KEY", "clave-de-prueba")
     vistos = []
 
     def ia_falsa(filas, config):
@@ -274,7 +274,7 @@ def test_auditar_con_ia_carga_transcripcion_solo_de_candidatos(cliente, store, c
 
 def test_auditar_con_ia_no_deja_transcripciones_en_el_temporal(cliente, store, chatwoot, monkeypatch):
     chatwoot.encuestas = [enc(1, rating=1), enc(2, rating=2)]
-    monkeypatch.setenv("OPENAI_API_KEY", "clave-de-prueba")
+    monkeypatch.setenv("AUDITORIA_CHATS_AI_API_KEY", "clave-de-prueba")
     vistos = []
 
     def ia_falsa(filas, config):

@@ -112,7 +112,7 @@ class AuditoriaCsatPropuestaIaTests(unittest.TestCase):
 
         with mock.patch.object(csat, "auditar_lote_con_proveedor", falso), mock.patch.object(
             csat, "obtener_ia_config",
-            return_value={"provider": "ollama", "api_key": "", "model": "m", "max_cases": 10, "ollama_base_url": ""},
+            return_value={"activa": True, "api_key": "k", "model": "m", "max_cases": 10},
         ):
             auditadas, _ = auditar_estado_con_ia(estado)
         self.assertEqual(0, auditadas)
@@ -143,3 +143,71 @@ class ParsearFechaIsoTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class IaCompartidaTests(unittest.TestCase):
+    """La Auditoría CSAT usa la misma IA que la Auditoría de chats (AUDITORIA_CHATS_AI_*)."""
+
+    def test_config_usa_la_ia_de_auditoria_de_chats(self):
+        with mock.patch.dict(os.environ, {"AUDITORIA_CHATS_AI_API_KEY": "k", "AUDITORIA_CHATS_AI_MODEL": "modelo-x", "CSAT_AI_MAX_CASES": "4"}):
+            config = csat.obtener_ia_config()
+        self.assertTrue(csat.ia_disponible(config))
+        self.assertEqual("modelo-x", config["model"])
+        self.assertEqual(4, config["max_cases"])
+
+    def test_sin_clave_avisa_y_no_llama(self):
+        estado = {"rows": [fila_negativa()]}
+        with mock.patch.dict(os.environ, {}, clear=False), mock.patch.object(csat, "completar_json") as llamada:
+            os.environ.pop("AUDITORIA_CHATS_AI_API_KEY", None)
+            auditadas, avisos = auditar_estado_con_ia(estado)
+        self.assertEqual(0, auditadas)
+        self.assertIn("AUDITORIA_CHATS_AI_API_KEY", avisos[0])
+        llamada.assert_not_called()
+
+    def test_lote_usa_conector_compartido_y_aplica_propuesta(self):
+        estado = {"rows": [fila_negativa()]}
+        config = {"activa": True, "api_key": "k", "model": "principal", "model_respaldo": "", "max_cases": 10, "base_url": "http://ia.local"}
+        respuesta = {"resultados": [{"row_id": "0", "justificable": "SI", "motivo_inconformidad": "CAPTCHA", "confianza": 0.7, "explicacion": "e", "evidencia": "v"}]}
+        with mock.patch.object(csat, "obtener_ia_config", return_value=config), mock.patch.object(
+            csat, "completar_json", return_value=respuesta
+        ) as llamada:
+            auditadas, avisos = auditar_estado_con_ia(estado)
+        self.assertEqual((1, []), (auditadas, avisos))
+        mensajes = llamada.call_args.args[0]
+        self.assertEqual(["system", "user"], [m["role"] for m in mensajes])
+        fila = estado["rows"][0]
+        self.assertEqual(("SÍ", "CAPTCHA", "principal"), (fila["ia_justificable"], fila["ia_motivo"], fila["ia_modelo"]))
+        self.assertEqual("", fila["justificable"])
+
+    def test_usa_modelo_de_respaldo_si_el_principal_no_tiene_cupo(self):
+        from utils.ia_chat import IARateLimitError
+
+        estado = {"rows": [fila_negativa()]}
+        config = {"activa": True, "api_key": "k", "model": "principal", "model_respaldo": "respaldo", "max_cases": 10, "base_url": "http://ia.local"}
+        respuesta = {"resultados": [{"row_id": "0", "justificable": "NO", "motivo_inconformidad": "OTRO", "confianza": 0.5}]}
+        modelos = []
+
+        def falso(mensajes, cfg, timeout=60):
+            modelos.append(cfg["model"])
+            if cfg["model"] == "principal":
+                raise IARateLimitError("Límite diario de la IA alcanzado; retoma mañana.", diario=True)
+            return respuesta
+
+        with mock.patch.object(csat, "obtener_ia_config", return_value=config), mock.patch.object(csat, "completar_json", falso):
+            auditadas, _ = auditar_estado_con_ia(estado)
+        self.assertEqual(["principal", "respaldo"], modelos)
+        self.assertEqual(1, auditadas)
+        self.assertEqual("respaldo", estado["rows"][0]["ia_modelo"])
+
+    def test_limite_sin_respaldo_da_aviso_en_espanol(self):
+        from utils.ia_chat import IARateLimitError
+
+        estado = {"rows": [fila_negativa()]}
+        config = {"activa": True, "api_key": "k", "model": "principal", "model_respaldo": "", "max_cases": 10, "base_url": "http://ia.local"}
+        with mock.patch.object(csat, "obtener_ia_config", return_value=config), mock.patch.object(
+            csat, "completar_json", side_effect=IARateLimitError("Límite diario de la IA alcanzado; retoma mañana.", diario=True)
+        ):
+            auditadas, avisos = auditar_estado_con_ia(estado)
+        self.assertEqual(0, auditadas)
+        self.assertIn("Límite diario", avisos[0])
+        self.assertIn("CSAT_AI_MAX_CASES", avisos[0])

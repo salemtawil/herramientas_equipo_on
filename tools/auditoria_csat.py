@@ -8,7 +8,6 @@ import uuid
 from datetime import date, datetime
 
 import pandas as pd
-import requests
 from flask import Blueprint, Response, render_template, request
 
 from utils import auditoria_csat_store
@@ -30,6 +29,8 @@ from utils.errores import mensaje_error_publico
 from utils.estado_temporal import cargar_json_temporal
 from utils.estado_temporal import guardar_json_temporal
 from utils.estado_temporal import limpiar_estados_temporales_expirados
+from utils.ia_chat import IAConfigError, IARateLimitError, IARespuestaError, completar_json
+from utils.ia_chat import obtener_config_ia as obtener_config_ia_compartida
 
 auditoria_csat_bp = Blueprint("auditoria_csat", __name__)
 logger = logging.getLogger(__name__)
@@ -171,13 +172,9 @@ RATING_CATEGORIAS = {
 MAX_CASOS_REPORTE_IA = 8
 ANALYSIS_TTL_HOURS = 24
 STATE_NAMESPACE = "auditoria_csat"
-OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
-OPENAI_CSAT_MODEL_DEFAULT = "gpt-4.1-mini"
-OLLAMA_BASE_URL_DEFAULT = "http://127.0.0.1:11434"
-OLLAMA_CSAT_MODEL_DEFAULT = "qwen2.5:7b"
-OPENAI_CSAT_MAX_CASES_DEFAULT = 10
-OPENAI_CSAT_MAX_TRANSCRIPT_CHARS = 6000
-OPENAI_REQUEST_TIMEOUT = 45
+CSAT_IA_MAX_CASOS_DEFAULT = 10
+CSAT_IA_MAX_TRANSCRIPT_CHARS = 6000
+CSAT_IA_TIMEOUT = 45
 
 
 def normalizar_texto(valor):
@@ -452,30 +449,12 @@ def construir_estado_inicial(df, nombre_archivo):
 
 
 def obtener_ia_config():
+    """Misma IA que la Auditoría de chats (AUDITORIA_CHATS_AI_*), más el tope de casos por clic."""
     try:
-        max_cases = int(os.getenv("OPENAI_CSAT_MAX_CASES", OPENAI_CSAT_MAX_CASES_DEFAULT))
+        max_cases = int(os.getenv("CSAT_AI_MAX_CASES", CSAT_IA_MAX_CASOS_DEFAULT))
     except (TypeError, ValueError):
-        max_cases = OPENAI_CSAT_MAX_CASES_DEFAULT
-
-    provider = normalizar_texto(os.getenv("CSAT_AI_PROVIDER")) or "openai"
-    if provider not in {"openai", "ollama"}:
-        provider = "openai"
-
-    return {
-        "provider": provider,
-        "api_key": limpiar_texto(os.getenv("OPENAI_API_KEY")),
-        "model": (
-            limpiar_texto(os.getenv("OLLAMA_CSAT_MODEL")) or OLLAMA_CSAT_MODEL_DEFAULT
-            if provider == "ollama"
-            else limpiar_texto(os.getenv("OPENAI_CSAT_MODEL")) or OPENAI_CSAT_MODEL_DEFAULT
-        ),
-        "ollama_base_url": limpiar_texto(os.getenv("OLLAMA_BASE_URL")) or OLLAMA_BASE_URL_DEFAULT,
-        "max_cases": max(1, max_cases),
-    }
-
-
-def obtener_openai_config():
-    return obtener_ia_config()
+        max_cases = CSAT_IA_MAX_CASOS_DEFAULT
+    return dict(obtener_config_ia_compartida(), max_cases=max(1, max_cases))
 
 
 def limitar_texto(valor, max_chars):
@@ -488,7 +467,7 @@ def limitar_texto(valor, max_chars):
 def construir_caso_auditoria_ia(fila):
     transcript = limitar_texto(
         fila.get("transcripcion_conversacion"),
-        OPENAI_CSAT_MAX_TRANSCRIPT_CHARS,
+        CSAT_IA_MAX_TRANSCRIPT_CHARS,
     )
     fuente = "transcripcion_csv" if transcript else "comentario_csv_sin_transcript"
 
@@ -518,21 +497,6 @@ def construir_instrucciones_auditoria_ia():
         "Si no hay transcripción completa, dilo en la explicación y baja la confianza. "
         "Devuelve un resultado por cada row_id recibido."
     )
-
-
-def construir_payload_auditoria_ia(fila):
-    contenido = construir_caso_auditoria_ia(fila)
-    instrucciones = (
-        "Audita una valoración CSAT negativa de soporte. "
-        "Decide si debe excluirse del CSAT del agente. "
-        "Usa SI cuando el negativo parece injusto, no atribuible al agente, causado por sistema/política/cliente sin solicitud clara, o sin evidencia suficiente contra el agente. "
-        "Usa NO cuando la conversación muestra falla atribuible al agente o mala gestión que justifica contar el negativo. "
-        "Usa TAL VEZ cuando la evidencia es ambigua y requiere revisión humana. "
-        "Elige un motivo exacto de la lista permitida. "
-        "Si no hay transcripción completa, dilo en la explicación y baja la confianza."
-    )
-
-    return instrucciones + "\n\nCaso:\n" + json.dumps(contenido, ensure_ascii=False, indent=2)
 
 
 def construir_payload_lote_auditoria_ia(filas):
@@ -599,124 +563,36 @@ def esquema_lote_auditoria_ia():
     }
 
 
-def extraer_texto_respuesta_openai(data):
-    if data.get("output_text"):
-        return data["output_text"]
-
-    textos = []
-    for item in data.get("output", []):
-        for contenido in item.get("content", []):
-            texto = contenido.get("text")
-            if texto:
-                textos.append(texto)
-    return "\n".join(textos).strip()
-
-
-def auditar_fila_con_ia(fila, config):
-    payload = {
-        "model": config["model"],
-        "input": [
-            {
-                "role": "system",
-                "content": "Eres auditor de calidad CSAT. Responde solo con JSON válido según el esquema.",
-            },
-            {
-                "role": "user",
-                "content": construir_payload_auditoria_ia(fila),
-            },
-        ],
-        "text": {
-            "format": {
-                "type": "json_schema",
-                "name": "auditoria_csat",
-                "strict": True,
-                "schema": esquema_auditoria_ia(),
-            }
+def mensajes_auditoria_ia(filas):
+    esquema = json.dumps(esquema_lote_auditoria_ia(), ensure_ascii=False)
+    return [
+        {
+            "role": "system",
+            "content": (
+                "Eres auditor de calidad CSAT. Responde solo con un objeto JSON válido "
+                f"que cumpla este esquema: {esquema}"
+            ),
         },
-        "max_output_tokens": 600,
-    }
-
-    response = requests.post(
-        OPENAI_RESPONSES_URL,
-        headers={
-            "Authorization": f"Bearer {config['api_key']}",
-            "Content-Type": "application/json",
-        },
-        json=payload,
-        timeout=OPENAI_REQUEST_TIMEOUT,
-    )
-    response.raise_for_status()
-    texto = extraer_texto_respuesta_openai(response.json())
-    return json.loads(texto)
-
-
-def auditar_lote_con_ia(filas, config):
-    payload = {
-        "model": config["model"],
-        "input": [
-            {
-                "role": "system",
-                "content": "Eres auditor de calidad CSAT. Responde solo con JSON válido según el esquema.",
-            },
-            {
-                "role": "user",
-                "content": construir_payload_lote_auditoria_ia(filas),
-            },
-        ],
-        "text": {
-            "format": {
-                "type": "json_schema",
-                "name": "auditoria_csat_lote",
-                "strict": True,
-                "schema": esquema_lote_auditoria_ia(),
-            }
-        },
-        "max_output_tokens": max(1200, 450 * len(filas)),
-    }
-
-    response = requests.post(
-        OPENAI_RESPONSES_URL,
-        headers={
-            "Authorization": f"Bearer {config['api_key']}",
-            "Content-Type": "application/json",
-        },
-        json=payload,
-        timeout=OPENAI_REQUEST_TIMEOUT,
-    )
-    response.raise_for_status()
-    texto = extraer_texto_respuesta_openai(response.json())
-    data = json.loads(texto)
-    return data.get("resultados", [])
-
-
-def auditar_lote_con_ollama(filas, config):
-    base_url = config["ollama_base_url"].rstrip("/")
-    payload = {
-        "model": config["model"],
-        "prompt": construir_payload_lote_auditoria_ia(filas),
-        "system": "Eres auditor de calidad CSAT. Responde solo con JSON válido según el esquema.",
-        "format": esquema_lote_auditoria_ia(),
-        "stream": False,
-        "options": {
-            "temperature": 0,
-        },
-    }
-
-    response = requests.post(
-        f"{base_url}/api/generate",
-        json=payload,
-        timeout=OPENAI_REQUEST_TIMEOUT,
-    )
-    response.raise_for_status()
-    texto = limpiar_texto(response.json().get("response"))
-    data = json.loads(texto)
-    return data.get("resultados", [])
+        {"role": "user", "content": construir_payload_lote_auditoria_ia(filas)},
+    ]
 
 
 def auditar_lote_con_proveedor(filas, config):
-    if config["provider"] == "ollama":
-        return auditar_lote_con_ollama(filas, config)
-    return auditar_lote_con_ia(filas, config)
+    """Audita el lote con la IA compartida; si el modelo principal está saturado o sin cupo, usa el de respaldo."""
+    mensajes = mensajes_auditoria_ia(filas)
+    modelo = config["model"]
+    try:
+        data = completar_json(mensajes, config, timeout=CSAT_IA_TIMEOUT)
+    except IARateLimitError:
+        if not config.get("model_respaldo"):
+            raise
+        modelo = config["model_respaldo"]
+        data = completar_json(mensajes, dict(config, model=modelo), timeout=CSAT_IA_TIMEOUT)
+
+    resultados = data.get("resultados")
+    if not isinstance(resultados, list):
+        raise IARespuestaError("La IA no devolvió la lista de resultados.")
+    return [dict(resultado, _modelo=modelo) for resultado in resultados if isinstance(resultado, dict)]
 
 
 def aplicar_resultado_ia(fila, resultado, modelo):
@@ -752,7 +628,7 @@ def aplicar_resultado_ia(fila, resultado, modelo):
 
 
 def ia_disponible(config):
-    return config["provider"] == "ollama" or bool(config["api_key"])
+    return bool(config.get("activa"))
 
 
 def candidatos_para_ia(filas, max_cases):
@@ -767,8 +643,11 @@ def candidatos_para_ia(filas, max_cases):
 
 def auditar_estado_con_ia(estado):
     config = obtener_ia_config()
-    if config["provider"] == "openai" and not config["api_key"]:
-        return 0, ["Configura OPENAI_API_KEY para usar la auditoría con IA."]
+    if not ia_disponible(config):
+        return 0, [
+            "Configura AUDITORIA_CHATS_AI_API_KEY (la misma IA de la Auditoría de chats) "
+            "para usar la auditoría con IA."
+        ]
 
     candidatos = candidatos_para_ia(estado.get("rows", []), config["max_cases"])
 
@@ -785,31 +664,15 @@ def auditar_estado_con_ia(estado):
             fila = filas_por_id.get(str(resultado.get("row_id")))
             if not fila:
                 continue
-            aplicar_resultado_ia(fila, resultado, config["model"])
+            aplicar_resultado_ia(fila, resultado, resultado.get("_modelo") or config["model"])
             auditadas += 1
-    except requests.exceptions.HTTPError as exc:
-        status_code = exc.response.status_code if exc.response is not None else None
-        if status_code in {401, 403}:
-            advertencias.append(
-                "OpenAI rechazó la credencial. Revisa que OPENAI_API_KEY sea una secret key válida, "
-                "que no tenga espacios/comillas extra, y reinicia Flask después de configurarla."
-            )
-        elif status_code == 429:
-            advertencias.append(
-                "OpenAI devolvió límite de uso o demasiadas solicitudes. "
-                "Intenta de nuevo en unos segundos, baja OPENAI_CSAT_MAX_CASES, o revisa los límites/crédito de tu cuenta."
-            )
-        else:
-            logger.exception("Error auditando lote CSAT con IA")
-            advertencias.append(mensaje_error_publico(exc, "No se pudo auditar el lote con IA"))
-    except requests.exceptions.ConnectionError:
-        if config["provider"] == "ollama":
-            advertencias.append(
-                "No se pudo conectar con Ollama. Verifica que Ollama esté abierto, "
-                f"que el modelo {config['model']} esté instalado, y que {config['ollama_base_url']} responda."
-            )
-        else:
-            advertencias.append("No se pudo conectar con el proveedor de IA.")
+    except IAConfigError as exc:
+        advertencias.append(str(exc))
+    except IARateLimitError as exc:
+        advertencias.append(f"{exc} Intenta de nuevo más tarde o baja CSAT_AI_MAX_CASES.")
+    except IARespuestaError:
+        logger.exception("Respuesta inválida de la IA en auditoría CSAT")
+        advertencias.append("La IA respondió con un formato inesperado. Intenta de nuevo.")
     except Exception as exc:
         logger.exception("Error auditando lote CSAT con IA")
         advertencias.append(mensaje_error_publico(exc, "No se pudo auditar el lote con IA"))
@@ -1118,8 +981,6 @@ def construir_contexto_analisis(estado):
         "warnings": estado.get("warnings", []),
         "ia_disponible": ia_disponible(ia_config),
         "ia_modelo": ia_config["model"],
-        "ia_provider": ia_config["provider"],
-        "ia_ollama_base_url": ia_config["ollama_base_url"],
         "metricas": metricas,
         "filas": filas,
         "resumen_agente": resumen_agente,
@@ -1464,7 +1325,7 @@ def preparar_transcripciones_ia(estado):
     candidatos = candidatos_para_ia(estado.get("rows", []), config["max_cases"])
     if not candidatos:
         return []
-    return cargar_transcripciones(candidatos, obtener_chatwoot(), _timezone(), OPENAI_CSAT_MAX_TRANSCRIPT_CHARS)
+    return cargar_transcripciones(candidatos, obtener_chatwoot(), _timezone(), CSAT_IA_MAX_TRANSCRIPT_CHARS)
 
 
 def listar_guardadas():

@@ -199,9 +199,9 @@
         <div class="csat-rule-box top-space">
           <strong>Auditoría asistida por IA</strong>
           {% if contexto.ia_disponible %}
-            <p class="small top-space">La IA usa {{ contexto.ia_provider }} / {{ contexto.ia_modelo }} y audita solo negativas pendientes. Solo propone: la decisión queda pendiente hasta que la confirmes o uses «Aceptar propuestas de la IA». Si el CSV incluye transcripción, la revisa; si solo hay link, usa el comentario disponible y baja la confianza.</p>
+            <p class="small top-space">La IA usa {{ contexto.ia_modelo }} (la misma configuración que la Auditoría de chats) y audita solo negativas pendientes. Solo propone: la decisión queda pendiente hasta que la confirmes o uses «Aceptar propuestas de la IA». Si el CSV incluye transcripción, la revisa; si solo hay link, usa el comentario disponible y baja la confianza.</p>
           {% else %}
-            <p class="small top-space">Configura OPENAI_API_KEY o usa CSAT_AI_PROVIDER=ollama en local para habilitar el botón. Las credenciales se usan solo en backend.</p>
+            <p class="small top-space">Configura AUDITORIA_CHATS_AI_API_KEY (la misma IA de la Auditoría de chats) para habilitar el botón. Las credenciales se usan solo en backend.</p>
           {% endif %}
         </div>
 

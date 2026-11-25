@@ -81,15 +81,11 @@ Opcionales según funcionalidad:
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `OPENAI_API_KEY`
-- `OPENAI_CSAT_MODEL`
-- `OPENAI_CSAT_MAX_CASES`
 - `OPENAI_WEEKLY_REPORT_MODEL`
 - `GEMINI_API_KEY`
 - `GEMINI_WEEKLY_REPORT_MODEL`
-- `CSAT_AI_PROVIDER`
 - `WEEKLY_REPORT_AI_PROVIDER`
 - `OLLAMA_BASE_URL`
-- `OLLAMA_CSAT_MODEL`
 - `OLLAMA_WEEKLY_REPORT_MODEL`
 - `AUDITORIA_CHATS_AI_BASE_URL` (por defecto `https://api.groq.com/openai/v1`)
 - `AUDITORIA_CHATS_AI_MODEL` (por defecto `openai/gpt-oss-120b`)
@@ -98,6 +94,7 @@ Opcionales según funcionalidad:
 - `AUDITORIA_CHATS_AI_RAZONAMIENTO` (opcional: `low`, `medium`, `high`; menos razonamiento = respuestas más rápidas. Vacío = no se envía)
 - `AUDITORIA_CHATS_AI_CUPO_DIARIO` (peticiones diarias que permite el plan de la IA; solo sirve para avisar en el selector; con la pauta QA-1.1 cada chat usa 2; por defecto `20`, `0` lo oculta)
 - `AUDITORIA_CHATS_MANUAL_VERSION` (versión del manual de procedimientos cargado en Supabase que usan los lotes nuevos; por defecto `3.0`)
+- `CSAT_AI_MAX_CASES` (negativos que la Auditoría CSAT revisa con IA por clic; por defecto `10`. La Auditoría CSAT usa la misma IA que la Auditoría de chats: `AUDITORIA_CHATS_AI_*`)
 - `CHATWOOT_BASE_URL`
 - `CHATWOOT_ACCOUNT_ID`
 - `CHATWOOT_API_ACCESS_TOKEN`
@@ -185,7 +182,7 @@ No se cambió ningún límite. En Vercel el cuerpo de cada petición está limit
 | Campos de formulario sin archivo | 8 MB | Textos del informe y estados firmados | Sin cambio | — | `MAX_FORM_MEMORY_SIZE` | 413 |
 | CSV descomprimido | 25 MB | < 5 MB | Sin cambio | — | (constante en `utils/archivos.py`) | Error en pantalla |
 | Archivos de Informe Semanal CS | 40 MB por archivo, sin límite de cantidad | 1–3 archivos | 4 MB en total y 5 archivos | Menos coste de IA por envío | nueva, a definir | 413 / error en pantalla |
-| Casos de CSAT auditados con IA | 10 por pulsación | 5–10 | Sin cambio; considerar tope diario | Coste de OpenAI | `OPENAI_CSAT_MAX_CASES` | Mensaje en pantalla |
+| Casos de CSAT auditados con IA | 10 por pulsación | 5–10 | Sin cambio; considerar tope diario | Cupo de la IA de Auditoría de chats | `CSAT_AI_MAX_CASES` | Mensaje en pantalla |
 | Rango de fechas de Chatwoot | Sin máximo | 1–7 días | 31 días | Evita consultas largas | nueva, a definir | Error en pantalla |
 | Duración de la función | 300 s (Hobby y Pro por defecto) | < 60 s | Sin cambio | — | `vercel.json` | 504 de Vercel |
 
@@ -282,7 +279,7 @@ python scripts/cargar_manual_auditoria.py "Manual de Procedimientos.pdf" --versi
 Puesta en marcha:
 
 1. Ejecuta `supabase_csat_audits.sql` en el editor SQL de Supabase (crea `csat_audit_periods` y `csat_audit_negatives`).
-2. Usa las variables que ya existen: `CHATWOOT_BASE_URL`, `CHATWOOT_ACCOUNT_ID`, `CHATWOOT_API_ACCESS_TOKEN`, `CHATWOOT_TIMEZONE`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` y la IA de CSAT (`OPENAI_API_KEY` o `CSAT_AI_PROVIDER=ollama`). No hay variables nuevas.
+2. Usa las variables que ya existen: `CHATWOOT_BASE_URL`, `CHATWOOT_ACCOUNT_ID`, `CHATWOOT_API_ACCESS_TOKEN`, `CHATWOOT_TIMEZONE`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` y la IA de la Auditoría de chats (`AUDITORIA_CHATS_AI_*`). La única variable propia es `CSAT_AI_MAX_CASES` (opcional).
 
 Cómo funciona:
 
@@ -291,7 +288,7 @@ Cómo funciona:
 - **Re-traer un período ya guardado** actualiza los conteos desde Chatwoot, conserva las decisiones de los negativos que siguen siéndolo y borra los que ya no vuelven o subieron a 3+.
 - **Auditorías guardadas**: la lista muestra período, CSAT real, ajustado y pendientes. «Abrir» vuelve a traer el período de Chatwoot y aplica las decisiones guardadas.
 - **Modo prueba (no se guarda)**: todo funciona igual, pero el estado vive solo en el almacenamiento temporal de 24 h y nunca toca Supabase. La pantalla muestra «Modo prueba — nada de esto se guarda». En Vercel ese estado temporal puede perderse entre peticiones.
-- **Ver conversación**: cada negativo abre la conversación traída en vivo de Chatwoot, anonimizada y sin guardarla, con enlace «Abrir en Chatwoot». Al auditar con IA, la conversación se trae solo para los negativos que va a revisar la IA en ese clic (`OPENAI_CSAT_MAX_CASES`).
+- **Ver conversación**: cada negativo abre la conversación traída en vivo de Chatwoot, anonimizada y sin guardarla, con enlace «Abrir en Chatwoot». Al auditar con IA, la conversación se trae solo para los negativos que va a revisar la IA en ese clic (`CSAT_AI_MAX_CASES`).
 - Si Supabase no está configurado, la pantalla sigue funcionando: usa el modo prueba o el CSV.
 - **Cargar CSV manualmente** sigue disponible como opción secundaria; ese modo no se guarda.
 
@@ -299,7 +296,7 @@ Cómo funciona:
 
 - `usuarios_a_sheets` y `auditoria_salientes` guardan estado temporal firmado. Si el estado es pequeño, viaja inline; si crece, se apoya en almacenamiento temporal del runtime.
 - `auditoria_csat` guarda su análisis temporal en almacenamiento efímero del runtime.
-- `auditoria_csat` puede auditar negativas pendientes con IA si `OPENAI_API_KEY` está configurada o si `CSAT_AI_PROVIDER=ollama` apunta a un Ollama local. En modo Chatwoot la IA lee la conversación traída de Chatwoot; con CSV usa la transcripción del CSV cuando existe y, si solo trae un link privado, audita con el comentario disponible.
+- `auditoria_csat` puede auditar negativas pendientes con IA con la misma IA que la Auditoría de chats (`AUDITORIA_CHATS_AI_API_KEY`, `AUDITORIA_CHATS_AI_BASE_URL`, `AUDITORIA_CHATS_AI_MODEL` y, si existe, `AUDITORIA_CHATS_AI_MODEL_RESPALDO`). En modo Chatwoot la IA lee la conversación traída de Chatwoot; con CSV usa la transcripción del CSV cuando existe y, si solo trae un link privado, audita con el comentario disponible.
 - `informe_semanal_cs` genera informes con Gemini si `GEMINI_API_KEY` está configurada y `WEEKLY_REPORT_AI_PROVIDER=gemini`. También puede usar OpenAI u Ollama. Si no hay proveedor de IA, devuelve una base editable con las secciones obligatorias. En esta V1 extrae texto de PDF, TXT, Markdown, CSV, JSON y logs; imágenes y hojas de cálculo quedan marcadas como recibidas sin extracción.
 - Ollama local no corre dentro de Vercel ni puede usar el `127.0.0.1` de una computadora personal desde producción. Para Vercel, usa OpenAI u otro proveedor cloud, o expón un servidor Ollama propio con URL segura y accesible desde Vercel.
 - `usuarios_activos` puede consultar la API nueva de Multiadmin si hay token o credenciales configuradas; sin esas variables cae al endpoint Lambda legado. El diagnóstico de promo de Compinche y los datos completos de Multiadmin dependen de credenciales/tokens.
