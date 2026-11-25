@@ -185,6 +185,9 @@
             <button type="submit" class="btn secondary" name="accion" value="aceptar_propuestas_ia">Aceptar propuestas de la IA</button>
             <button type="submit" class="btn secondary" name="accion" value="descargar_csv_auditado">Descargar CSV auditado</button>
             <button type="submit" class="btn secondary" name="accion" value="descargar_reporte_ia">Descargar reporte para IA</button>
+            {% if contexto.modo == "chatwoot" and contexto.prueba %}
+            <button type="submit" class="btn secondary" name="accion" value="descargar_bloque_informe">Descargar bloque para el informe</button>
+            {% endif %}
           </div>
         </div>
 

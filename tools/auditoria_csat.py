@@ -20,6 +20,7 @@ from utils.auditoria_csat_chatwoot import (
     negativos_para_guardar,
     resumen_para_guardar,
 )
+from utils.auditoria_csat_informe import bloque_desde_estado
 from utils.auditoria_csat_store import AuditoriaCsatConfigError
 from utils.chatwoot_reportes import ChatwootClient, _obtener_timezone, _timezone, construir_rango_chatwoot_fechas
 from utils.csat_periodos import TIPOS_PERIODO, formatear_periodo, resolver_periodo
@@ -1565,6 +1566,13 @@ def auditoria_csat():
                             headers={
                                 "Content-Disposition": "attachment; filename=auditoria_csat_reporte_ia.md"
                             },
+                        )
+                    elif accion == "descargar_bloque_informe" and estado.get("modo") == "chatwoot" and estado.get("prueba"):
+                        bloque = bloque_desde_estado(estado, obtener_chatwoot(), _timezone())
+                        return Response(
+                            bloque,
+                            mimetype="text/plain; charset=utf-8",
+                            headers={"Content-Disposition": "attachment; filename=bloque_csat_informe.txt"},
                         )
                     else:
                         advertencia = "Acción no válida."

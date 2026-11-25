@@ -49,6 +49,19 @@
           </div>
         </div>
 
+        {% if auditorias_csat %}
+        <div>
+          <label class="small" for="auditoria_csat_id">Auditoría CSAT</label>
+          <select id="auditoria_csat_id" name="auditoria_csat_id">
+            <option value="">Sin auditoría CSAT</option>
+            {% for auditoria in auditorias_csat %}
+              <option value="{{ auditoria.id }}" {% if auditoria.id == auditoria_csat_id %}selected{% endif %}>{{ auditoria.texto }}</option>
+            {% endfor %}
+          </select>
+          <p class="small report-help">Usa los datos confirmados de una auditoría guardada para la sección de CSAT.</p>
+        </div>
+        {% endif %}
+
         <div class="report-bitacora-upload">
           <label class="small" for="bitacora_archivo">PDF o archivo con la bitácora recopilada</label>
           <input id="bitacora_archivo" type="file" name="bitacora_archivo" accept=".txt,.md,.csv,.json,.log,.pdf,.png,.jpg,.jpeg,.webp,.xlsx,.xls,.ods">
