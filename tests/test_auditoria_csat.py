@@ -195,10 +195,41 @@ class IaCompartidaTests(unittest.TestCase):
 
         with mock.patch.object(csat, "obtener_ia_config", return_value=config), mock.patch.object(csat, "completar_json", falso):
             auditadas, _ = auditar_estado_con_ia(estado)
-        # Ambos modelos se reparten el presupuesto para no pasar el límite de 60 s de Vercel.
-        self.assertEqual([("principal", 24), ("respaldo", 24)], modelos)
+        # El principal usa la mitad del presupuesto; el respaldo recibe lo que sobra (el fallo fue instantáneo).
+        self.assertEqual(["principal", "respaldo"], [m for m, _ in modelos])
+        self.assertEqual(24, modelos[0][1])
+        self.assertGreaterEqual(modelos[1][1], 46)
         self.assertEqual(1, auditadas)
         self.assertEqual("respaldo", estado["rows"][0]["ia_modelo"])
+
+    def test_respaldo_recibe_el_minimo_si_el_principal_agoto_el_tiempo(self):
+        from utils.ia_chat import IATemporalError
+
+        config = {"model": "principal", "model_respaldo": "respaldo"}
+        tiempos = iter([100.0, 145.0])
+        modelos = []
+
+        def falso(mensajes, cfg, timeout=60):
+            modelos.append((cfg["model"], timeout))
+            if cfg["model"] == "principal":
+                raise IATemporalError("saturado")
+            return {"resultados": []}
+
+        with mock.patch.object(csat.time, "monotonic", lambda: next(tiempos)), mock.patch.object(csat, "completar_json", falso):
+            csat.auditar_lote_con_proveedor([fila_negativa()], config)
+        self.assertEqual([("principal", 24), ("respaldo", 10)], modelos)
+
+    def test_sin_respaldo_el_principal_usa_todo_el_tiempo(self):
+        config = {"model": "principal", "model_respaldo": ""}
+        modelos = []
+
+        def falso(mensajes, cfg, timeout=60):
+            modelos.append((cfg["model"], timeout))
+            return {"resultados": []}
+
+        with mock.patch.object(csat, "completar_json", falso):
+            csat.auditar_lote_con_proveedor([fila_negativa()], config)
+        self.assertEqual([("principal", 48)], modelos)
 
     def test_limite_sin_respaldo_da_aviso_en_espanol(self):
         from utils.ia_chat import IARateLimitError

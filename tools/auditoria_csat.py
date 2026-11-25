@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import re
+import time
 import unicodedata
 import uuid
 from datetime import date, datetime
@@ -181,6 +182,7 @@ CSAT_IA_MAX_TRANSCRIPT_CHARS = 6000
 # Tiempo total de IA por clic (principal + respaldo). Vercel corta a los 60 s y antes se
 # traen conversaciones de Chatwoot y se guarda en Supabase, así que se deja margen.
 CSAT_IA_PRESUPUESTO_SEGUNDOS = 48
+CSAT_IA_RESPALDO_MINIMO_SEGUNDOS = 10
 
 
 def normalizar_texto(valor):
@@ -630,10 +632,15 @@ def auditar_lote_con_proveedor(filas, config):
     modelos = [config["model"]]
     if config.get("model_respaldo") and config["model_respaldo"] != config["model"]:
         modelos.append(config["model_respaldo"])
+    # Con respaldo, el principal usa la mitad del presupuesto; el respaldo recibe lo que sobra (mínimo fijo).
     timeout = CSAT_IA_PRESUPUESTO_SEGUNDOS // len(modelos)
+    inicio = time.monotonic()
     errores = []
     data = None
     for modelo in modelos:
+        if errores:
+            transcurrido = time.monotonic() - inicio
+            timeout = max(CSAT_IA_RESPALDO_MINIMO_SEGUNDOS, int(CSAT_IA_PRESUPUESTO_SEGUNDOS - transcurrido))
         try:
             data = completar_json(mensajes, dict(config, model=modelo), timeout=timeout)
             break
