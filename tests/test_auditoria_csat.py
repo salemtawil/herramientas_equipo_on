@@ -133,6 +133,13 @@ class ParsearFechaIsoTests(unittest.TestCase):
         fecha = csat.parsear_fecha("05/11/2023 10:00")
         self.assertEqual((2023, 11, 5), (fecha.year, fecha.month, fecha.day))
 
+    def test_candidatos_para_ia_excluye_negativos_con_decision_humana_previa(self):
+        filas = [
+            {"row_id": "1", "tipo_rating": "Negativo", "justificable": "NO", "origen_decision": ""},
+            {"row_id": "2", "tipo_rating": "Negativo", "justificable": "", "origen_decision": ""},
+        ]
+        self.assertEqual(["2"], [f["row_id"] for f in csat.candidatos_para_ia(filas, 10)])
+
 
 if __name__ == "__main__":
     unittest.main()

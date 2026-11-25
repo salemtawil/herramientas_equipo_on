@@ -760,6 +760,7 @@ def candidatos_para_ia(filas, max_cases):
         fila for fila in filas
         if fila.get("tipo_rating") == "Negativo"
         and not fila.get("ia_justificable")
+        and not fila.get("justificable")
         and fila.get("origen_decision") != "humana"
     ][:max_cases]
 
@@ -1536,8 +1537,15 @@ def auditoria_csat():
                             mensaje = "Auditoría actualizada."
                         contexto_analisis = construir_contexto_analisis(estado)
                     elif accion == "auditar_con_ia":
+                        filas_chatwoot = (
+                            candidatos_para_ia(estado.get("rows", []), obtener_ia_config()["max_cases"])
+                            if estado.get("modo") == "chatwoot"
+                            else []
+                        )
                         advertencias_transcripcion = preparar_transcripciones_ia(estado)
                         auditadas, advertencias_ia = auditar_estado_con_ia(estado)
+                        for fila in filas_chatwoot:
+                            fila["transcripcion_conversacion"] = ""
                         advertencia = unir_advertencias(
                             advertencia, *advertencias_transcripcion, *advertencias_ia, persistir_estado(estado)
                         )

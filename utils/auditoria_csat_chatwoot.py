@@ -1,8 +1,12 @@
 """Encuestas CSAT de Chatwoot convertidas en filas de auditoría, y su persistencia."""
+import logging
 from datetime import datetime
 
 from utils.auditoria_chats_transcripcion import construir_transcripcion
 from utils.chatwoot_reportes import _obtener_timezone
+from utils.errores import mensaje_error_publico
+
+logger = logging.getLogger(__name__)
 
 MAX_TEXTO_GUARDADO = 500
 
@@ -122,7 +126,8 @@ def cargar_transcripciones(filas, chatwoot, tz_name, max_chars=6000):
             mensajes = chatwoot.mensajes_de_conversacion(conversation_id)
             fila["transcripcion_conversacion"] = construir_transcripcion(mensajes, tz_name, max_chars)
         except Exception as exc:
-            advertencias.append(f"No se pudo cargar la conversación {conversation_id}: {exc}")
+            logger.exception("Error cargando conversación %s de Chatwoot", conversation_id)
+            advertencias.append(mensaje_error_publico(exc, f"No se pudo cargar la conversación {conversation_id}"))
     return advertencias
 
 

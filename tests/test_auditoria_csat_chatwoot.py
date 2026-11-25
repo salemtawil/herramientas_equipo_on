@@ -117,6 +117,19 @@ def test_cargar_transcripciones_sigue_si_una_falla():
     assert not filas[1]["transcripcion_conversacion"]
 
 
+def test_cargar_transcripciones_no_expone_detalle_interno():
+    import requests
+
+    class Caido(ChatwootFalso):
+        def mensajes_de_conversacion(self, conversation_id, max_paginas=5):
+            raise requests.exceptions.ConnectionError("fallo en https://chat.interno/api/v1/x")
+
+    filas = filas_desde_encuestas([enc(1)], Caido(), TZ)
+    advertencias = cargar_transcripciones(filas, Caido(), TZ)
+    assert len(advertencias) == 1 and "501" in advertencias[0]
+    assert "chat.interno" not in advertencias[0]
+
+
 def test_cargar_transcripciones_no_repite_las_existentes():
     filas = filas_desde_encuestas([enc(2, conversation_id=502)], ChatwootFalso(), TZ)
     filas[0]["transcripcion_conversacion"] = "ya"

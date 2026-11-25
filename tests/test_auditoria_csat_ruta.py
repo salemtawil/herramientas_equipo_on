@@ -272,6 +272,28 @@ def test_auditar_con_ia_carga_transcripcion_solo_de_candidatos(cliente, store, c
     assert "transcripcion" not in negativos[1]
 
 
+def test_auditar_con_ia_no_deja_transcripciones_en_el_temporal(cliente, store, chatwoot, monkeypatch):
+    chatwoot.encuestas = [enc(1, rating=1), enc(2, rating=2)]
+    monkeypatch.setenv("OPENAI_API_KEY", "clave-de-prueba")
+    vistos = []
+
+    def ia_falsa(filas, config):
+        vistos.extend(bool(f.get("transcripcion_conversacion")) for f in filas)
+        return [{"row_id": f["row_id"], "justificable": "SÍ", "motivo_inconformidad": "OTRO", "confianza": 0.8} for f in filas]
+
+    monkeypatch.setattr(herramienta, "auditar_lote_con_proveedor", ia_falsa)
+    html = _traer(cliente).get_data(as_text=True)
+    analysis_id = _hidden(html, "analysis_id")
+    cliente.post(
+        "/auditoria-csat",
+        data={"accion": "auditar_con_ia", "analysis_id": analysis_id, "period_id": _hidden(html, "period_id")},
+    )
+    assert vistos == [True, True]
+    estado = herramienta.cargar_analisis(analysis_id)
+    assert estado["rows"] and all(not f.get("transcripcion_conversacion") for f in estado["rows"])
+    assert any(f.get("ia_justificable") for f in estado["rows"])
+
+
 def test_ver_conversacion_no_guarda(cliente, store, chatwoot):
     r = cliente.get("/auditoria-csat/conversacion/501")
     html = r.get_data(as_text=True)
