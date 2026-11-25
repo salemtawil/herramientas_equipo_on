@@ -94,7 +94,7 @@ Opcionales según funcionalidad:
 - `AUDITORIA_CHATS_AI_RAZONAMIENTO` (opcional: `low`, `medium`, `high`; menos razonamiento = respuestas más rápidas. Vacío = no se envía)
 - `AUDITORIA_CHATS_AI_CUPO_DIARIO` (peticiones diarias que permite el plan de la IA; solo sirve para avisar en el selector; con la pauta QA-1.1 cada chat usa 2; por defecto `20`, `0` lo oculta)
 - `AUDITORIA_CHATS_MANUAL_VERSION` (versión del manual de procedimientos cargado en Supabase que usan los lotes nuevos; por defecto `3.0`)
-- `CSAT_AI_MAX_CASES` (negativos que la Auditoría CSAT revisa con IA por clic; por defecto `10`. La Auditoría CSAT usa la misma IA que la Auditoría de chats: `AUDITORIA_CHATS_AI_*`)
+- `CSAT_AI_MAX_CASES` (negativos que la Auditoría CSAT revisa con IA en cada tanda; el botón repite tandas hasta revisar todos los pendientes; por defecto `5`. La Auditoría CSAT usa la misma IA que la Auditoría de chats: `AUDITORIA_CHATS_AI_*`)
 - `CHATWOOT_BASE_URL`
 - `CHATWOOT_ACCOUNT_ID`
 - `CHATWOOT_API_ACCESS_TOKEN`
@@ -182,7 +182,7 @@ No se cambió ningún límite. En Vercel el cuerpo de cada petición está limit
 | Campos de formulario sin archivo | 8 MB | Textos del informe y estados firmados | Sin cambio | — | `MAX_FORM_MEMORY_SIZE` | 413 |
 | CSV descomprimido | 25 MB | < 5 MB | Sin cambio | — | (constante en `utils/archivos.py`) | Error en pantalla |
 | Archivos de Informe Semanal CS | 40 MB por archivo, sin límite de cantidad | 1–3 archivos | 4 MB en total y 5 archivos | Menos coste de IA por envío | nueva, a definir | 413 / error en pantalla |
-| Casos de CSAT auditados con IA | 10 por pulsación | 5–10 | Sin cambio; considerar tope diario | Cupo de la IA de Auditoría de chats | `CSAT_AI_MAX_CASES` | Mensaje en pantalla |
+| Casos de CSAT auditados con IA | Todos los pendientes, en tandas de 5 | 5–10 | Sin cambio; considerar tope diario | Cupo de la IA de Auditoría de chats | `CSAT_AI_MAX_CASES` | Mensaje en pantalla |
 | Rango de fechas de Chatwoot | Sin máximo | 1–7 días | 31 días | Evita consultas largas | nueva, a definir | Error en pantalla |
 | Duración de la función | 300 s (Hobby y Pro por defecto) | < 60 s | Sin cambio | — | `vercel.json` | 504 de Vercel |
 
@@ -288,7 +288,7 @@ Cómo funciona:
 - **Re-traer un período ya guardado** actualiza los conteos desde Chatwoot, conserva las decisiones de los negativos que siguen siéndolo y borra los que ya no vuelven o subieron a 3+.
 - **Auditorías guardadas**: la lista muestra período, CSAT real, ajustado y pendientes. «Abrir» vuelve a traer el período de Chatwoot y aplica las decisiones guardadas.
 - **Modo prueba (no se guarda)**: todo funciona igual, pero el estado vive solo en el almacenamiento temporal de 24 h y nunca toca Supabase. La pantalla muestra «Modo prueba — nada de esto se guarda». En Vercel ese estado temporal puede perderse entre peticiones.
-- **Ver conversación**: cada negativo abre la conversación traída en vivo de Chatwoot, anonimizada y sin guardarla, con enlace «Abrir en Chatwoot». Al auditar con IA, la conversación se trae solo para los negativos que va a revisar la IA en ese clic (`CSAT_AI_MAX_CASES`).
+- **Ver conversación**: cada negativo abre la conversación traída en vivo de Chatwoot, anonimizada y sin guardarla, con enlace «Abrir en Chatwoot». Al auditar con IA, la conversación se trae solo para los negativos de cada tanda (`CSAT_AI_MAX_CASES`).
 - Si Supabase no está configurado, la pantalla sigue funcionando: usa el modo prueba o el CSV.
 - **Cargar CSV manualmente** sigue disponible como opción secundaria; ese modo no se guarda.
 
