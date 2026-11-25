@@ -95,6 +95,28 @@ def _hidden(html, nombre):
     return encontrado.group(1) if encontrado else ""
 
 
+def _ficha_de(html, row_id):
+    return re.search(rf'<article[^>]*data-csat-ficha data-row-id="{row_id}".*?</article>', html, re.S).group(0)
+
+
+def _formulario_fichas(html):
+    return re.search(r"<form[^>]*data-csat-fichas[^>]*>.*?</form>", html, re.S).group(0)
+
+
+def _decision_actual(html, row_id):
+    """Decisión del botón marcado como actual en la ficha de esa fila (value="<row_id>|<decisión>")."""
+    actual = re.search(r'value="([^"]+)"[^>]*class="[^"]*is-actual', _ficha_de(html, row_id))
+    if not actual:
+        return ""
+    fila, decision = actual.group(1).rsplit("|", 1)
+    assert fila == str(row_id)
+    return decision
+
+
+def _kpi(html, clave):
+    return re.search(rf'data-csat-kpi="{clave}">([^<]*)<', html).group(1).strip()
+
+
 def test_get_muestra_formulario_chatwoot_y_csv_en_details(cliente, store):
     html = cliente.get("/auditoria-csat").get_data(as_text=True)
     assert 'value="traer_chatwoot"' in html
@@ -114,7 +136,7 @@ def test_traer_chatwoot_guarda_periodo(cliente, store):
     assert periodo["total_encuestas"] == 3 and periodo["negativos_pendientes"] == 1
     assert [n["survey_id"] for n in store.negativos(periodo["id"])] == [1]
     assert _hidden(html, "period_id") == periodo["id"]
-    assert "1 negativos sin confirmar — el ajustado aún no es definitivo" in html
+    assert _kpi(html, "por_confirmar") == "1" and 'data-confirmada="0"' in _ficha_de(html, "1")
     assert "Auditados a mano: 0 · Aceptados de la IA: 0" in html
     assert "/auditoria-csat/conversacion/501" in html and "Ver conversación" in html
     assert "Modo prueba — nada de esto se guarda" not in html
@@ -180,7 +202,7 @@ def test_guardar_decision_sincroniza_y_cuenta_origen(cliente, store):
     periodo = store.obtener_periodo(period_id)
     assert periodo["negativos_pendientes"] == 0 and periodo["csat_ajustado"] == 100.0
     assert "Auditados a mano: 1 · Aceptados de la IA: 0" in html2
-    assert "negativos sin confirmar" not in html2
+    assert _kpi(html2, "por_confirmar") == "0" and 'data-confirmada="1"' in _ficha_de(html2, "1")
 
 
 def test_reabrir_guardada_sin_temporal_reconstruye_decisiones(cliente, store, monkeypatch):
@@ -199,8 +221,7 @@ def test_reabrir_guardada_sin_temporal_reconstruye_decisiones(cliente, store, mo
     r = cliente.get(f"/auditoria-csat?period_id={period_id}")
     html2 = r.get_data(as_text=True)
     assert r.status_code == 200
-    select = re.search(r'<select name="justificable__1".*?</select>', html2, re.S).group(0)
-    assert re.search(r'<option value="SÍ"\s+selected', select)
+    assert _decision_actual(html2, "1") == "SÍ"
     assert _hidden(html2, "period_id") == period_id
 
 
@@ -255,14 +276,18 @@ def test_auditar_con_ia_carga_transcripcion_solo_de_candidatos(cliente, store, c
     monkeypatch.setattr(herramienta, "auditar_lote_con_proveedor", ia_falsa)
     html = _traer(cliente).get_data(as_text=True)
     period_id = _hidden(html, "period_id")
-    cliente.post(
+    guardado = cliente.post(
         "/auditoria-csat",
         data={
-            "accion": "auditar_con_ia",
+            "accion": "guardar_auditoria",
             "analysis_id": _hidden(html, "analysis_id"),
             "period_id": period_id,
             "justificable__2": "NO",
         },
+    ).get_data(as_text=True)
+    cliente.post(
+        "/auditoria-csat",
+        data={"accion": "auditar_con_ia", "analysis_id": _hidden(guardado, "analysis_id"), "period_id": period_id},
     )
     assert vistos == [("1", True)]
     assert chatwoot.mensajes_pedidos == [501]
@@ -443,7 +468,7 @@ def test_estado_viaja_en_la_pagina_aunque_se_borre_el_temporal(cliente, store, c
     vista = cliente.post("/auditoria-csat", data={"accion": "ver_estado", "analysis_id": segundo["analysis_id"]})
     texto = vista.get_data(as_text=True)
     assert vista.status_code == 200
-    assert texto.count("Propuesta IA: SÍ") == 2
+    assert texto.count('data-csat-ia-propuesta="SÍ"') == 2 and texto.count("La IA cree") == 2
     assert "Modo prueba" in texto
 
 
@@ -457,5 +482,286 @@ def test_ver_estado_no_borra_decisiones(cliente, store, chatwoot):
     vista = cliente.post(
         "/auditoria-csat", data={"accion": "ver_estado", "analysis_id": _hidden(guardado, "analysis_id")}
     ).get_data(as_text=True)
-    assert re.search(r'<option value="NO"\s+selected', vista)
+    assert _decision_actual(vista, "1") == "NO"
     assert store.negativos(_hidden(html, "period_id"))[0]["decision_final"] == "NO"
+
+
+# --- Acción decidir: una decisión a la vez ---
+JSON = {"Accept": "application/json"}
+
+
+def _decidir(cliente, analysis_id, period_id, row_id, justificable="SÍ", json=True, **extra):
+    datos = {
+        "accion": "decidir",
+        "analysis_id": analysis_id,
+        "period_id": period_id,
+        "row_id": row_id,
+        "justificable": justificable,
+        "motivo": herramienta.MOTIVOS_INCONFORMIDAD[0],
+        "nota": "n",
+    }
+    datos.update(extra)
+    return cliente.post("/auditoria-csat", data=datos, headers=JSON if json else {})
+
+
+def _dos_negativos(cliente, chatwoot):
+    chatwoot.encuestas = [enc(1, rating=1), enc(2, rating=1)]
+    html = _traer(cliente).get_data(as_text=True)
+    return _hidden(html, "analysis_id"), _hidden(html, "period_id")
+
+
+def test_decidir_json_guarda_una_fila(cliente, store, chatwoot):
+    aid, pid = _dos_negativos(cliente, chatwoot)
+    r = _decidir(cliente, aid, pid, "1", motivo="CAPTCHA")
+    datos = r.get_json()
+    assert datos["ok"] and datos["ficha"]["confirmada"]
+    assert datos["kpis"]["por_confirmar"] == 1
+    assert datos["pestanas"]["confirmados"] == 1
+    por_id = {str(n["survey_id"]): n for n in store.negativos(pid)}
+    assert por_id["1"]["decision_final"] == "SÍ" and por_id["1"]["origen_decision"] == "humana"
+    assert not por_id["2"].get("decision_final")
+
+
+def test_dos_decisiones_encadenadas(cliente, store, chatwoot):
+    aid, pid = _dos_negativos(cliente, chatwoot)
+    primera = _decidir(cliente, aid, pid, "1").get_json()
+    segunda = _decidir(cliente, primera["analysis_id"], pid, "2", "NO").get_json()
+    assert segunda["ok"] and segunda["pestanas"]["confirmados"] == 2
+    por_id = {str(n["survey_id"]): n for n in store.negativos(pid)}
+    assert por_id["1"]["decision_final"] == "SÍ" and por_id["2"]["decision_final"] == "NO"
+
+
+def test_decidir_invalido_no_cambia_nada(cliente, store, chatwoot):
+    chatwoot.encuestas = [enc(1, rating=1), enc(2, rating=5)]
+    html = _traer(cliente).get_data(as_text=True)
+    aid, pid = _hidden(html, "analysis_id"), _hidden(html, "period_id")
+    antes = store.negativos(pid)
+    for row_id, justificable in (("999", "SÍ"), ("2", "SÍ"), ("1", "")):
+        datos = _decidir(cliente, aid, pid, row_id, justificable).get_json()
+        assert datos["ok"] is False and datos["error"] and datos["analysis_id"] == aid
+    assert store.negativos(pid) == antes
+    assert _decidir(cliente, aid, pid, "1").get_json()["ok"]
+
+
+def test_decidir_sin_js_recarga_con_ficha_confirmada(cliente, store, chatwoot):
+    aid, pid = _dos_negativos(cliente, chatwoot)
+    r = _decidir(cliente, aid, pid, "1", json=False)
+    assert r.status_code == 200 and "Confirmado" in r.get_data(as_text=True)
+
+
+def test_decidir_con_supabase_caido_conserva_la_decision(cliente, store, chatwoot, monkeypatch):
+    aid, pid = _dos_negativos(cliente, chatwoot)
+
+    def falla(*args, **kwargs):
+        raise RuntimeError("supabase caído")
+
+    monkeypatch.setattr(store, "reemplazar_negativos", falla)
+    datos = _decidir(cliente, aid, pid, "1").get_json()
+    assert datos["ok"] and datos["advertencia"]
+    with app.app_context():
+        estado = herramienta.cargar_analisis(datos["analysis_id"])
+    assert next(f for f in estado["rows"] if f["row_id"] == "1")["justificable"] == "SÍ"
+
+
+def test_acciones_sin_filas_no_borran_decisiones(cliente, store, chatwoot):
+    aid, pid = _dos_negativos(cliente, chatwoot)
+    datos = _decidir(cliente, aid, pid, "1").get_json()
+    r = cliente.post(
+        "/auditoria-csat",
+        data={"accion": "aceptar_propuestas_ia", "analysis_id": datos["analysis_id"], "period_id": pid},
+    )
+    assert store.negativos(pid)[0]["decision_final"] == "SÍ"
+    r = cliente.post(
+        "/auditoria-csat",
+        data={"accion": "descargar_csv_auditado", "analysis_id": _hidden(r.get_data(as_text=True), "analysis_id"), "period_id": pid},
+    )
+    assert r.status_code == 200 and "SÍ" in r.get_data(as_text=True)
+    assert store.negativos(pid)[0]["decision_final"] == "SÍ"
+
+
+def test_decidir_no_aplica_retencion(cliente, store, chatwoot, monkeypatch):
+    aid, pid = _dos_negativos(cliente, chatwoot)
+    llamadas = []
+    monkeypatch.setattr(store, "borrar_vencidos", lambda hoy: llamadas.append(hoy))
+    assert _decidir(cliente, aid, pid, "1").get_json()["ok"]
+    assert llamadas == []
+
+
+# --- Pantalla por pasos y fichas ---
+
+
+def _fichas(html):
+    return re.findall(r"<article[^>]*data-csat-ficha[^>]*>.*?</article>", html, re.S)
+
+
+def test_pagina_muestra_pasos_kpis_y_fichas(cliente, store, chatwoot):
+    chatwoot.encuestas = [enc(1, rating=1), enc(2, rating=2), enc(3, rating=5)]
+    html = _traer(cliente).get_data(as_text=True)
+    assert 'data-csat-paso="confirmar"' in html
+    assert 'data-csat-kpi="csat_ajustado"' in html
+    assert len(_fichas(html)) == 2
+    assert "No fue culpa del agente" in html
+    assert "SÍ justificable" not in html and "CSAT actualizado" not in html
+
+
+def test_ficha_con_propuesta_ia_en_lenguaje_claro(cliente, store, chatwoot, monkeypatch):
+    chatwoot.encuestas = [enc(1, rating=1)]
+    monkeypatch.setenv("AUDITORIA_CHATS_AI_API_KEY", "clave-de-prueba")
+    monkeypatch.setattr(herramienta, "auditar_lote_con_proveedor", _ia_propone_si)
+    html = _traer(cliente).get_data(as_text=True)
+    respuesta = cliente.post(
+        "/auditoria-csat",
+        data={"accion": "auditar_con_ia", "analysis_id": _hidden(html, "analysis_id"), "period_id": _hidden(html, "period_id")},
+    ).get_data(as_text=True)
+    (ficha,) = _fichas(respuesta)
+    assert "La IA cree" in ficha and "No fue culpa del agente" in ficha
+    assert re.search(r'value="1\|SÍ"[^>]*class="[^"]*is-sugerido', ficha) or re.search(
+        r'class="[^"]*is-sugerido[^"]*"[^>]*value="1\|SÍ"', ficha
+    )
+
+
+def test_pagina_sin_auditoria_explica_los_pasos(cliente, store):
+    html = cliente.get("/auditoria-csat").get_data(as_text=True)
+    assert "Tú confirmas" in html
+    assert "data-csat-ficha" not in html
+
+
+def test_csv_usa_fichas(cliente):
+    encabezado = ",".join(herramienta.EXPECTED_COLUMNS)
+    valores = []
+    for columna in herramienta.EXPECTED_COLUMNS:
+        normal = herramienta.normalizar_texto(columna)
+        if "calificacion" in normal:
+            valores.append("1")
+        elif "fecha" in normal:
+            valores.append("2025-11-10 10:00")
+        else:
+            valores.append("x")
+    csv = (encabezado + "\n" + ",".join(valores) + "\n").encode("utf-8")
+    html = cliente.post(
+        "/auditoria-csat",
+        data={"accion": "analizar_csv", "archivo": (io.BytesIO(csv), "csat.csv")},
+        content_type="multipart/form-data",
+    ).get_data(as_text=True)
+    fichas = _fichas(html)
+    assert len(fichas) == 1
+    assert _hidden(_formulario_fichas(html), "period_id") == ""
+
+
+def test_guardar_auditoria_sin_campos_por_fila_conserva_decisiones(cliente, store, chatwoot):
+    aid, pid = _dos_negativos(cliente, chatwoot)
+    datos = _decidir(cliente, aid, pid, "1").get_json()
+    r = cliente.post(
+        "/auditoria-csat",
+        data={"accion": "guardar_auditoria", "analysis_id": datos["analysis_id"], "period_id": pid},
+    )
+    assert r.status_code == 200
+    por_id = {str(n["survey_id"]): n for n in store.negativos(pid)}
+    assert por_id["1"]["decision_final"] == "SÍ" and por_id["1"]["origen_decision"] == "humana"
+
+
+def test_reporte_ia_usa_las_palabras_de_la_pantalla(cliente, store, chatwoot):
+    aid, pid = _dos_negativos(cliente, chatwoot)
+    datos = _decidir(cliente, aid, pid, "1").get_json()
+    r = cliente.post(
+        "/auditoria-csat",
+        data={"accion": "descargar_reporte_ia", "analysis_id": datos["analysis_id"], "period_id": pid},
+    )
+    texto = r.get_data(as_text=True)
+    assert r.status_code == 200
+    assert "No fue culpa del agente" in texto and "CSAT real" in texto and "CSAT ajustado" in texto
+    for viejo in ("SÍ justificable", "CSAT actualizado", "CSAT original", "TAL VEZ"):
+        assert viejo not in texto
+
+
+# --- Revisión final: un solo token por página, decisión sin JS y enlaces seguros ---
+
+
+def test_pagina_lleva_el_token_a_lo_sumo_dos_veces(cliente, store, chatwoot):
+    chatwoot.encuestas = [enc(i, rating=1) for i in range(1, 7)]
+    html = _traer(cliente).get_data(as_text=True)
+    aid = _hidden(html, "analysis_id")
+    assert aid and len(_fichas(html)) == 6
+    assert html.count(aid) <= 2
+    # El formulario único de fichas lleva el token, el período y la acción una sola vez.
+    formulario = _formulario_fichas(html)
+    assert formulario.count('name="analysis_id"') == 1 and formulario.count('name="accion"') == 1
+    assert 'value="decidir"' in formulario and 'name="prueba"' not in formulario
+
+
+def test_formulario_de_fichas_lleva_prueba_en_modo_prueba(cliente, store, chatwoot):
+    chatwoot.encuestas = [enc(1, rating=1)]
+    html = _traer(cliente, prueba="1").get_data(as_text=True)
+    assert 'name="prueba" value="1"' in _formulario_fichas(html)
+
+
+def test_decidir_sin_js_con_el_boton_de_la_ficha(cliente, store, chatwoot):
+    aid, pid = _dos_negativos(cliente, chatwoot)
+    motivo = herramienta.MOTIVOS_INCONFORMIDAD[0]
+    r = cliente.post(
+        "/auditoria-csat",
+        data={
+            "accion": "decidir",
+            "analysis_id": aid,
+            "period_id": pid,
+            "decision": "2|SÍ",
+            "motivo__1": "",
+            "nota__1": "no es esta",
+            "motivo__2": motivo,
+            "nota__2": "nota de la 2",
+        },
+    )
+    html = r.get_data(as_text=True)
+    assert r.status_code == 200 and "Confirmado" in html
+    assert _decision_actual(html, "2") == "SÍ" and _decision_actual(html, "1") == ""
+    por_id = {str(n["survey_id"]): n for n in store.negativos(pid)}
+    assert por_id["2"]["decision_final"] == "SÍ" and por_id["2"]["origen_decision"] == "humana"
+    assert not por_id["1"].get("decision_final")
+    with app.app_context():
+        estado = herramienta.cargar_analisis(_hidden(html, "analysis_id"))
+    fila = next(f for f in estado["rows"] if f["row_id"] == "2")
+    assert fila["motivo_inconformidad"] == motivo and fila["comentario_auditor"] == "nota de la 2"
+
+
+class StoreIntocable:
+    def __getattr__(self, nombre):
+        pytest.fail(f"En modo prueba no se debe tocar el store ({nombre})")
+
+
+def test_decidir_en_modo_prueba_no_toca_el_store(cliente, store, chatwoot, monkeypatch):
+    chatwoot.encuestas = [enc(1, rating=1), enc(2, rating=1)]
+    html = _traer(cliente, prueba="1").get_data(as_text=True)
+    monkeypatch.setattr(herramienta, "obtener_store_csat", lambda: StoreIntocable())
+    aid = _hidden(html, "analysis_id")
+    datos = _decidir(cliente, aid, "", "1", prueba="1").get_json()
+    assert datos["ok"] and datos["ficha"]["confirmada"]
+    r = cliente.post(
+        "/auditoria-csat",
+        data={"accion": "decidir", "analysis_id": datos["analysis_id"], "prueba": "1", "decision": "2|NO"},
+        headers=JSON,
+    )
+    assert r.get_json()["ok"]
+    assert store.listar_periodos() == []
+
+
+def test_enlace_del_csv_no_se_usa_si_no_es_http(cliente):
+    encabezado = ",".join(herramienta.EXPECTED_COLUMNS)
+    valores = []
+    for columna in herramienta.EXPECTED_COLUMNS:
+        normal = herramienta.normalizar_texto(columna)
+        if "calificacion" in normal:
+            valores.append("1")
+        elif "fecha" in normal:
+            valores.append("2025-11-10 10:00")
+        elif "enlace" in normal:
+            valores.append("javascript:alert(1)")
+        else:
+            valores.append("x")
+    csv = (encabezado + "\n" + ",".join(valores) + "\n").encode("utf-8")
+    html = cliente.post(
+        "/auditoria-csat",
+        data={"accion": "analizar_csv", "archivo": (io.BytesIO(csv), "csat.csv")},
+        content_type="multipart/form-data",
+    ).get_data(as_text=True)
+    (ficha,) = _fichas(html)
+    assert "javascript:" not in ficha and "Abrir enlace" not in ficha

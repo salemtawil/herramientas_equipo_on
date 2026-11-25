@@ -4,93 +4,441 @@
 {% block page_name %}Auditoría CSAT{% endblock %}
 
 {% block content %}
+{% set clase_decision = {"SÍ": "is-si", "NO": "is-no", "TAL VEZ": "is-dudoso"} %}
+{% set marca_decision = {"SÍ": "✓", "NO": "✗", "TAL VEZ": "?"} %}
 <div class="page-stack auditoria-csat-page">
-  <section class="card page-hero">
+  {# 1. Barra superior: qué es, período y traer encuestas #}
+  <section class="card page-hero csat-barra">
     <div class="page-section-title">
       <div>
-        <h1>Auditoría CSAT de conversaciones</h1>
-        <p>Trae las encuestas CSAT de Chatwoot del período (o carga un CSV), audita las negativas, recalcula el CSAT y exporta tanto el archivo auditado como un reporte listo para IA.</p>
+        <h1>Auditoría CSAT</h1>
+        <p>Revisa los negativos y descubre cuáles no fueron culpa del agente.</p>
       </div>
-      <span class="hero-badge">V1 operativa</span>
+      {% if contexto %}
+        <div class="csat-barra__estado">
+          <span class="hero-badge hero-badge-soft">{{ contexto.periodo_texto or contexto.metricas.periodo or "Auditoría abierta" }}</span>
+          {% if contexto.modo != "chatwoot" %}
+            <span class="hero-badge is-muted">CSV · no se guarda</span>
+          {% elif contexto.prueba %}
+            <span class="hero-badge is-muted">Modo prueba</span>
+          {% else %}
+            <span class="hero-badge is-ready">Guardada</span>
+          {% endif %}
+        </div>
+      {% endif %}
     </div>
 
-    <div class="dashboard-highlight-grid top-space">
-      <article class="dashboard-highlight-card dashboard-highlight-card--primary">
-        <span class="dashboard-highlight-card__eyebrow">Auditoría</span>
-        <strong>Calificación, justificación y motivo</strong>
-        <p>Cada fila permite marcar NO, TAL VEZ o SÍ justificable, con comentario del auditor y motivo de inconformidad.</p>
-      </article>
-      <article class="dashboard-highlight-card">
-        <span class="dashboard-highlight-card__eyebrow">Salida</span>
-        <strong>CSV auditado y reporte para IA</strong>
-        <p>El resultado queda exportable sin introducir otra API ni un frontend separado.</p>
-      </article>
-    </div>
+    <form method="post" class="csat-traer" data-processing-message="Trayendo encuestas CSAT de Chatwoot...">
+      <input type="hidden" name="accion" value="traer_chatwoot">
+      <div class="csat-traer__campo">
+        <label class="small" for="csat-tipo-periodo">Período</label>
+        <select id="csat-tipo-periodo" name="tipo_periodo">
+          {% for valor, etiqueta in tipos_periodo %}
+            <option value="{{ valor }}" {% if formulario.tipo_periodo == valor %}selected{% endif %}>{{ etiqueta }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="csat-traer__campo csat-traer__fecha">
+        <label class="small" for="csat-fecha-inicio">Desde (personalizado)</label>
+        <input id="csat-fecha-inicio" type="date" name="fecha_inicio" value="{{ formulario.fecha_inicio }}">
+      </div>
+      <div class="csat-traer__campo csat-traer__fecha">
+        <label class="small" for="csat-fecha-fin">Hasta (personalizado)</label>
+        <input id="csat-fecha-fin" type="date" name="fecha_fin" value="{{ formulario.fecha_fin }}">
+      </div>
+      <label class="csat-check">
+        <input type="checkbox" name="prueba" value="1" {% if formulario.prueba %}checked{% endif %}>
+        <span>Modo prueba (no se guarda)</span>
+      </label>
+      <button type="submit">Traer encuestas</button>
+    </form>
 
     {% if mensaje %}
-      <div class="success top-space">{{ mensaje }}</div>
+      <div class="success top-space" role="status">{{ mensaje }}</div>
     {% endif %}
     {% if advertencia %}
-      <div class="warning top-space">{{ advertencia }}</div>
+      <div class="warning top-space" role="alert">{{ advertencia }}</div>
     {% endif %}
     {% if contexto and contexto.warnings %}
       {% for warning in contexto.warnings %}
         <div class="warning top-space">{{ warning }}</div>
       {% endfor %}
     {% endif %}
+    <div class="warning top-space" data-csat-aviso role="alert" hidden></div>
   </section>
 
   {% if contexto and contexto.prueba %}
     <div class="csat-test-banner" role="status"><strong>Modo prueba — nada de esto se guarda</strong> Las decisiones viven solo en el estado temporal de 24 h y no aparecen en las auditorías guardadas.</div>
   {% endif %}
 
-  <section class="card">
-    <div class="page-section-title">
-      <div>
-        <h2>Traer de Chatwoot</h2>
-        <p class="small">Elige el período y trae todas las encuestas CSAT de Chatwoot. Las fechas solo se usan con «Personalizado». Fuera del modo prueba, la auditoría del período se guarda (resumen y negativos, sin transcripciones ni datos de contacto).</p>
+  {% if contexto %}
+    {% set vista = contexto.vista %}
+    {% set kpis = vista.kpis %}
+
+    {# 2. Pasos #}
+    <ol class="csat-pasos" aria-label="Pasos de la auditoría">
+      {% for paso in vista.pasos %}
+        <li class="csat-paso is-{{ paso.estado }}" data-csat-paso="{{ paso.clave }}" {% if paso.estado == "actual" %}aria-current="step"{% endif %}>
+          <span class="csat-paso__marca" aria-hidden="true"></span>
+          <span class="csat-paso__texto">
+            <strong>{{ loop.index }}. {{ paso.titulo }}</strong>
+            <span class="csat-paso__detalle" data-csat-paso-detalle>{{ paso.detalle }}</span>
+          </span>
+        </li>
+      {% endfor %}
+    </ol>
+
+    {# 3. KPIs #}
+    <div class="csat-kpis">
+      <div class="metric csat-kpi">
+        <div class="label">CSAT real{% if contexto.modo == "chatwoot" %} (Chatwoot){% endif %}</div>
+        <div class="value"><span><span data-csat-kpi="csat_real">{{ kpis.csat_real }}</span>%</span></div>
       </div>
-      <span class="hero-badge hero-badge-soft">Chatwoot</span>
+      <div class="metric csat-kpi csat-kpi--principal">
+        <div class="label">CSAT ajustado</div>
+        <div class="value">
+          <span><span data-csat-kpi="csat_ajustado">{{ kpis.csat_ajustado }}</span>%</span>
+          <span class="csat-kpi__delta {{ 'is-up' if kpis.delta > 0 else 'is-down' if kpis.delta < 0 else 'is-igual' }}" data-csat-kpi="delta">{% if kpis.delta > 0 %}▲ {{ kpis.delta }}{% elif kpis.delta < 0 %}▼ {{ kpis.delta|abs }}{% else %}= 0{% endif %}</span>
+        </div>
+        <p class="csat-kpi__nota">{% if kpis.excluidos %}Sin <span data-csat-kpi="excluidos">{{ kpis.excluidos }}</span> negativos que no fueron culpa del agente{% else %}Ningún negativo excluido todavía<span data-csat-kpi="excluidos" hidden>0</span>{% endif %}</p>
+      </div>
+      <div class="metric csat-kpi">
+        <div class="label">Negativos</div>
+        <div class="value" data-csat-kpi="negativos">{{ kpis.negativos }}</div>
+      </div>
+      <div class="metric csat-kpi csat-kpi--pendiente">
+        <div class="label">Por confirmar</div>
+        <div class="value" data-csat-kpi="por_confirmar">{{ kpis.por_confirmar }}</div>
+      </div>
     </div>
 
-    <form method="post" data-processing-message="Trayendo encuestas CSAT de Chatwoot...">
-      <input type="hidden" name="accion" value="traer_chatwoot">
-      <div class="csat-periodo-grid">
+    {# 4. Revisión: pestañas, acciones y fichas #}
+    <section class="card csat-revision" aria-labelledby="csat-revision-titulo">
+      <div class="page-section-title">
         <div>
-          <label class="small" for="csat-tipo-periodo">Período</label>
-          <select id="csat-tipo-periodo" name="tipo_periodo">
-            {% for valor, etiqueta in tipos_periodo %}
-              <option value="{{ valor }}" {% if formulario.tipo_periodo == valor %}selected{% endif %}>{{ etiqueta }}</option>
+          <h2 id="csat-revision-titulo">Negativos para confirmar</h2>
+          <p class="small">Solo tus confirmaciones cambian el CSAT ajustado. Las propuestas de la IA no cuentan hasta que las aceptes.</p>
+        </div>
+      </div>
+
+      <div class="csat-revision__barra">
+        <div class="csat-pestanas" aria-label="Filtrar fichas">
+          {% for clave, etiqueta in [("por_confirmar", "Por confirmar"), ("confirmados", "Confirmados"), ("todos", "Todos")] %}
+            {% set activa = (clave == "por_confirmar" and vista.pestanas.por_confirmar) or (clave == "todos" and not vista.pestanas.por_confirmar) %}
+            <button type="button" class="csat-pestana{% if activa %} is-activa{% endif %}" data-csat-pestana="{{ clave }}" aria-pressed="{{ 'true' if activa else 'false' }}">
+              {{ etiqueta }} <span class="csat-pestana__conteo" data-csat-pestana-conteo>{{ vista.pestanas[clave] }}</span>
+            </button>
+          {% endfor %}
+        </div>
+
+        <form method="post" class="csat-acciones" id="csat-acciones" data-csat-acciones data-processing-message="Actualizando auditoría CSAT...">
+          <input type="hidden" name="analysis_id" value="{{ contexto.analysis_id }}">
+          <input type="hidden" name="period_id" value="{{ contexto.period_id }}">
+          {% if contexto.prueba %}<input type="hidden" name="prueba" value="1">{% endif %}
+          <button type="submit" class="btn secondary" name="accion" value="auditar_con_ia" data-csat-ia {% if not contexto.ia_disponible %}disabled{% endif %}><span aria-hidden="true">🤖</span> Revisar con IA los que faltan</button>
+          <button type="submit" name="accion" value="aceptar_propuestas_ia">Aceptar todo lo que propuso la IA</button>
+        </form>
+      </div>
+
+      <p class="csat-ia-estado" data-csat-ia-estado aria-live="polite" hidden></p>
+      <p class="small csat-revision__nota">
+        {% if contexto.ia_disponible %}
+          La IA ({{ contexto.ia_modelo }}) revisa {{ contexto.ia_tanda }} negativos por paso y solo propone.
+        {% else %}
+          Configura AUDITORIA_CHATS_AI_API_KEY (la misma IA de la Auditoría de chats) para habilitar la revisión con IA.
+        {% endif %}
+        Auditados a mano: {{ contexto.auditados_humana }} · Aceptados de la IA: {{ contexto.aceptados_ia }}
+      </p>
+
+      <div class="csat-listo" data-csat-listo role="status" {% if kpis.por_confirmar %}hidden{% endif %}>
+        <strong>¡Listo! No quedan negativos por confirmar</strong>
+        <a class="csat-link" href="#csat-resultado">Ver el resultado</a>
+      </div>
+
+      {% if vista.fichas %}
+        {# Un solo formulario para todas las fichas: el token firmado va una vez, no una por ficha. #}
+        <form method="post" class="csat-fichas" id="csat-fichas" data-csat-fichas>
+          <input type="hidden" name="accion" value="decidir">
+          <input type="hidden" name="analysis_id" value="{{ contexto.analysis_id }}">
+          <input type="hidden" name="period_id" value="{{ contexto.period_id }}">
+          {% if contexto.prueba %}<input type="hidden" name="prueba" value="1">{% endif %}
+          {% for f in vista.fichas %}
+            {% set fid = "csat-ficha-" ~ loop.index %}
+            <article class="csat-ficha" data-csat-ficha data-row-id="{{ f.row_id }}" data-confirmada="{{ 1 if f.confirmada else 0 }}" aria-labelledby="{{ fid }}-agente">
+
+              <header class="csat-ficha__cabecera">
+                <div class="csat-ficha__quien">
+                  <strong id="{{ fid }}-agente">{{ f.agente or "Sin agente" }}</strong>
+                  <span class="csat-estrellas" role="img" aria-label="{{ f.estrellas }} de 5 estrellas">{% for i in range(5) %}{{ "★" if i < f.estrellas else "☆" }}{% endfor %}</span>
+                  {% if f.fecha %}<span class="csat-ficha__fecha">{{ f.fecha }}</span>{% endif %}
+                </div>
+                {% if f.conversation_id %}
+                  <a class="csat-link" href="{{ url_for('auditoria_csat.conversacion_csat', conversation_id=f.conversation_id) }}" target="_blank" rel="noopener">Ver conversación <span aria-hidden="true">↗</span></a>
+                {% elif f.enlace %}
+                  <a class="csat-link" href="{{ f.enlace }}" target="_blank" rel="noopener noreferrer">Abrir enlace <span aria-hidden="true">↗</span></a>
+                {% endif %}
+              </header>
+
+              {% if f.comentario %}
+                <blockquote class="csat-cita">“{{ f.comentario }}”</blockquote>
+              {% else %}
+                <p class="csat-cita is-vacia">Sin comentario del cliente</p>
+              {% endif %}
+
+              <div class="csat-ficha__resumen" data-csat-ficha-resumen>
+                <span class="csat-insignia {{ clase_decision.get(f.justificable, '') }}">
+                  <span aria-hidden="true">✓</span> Confirmado: <span data-csat-resumen-decision>{{ f.decision_texto }}</span>{% if f.origen_texto %} · <span data-csat-resumen-origen>{{ f.origen_texto }}</span>{% endif %}
+                </span>
+                <span class="csat-ficha__detalle">
+                  {% if f.ia %}{{ "Coincide con la IA" if f.ia.decision == f.justificable else "La IA proponía: " ~ f.ia.texto }} · {% endif %}Motivo: <span data-csat-resumen-motivo>{{ f.motivo or "sin motivo" }}</span>{% if f.nota %} · Nota: <span data-csat-resumen-nota>{{ f.nota }}</span>{% endif %}
+                </span>
+              </div>
+
+              <details class="csat-ficha__cuerpo" data-csat-ficha-cuerpo {% if not f.confirmada %}open{% endif %}>
+                <summary class="csat-cambiar" data-csat-cambiar>Cambiar decisión</summary>
+
+                {% if f.ia %}
+                  <div class="csat-ia" data-csat-ia-propuesta="{{ f.ia.decision }}">
+                    <p class="csat-ia__titulo"><span aria-hidden="true">🤖</span> La IA cree: <strong class="{{ clase_decision.get(f.ia.decision, '') }}">{{ f.ia.texto }}</strong></p>
+                    <p class="csat-ia__meta">
+                      {% if f.ia.motivo %}Motivo: {{ f.ia.motivo }}{% endif %}{% if f.ia.motivo and f.ia.confianza not in ("", None) %} · {% endif %}{% if f.ia.confianza not in ("", None) %}{{ f.ia.confianza }}% seguro{% endif %}
+                    </p>
+                    {% if f.ia.evidencia %}<p class="csat-ia__evidencia">Evidencia: «{{ f.ia.evidencia }}»</p>{% endif %}
+                  </div>
+                {% else %}
+                  <p class="csat-ia is-vacia">La IA todavía no la revisó.</p>
+                {% endif %}
+
+                <fieldset class="csat-decision">
+                  <legend class="csat-oculto-visual">¿Fue culpa del agente?</legend>
+                  {% for valor in ["SÍ", "NO", "TAL VEZ"] %}
+                    {% set sugerido = f.ia and f.ia.decision == valor %}
+                    {% set actual = f.justificable == valor %}
+                    <button type="submit" name="decision" value="{{ f.row_id }}|{{ valor }}" data-justificable="{{ valor }}" class="csat-decision__boton {{ clase_decision[valor] }}{% if sugerido %} is-sugerido{% endif %}{% if actual %} is-actual{% endif %}" aria-pressed="{{ 'true' if actual else 'false' }}">
+                      <span aria-hidden="true">{{ marca_decision[valor] }}</span> {{ contexto.texto_decision[valor] }}{% if sugerido %} <span class="csat-decision__tag">sugerido por la IA</span>{% endif %}
+                    </button>
+                  {% endfor %}
+                </fieldset>
+
+                <div class="csat-ficha__campos">
+                  <div>
+                    <label class="small" for="{{ fid }}-motivo">Motivo</label>
+                    <select id="{{ fid }}-motivo" name="motivo__{{ f.row_id }}">
+                      <option value="" {% if not f.motivo %}selected{% endif %}>Sin motivo</option>
+                      {% for motivo in contexto.motivos_catalogo %}
+                        <option value="{{ motivo }}" {% if f.motivo == motivo %}selected{% endif %}>{{ motivo }}</option>
+                      {% endfor %}
+                    </select>
+                  </div>
+                  <div>
+                    <label class="small" for="{{ fid }}-nota">Nota del auditor (opcional)</label>
+                    <textarea id="{{ fid }}-nota" name="nota__{{ f.row_id }}" rows="2" placeholder="Contexto para el informe">{{ f.nota }}</textarea>
+                  </div>
+                </div>
+                <p class="csat-ficha__estado" data-csat-ficha-estado aria-live="polite"></p>
+              </details>
+            </article>
+          {% endfor %}
+        </form>
+      {% else %}
+        <p class="small empty-state">No hay negativos (calificación 1–2) en esta auditoría.</p>
+      {% endif %}
+    </section>
+
+    {# 5. Resultado #}
+    {% set metricas = contexto.metricas %}
+    <details class="card seccion-desplegable csat-resultado" id="csat-resultado" {% if not kpis.por_confirmar %}open{% endif %}>
+      <summary class="titulo-desplegable">
+        <span>4. Resultado</span>
+        <span class="small">Por agente, motivos, gráficos y descargas</span>
+      </summary>
+
+      {% if kpis.por_confirmar %}
+        <div class="warning">Quedan {{ kpis.por_confirmar }} negativos por confirmar: el CSAT ajustado aún no es definitivo.</div>
+      {% endif %}
+
+      <div class="csat-resultado__descargas top-space">
+        <button type="submit" form="csat-acciones" class="btn secondary" name="accion" value="descargar_csv_auditado">Descargar CSV auditado</button>
+        <button type="submit" form="csat-acciones" class="btn secondary" name="accion" value="descargar_reporte_ia">Descargar reporte para IA</button>
+        {% if contexto.modo == "chatwoot" and contexto.prueba %}
+          <button type="submit" form="csat-acciones" class="btn secondary" name="accion" value="descargar_bloque_informe">Descargar bloque para el informe</button>
+        {% endif %}
+      </div>
+
+      <div class="csat-rule-box top-space">
+        <strong>Cómo se calcula</strong>
+        <p class="small">CSAT real = positivas / calificaciones válidas ({{ metricas.total_respuestas }} respuestas: {{ metricas.positivos }} positivas, {{ metricas.neutrales }} neutrales, {{ metricas.negativos }} negativas). CSAT ajustado = positivas / (válidas menos los negativos confirmados como «No fue culpa del agente»). «Sí fue culpa del agente» y «Dudoso» siguen contando.</p>
+      </div>
+
+      <h3 class="csat-resultado__titulo">Por agente: CSAT real vs ajustado</h3>
+      <div class="table-wrap">
+        <table class="tabla-ordenable tabla-compacta">
+          <thead>
+            <tr>
+              <th>Agente</th>
+              <th>Encuestas</th>
+              <th>Negativas</th>
+              <th>Sí fue culpa del agente</th>
+              <th>Dudoso</th>
+              <th>No fue culpa del agente</th>
+              <th>CSAT real</th>
+              <th>CSAT ajustado</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for fila in contexto.resumen_agente %}
+              <tr>
+                <td>{{ fila["Agente"] }}</td>
+                <td>{{ fila["Total de valoraciones"] }}</td>
+                <td>{{ fila["Negativas"] }}</td>
+                <td>{{ fila["NO"] }}</td>
+                <td>{{ fila["TAL VEZ"] }}</td>
+                <td>{{ fila["SÍ"] }}</td>
+                <td>{{ fila["CSAT original"] }}%</td>
+                <td>{{ fila["CSAT auditado"] }}%</td>
+              </tr>
             {% endfor %}
-          </select>
-        </div>
-        <div>
-          <label class="small" for="csat-fecha-inicio">Fecha inicio (personalizado)</label>
-          <input id="csat-fecha-inicio" type="date" name="fecha_inicio" value="{{ formulario.fecha_inicio }}">
-        </div>
-        <div>
-          <label class="small" for="csat-fecha-fin">Fecha fin (personalizado)</label>
-          <input id="csat-fecha-fin" type="date" name="fecha_fin" value="{{ formulario.fecha_fin }}">
-        </div>
-        <label class="csat-check">
-          <input type="checkbox" name="prueba" value="1" {% if formulario.prueba %}checked{% endif %}>
-          <span>Modo prueba (no se guarda)</span>
-        </label>
-        <div>
-          <button type="submit">Traer encuestas de Chatwoot</button>
-        </div>
+          </tbody>
+        </table>
       </div>
-    </form>
-  </section>
 
-  <section class="card">
-    <div class="page-section-title">
-      <div>
-        <h2>Auditorías guardadas</h2>
-        <p class="small">Períodos guardados en las últimas 12 semanas. Al abrir uno se vuelve a traer de Chatwoot y se aplican las decisiones guardadas.</p>
+      <h3 class="csat-resultado__titulo">Motivos más comunes</h3>
+      {% if contexto.resumen_motivo %}
+        <div class="table-wrap">
+          <table class="tabla-ordenable tabla-compacta">
+            <thead>
+              <tr><th>Motivo</th><th>Cantidad</th><th>Porcentaje</th></tr>
+            </thead>
+            <tbody>
+              {% for fila in contexto.resumen_motivo %}
+                <tr>
+                  <td>{{ fila["Motivo"] }}</td>
+                  <td>{{ fila["Cantidad"] }}</td>
+                  <td>{{ fila["Porcentaje"] }}%</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="small empty-state">Todavía no hay motivos capturados.</p>
+      {% endif %}
+
+      <h3 class="csat-resultado__titulo">Gráficos</h3>
+      <div class="csat-chart-grid">
+        <article class="csat-chart-card">
+          <h4>Antes de la auditoría</h4>
+          <p class="small">Sobre {{ contexto.graficos.ratings_original.total }} calificaciones válidas.</p>
+          <div class="bar-chart">
+            {% for item in contexto.graficos.ratings_original.barras %}
+              {% set clase = 'is-success' if item.tipo == 'Positivo' else 'is-warning' if item.tipo == 'Neutral' else 'is-danger' %}
+              <div class="bar-row">
+                <span>{{ item.label }} ({{ item.rating }})</span>
+                <div class="bar-track"><div class="bar-fill {{ clase }}" style="width: {{ item.percent }}%"></div></div>
+                <strong>{{ item.value }} / {{ item.percent }}%</strong>
+              </div>
+            {% endfor %}
+          </div>
+        </article>
+
+        <article class="csat-chart-card">
+          <h4>Después de la auditoría</h4>
+          <p class="small">Sobre {{ contexto.graficos.ratings_auditada.total }} calificaciones, sin los negativos que no fueron culpa del agente.</p>
+          <div class="bar-chart">
+            {% for item in contexto.graficos.ratings_auditada.barras %}
+              {% set clase = 'is-success' if item.tipo == 'Positivo' else 'is-warning' if item.tipo == 'Neutral' else 'is-danger' %}
+              <div class="bar-row">
+                <span>{{ item.label }} ({{ item.rating }})</span>
+                <div class="bar-track"><div class="bar-fill {{ clase }}" style="width: {{ item.percent }}%"></div></div>
+                <strong>{{ item.value }} / {{ item.percent }}%</strong>
+                <small class="csat-delta {{ item.delta_class }}">Cambio {{ item.delta_value_label }} / {{ item.delta_percent_label }}</small>
+              </div>
+            {% endfor %}
+          </div>
+        </article>
+
+        <article class="csat-chart-card">
+          <h4>Decisiones sobre los negativos</h4>
+          <div class="bar-chart">
+            {% set max_value = (contexto.graficos.auditoria | map(attribute='value') | max) or 1 %}
+            {% for item in contexto.graficos.auditoria %}
+              {% set clase = 'is-danger' if item.label == 'NO' else 'is-warning' if item.label == 'TAL VEZ' else 'is-success' %}
+              <div class="bar-row">
+                <span>{{ contexto.texto_decision.get(item.label, item.label) }}</span>
+                <div class="bar-track"><div class="bar-fill {{ clase }}" style="width: {{ (item.value / max_value * 100) if max_value else 0 }}%"></div></div>
+                <strong>{{ item.value }}</strong>
+              </div>
+            {% endfor %}
+          </div>
+        </article>
+
+        <article class="csat-chart-card">
+          <h4>Motivos</h4>
+          <div class="bar-chart">
+            {% if contexto.graficos.motivos %}
+              {% set max_value = (contexto.graficos.motivos | map(attribute='value') | max) or 1 %}
+              {% for item in contexto.graficos.motivos %}
+                <div class="bar-row">
+                  <span>{{ item.label }}</span>
+                  <div class="bar-track"><div class="bar-fill is-warning" style="width: {{ (item.value / max_value * 100) if max_value else 0 }}%"></div></div>
+                  <strong>{{ item.value }}</strong>
+                </div>
+              {% endfor %}
+            {% else %}
+              <p class="small empty-state">No hay motivos capturados todavía.</p>
+            {% endif %}
+          </div>
+        </article>
       </div>
-      <span class="hero-badge hero-badge-soft">{{ periodos_guardados|length }} períodos</span>
-    </div>
+
+      <h3 class="csat-resultado__titulo">Hallazgos rápidos</h3>
+      <div class="csat-hallazgos">
+        {% if contexto.hallazgos %}
+          {% for hallazgo in contexto.hallazgos %}
+            <div class="csat-hallazgo">{{ hallazgo }}</div>
+          {% endfor %}
+        {% else %}
+          <div class="csat-hallazgo">Todavía no hay suficiente señal para mostrar hallazgos automáticos.</div>
+        {% endif %}
+      </div>
+    </details>
+  {% else %}
+    {# Sin auditoría abierta: cómo funciona #}
+    <section class="card csat-intro" aria-labelledby="csat-intro-titulo">
+      <div class="page-section-title">
+        <div>
+          <h2 id="csat-intro-titulo">Cómo funciona</h2>
+          <p class="small">Elige el período arriba y pulsa «Traer encuestas». La auditoría avanza en cuatro pasos.</p>
+        </div>
+      </div>
+      <ol class="csat-pasos csat-pasos--intro">
+        <li class="csat-paso is-pendiente">
+          <span class="csat-paso__marca" aria-hidden="true"></span>
+          <span class="csat-paso__texto"><strong>1. Encuestas</strong><span class="csat-paso__detalle">Se traen de Chatwoot las encuestas del período.</span></span>
+        </li>
+        <li class="csat-paso is-pendiente">
+          <span class="csat-paso__marca" aria-hidden="true"></span>
+          <span class="csat-paso__texto"><strong>2. La IA revisa</strong><span class="csat-paso__detalle">Propone, para cada negativo, si fue culpa del agente.</span></span>
+        </li>
+        <li class="csat-paso is-pendiente">
+          <span class="csat-paso__marca" aria-hidden="true"></span>
+          <span class="csat-paso__texto"><strong>3. Tú confirmas</strong><span class="csat-paso__detalle">Decides en cada ficha; solo tus confirmaciones cambian el CSAT ajustado.</span></span>
+        </li>
+        <li class="csat-paso is-pendiente">
+          <span class="csat-paso__marca" aria-hidden="true"></span>
+          <span class="csat-paso__texto"><strong>4. Resultado</strong><span class="csat-paso__detalle">CSAT real vs ajustado, por agente y descargas para el informe.</span></span>
+        </li>
+      </ol>
+    </section>
+  {% endif %}
+
+  {# 6. Auditorías guardadas #}
+  <details class="card seccion-desplegable" {% if not contexto %}open{% endif %}>
+    <summary class="titulo-desplegable">
+      <span>Auditorías guardadas</span>
+      <span class="small">Últimas 12 semanas · {{ periodos_guardados|length }} períodos</span>
+    </summary>
+    <p class="small">Al abrir una se vuelve a traer de Chatwoot y se aplican las decisiones guardadas.</p>
 
     {% if aviso_guardadas %}
       <div class="warning">{{ aviso_guardadas }}</div>
@@ -103,7 +451,7 @@
               <th>Encuestas</th>
               <th>CSAT real</th>
               <th>CSAT ajustado</th>
-              <th>Pendientes</th>
+              <th>Por confirmar</th>
               <th></th>
             </tr>
           </thead>
@@ -124,516 +472,29 @@
     {% else %}
       <p class="small empty-state">Todavía no hay auditorías guardadas.</p>
     {% endif %}
-  </section>
+  </details>
 
+  {# 7. CSV manual #}
   <details class="card seccion-desplegable">
     <summary class="titulo-desplegable">
       <span>Cargar CSV manualmente</span>
       <span class="small">No se guarda; usa el estado temporal de 24 h</span>
     </summary>
-    <p class="small">La herramienta espera la estructura operativa actual del CSV exportado de Chatwoot y completa vacíos si faltan columnas.</p>
+    <p class="small">La herramienta espera la estructura del CSV exportado de Chatwoot y completa vacíos si faltan columnas.</p>
 
-    <form method="post" enctype="multipart/form-data" data-processing-message="Leyendo CSV y armando la auditoría CSAT...">
+    <form method="post" enctype="multipart/form-data" class="csat-csv" data-processing-message="Leyendo CSV y armando la auditoría CSAT...">
       <input type="hidden" name="accion" value="analizar_csv">
-      <div class="row">
-        <div>
-          <label class="small" for="archivo">Archivo CSV</label>
-          <input id="archivo" type="file" name="archivo" accept=".csv">
-        </div>
-        <div>
-          <button type="submit">Analizar CSV</button>
-        </div>
+      <div class="csat-traer__campo">
+        <label class="small" for="archivo">Archivo CSV</label>
+        <input id="archivo" type="file" name="archivo" accept=".csv">
       </div>
+      <button type="submit">Analizar CSV</button>
     </form>
   </details>
-
-  {% if contexto %}
-    {% set metricas = contexto.metricas %}
-    <section class="card">
-      <div class="page-section-title">
-        <div>
-          <h2>Resumen inicial automático</h2>
-          <p class="small">Periodo, distribución del rating y CSAT base antes de aplicar decisiones del auditor.</p>
-        </div>
-        <span class="hero-badge hero-badge-soft">{{ contexto.periodo_texto or metricas.periodo }}</span>
-      </div>
-
-      <div class="csat-summary-grid">
-        <div class="metric"><div class="label">Total de respuestas</div><div class="value">{{ metricas.total_respuestas }}</div></div>
-        <div class="metric"><div class="label">CSAT original</div><div class="value">{{ metricas.csat_original }}%</div></div>
-        <div class="metric"><div class="label">Negativos</div><div class="value">{{ metricas.negativos }}</div></div>
-        <div class="metric"><div class="label">Neutrales</div><div class="value">{{ metricas.neutrales }}</div></div>
-        <div class="metric"><div class="label">Positivos</div><div class="value">{{ metricas.positivos }}</div></div>
-        <div class="metric"><div class="label">Ratings inválidos</div><div class="value">{{ metricas.ratings_invalidos }}</div></div>
-      </div>
-    </section>
-
-    <form method="post" data-processing-message="Actualizando auditoría CSAT...">
-      <input type="hidden" name="analysis_id" value="{{ contexto.analysis_id }}">
-      <input type="hidden" name="period_id" value="{{ contexto.period_id }}">
-      {% if contexto.prueba %}<input type="hidden" name="prueba" value="1">{% endif %}
-
-      <section class="card">
-        <div class="page-section-title">
-          <div>
-            <h2>Resumen de auditoría</h2>
-            <p class="small">El CSAT actualizado excluye solo las negativas con decisión confirmada SÍ (no atribuible al agente); las propuestas de la IA no cuentan hasta que las aceptes o las decidas tú. TAL VEZ no cambia el cálculo en esta V1.</p>
-          </div>
-          <div class="csat-action-bar">
-            <button type="submit" name="accion" value="guardar_auditoria">Actualizar resumen</button>
-            <button type="submit" class="btn secondary" name="accion" value="auditar_con_ia" data-csat-ia {% if not contexto.ia_disponible %}disabled{% endif %}>Auditar pendientes con IA</button>
-            <button type="submit" class="btn secondary" name="accion" value="aceptar_propuestas_ia">Aceptar propuestas de la IA</button>
-            <button type="submit" class="btn secondary" name="accion" value="descargar_csv_auditado">Descargar CSV auditado</button>
-            <button type="submit" class="btn secondary" name="accion" value="descargar_reporte_ia">Descargar reporte para IA</button>
-            {% if contexto.modo == "chatwoot" and contexto.prueba %}
-            <button type="submit" class="btn secondary" name="accion" value="descargar_bloque_informe">Descargar bloque para el informe</button>
-            {% endif %}
-          </div>
-        </div>
-
-        <p class="small top-space" data-csat-ia-estado aria-live="polite" hidden></p>
-
-        {% if metricas.negativos_pendientes %}
-          <div class="warning top-space">{{ metricas.negativos_pendientes }} negativos sin confirmar — el ajustado aún no es definitivo</div>
-        {% endif %}
-        <p class="small top-space">Auditados a mano: {{ contexto.auditados_humana }} · Aceptados de la IA: {{ contexto.aceptados_ia }}</p>
-
-        <div class="csat-rule-box top-space">
-          <strong>Auditoría asistida por IA</strong>
-          {% if contexto.ia_disponible %}
-            <p class="small top-space">La IA usa {{ contexto.ia_modelo }} (la misma configuración que la Auditoría de chats) y revisa todos los negativos pendientes ({{ contexto.ia_tanda }} por paso), mostrando el avance. Si el proveedor está saturado, espera y reintenta solo. Solo propone: la decisión queda pendiente hasta que la confirmes o uses «Aceptar propuestas de la IA». Si el CSV incluye transcripción, la revisa; si solo hay link, usa el comentario disponible y baja la confianza.</p>
-          {% else %}
-            <p class="small top-space">Configura AUDITORIA_CHATS_AI_API_KEY (la misma IA de la Auditoría de chats) para habilitar el botón. Las credenciales se usan solo en backend.</p>
-          {% endif %}
-        </div>
-
-        <div class="csat-summary-grid">
-          <div class="metric"><div class="label">NO</div><div class="value">{{ metricas.negativos_no }}</div></div>
-          <div class="metric"><div class="label">TAL VEZ</div><div class="value">{{ metricas.negativos_tal_vez }}</div></div>
-          <div class="metric"><div class="label">SÍ</div><div class="value">{{ metricas.negativos_si }}</div></div>
-          <div class="metric"><div class="label">% NO</div><div class="value">{{ metricas.porcentaje_no }}%</div></div>
-          <div class="metric"><div class="label">% TAL VEZ</div><div class="value">{{ metricas.porcentaje_tal_vez }}%</div></div>
-          <div class="metric"><div class="label">% SÍ</div><div class="value">{{ metricas.porcentaje_si }}%</div></div>
-          <div class="metric"><div class="label">Negativos totales</div><div class="value">{{ metricas.negativos }}</div></div>
-          <div class="metric"><div class="label">CSAT actualizado</div><div class="value">{{ metricas.csat_actualizado }}%</div></div>
-        </div>
-
-        <div class="csat-rule-box top-space">
-          <strong>Regla de cálculo usada</strong>
-          <p class="small top-space">CSAT original = positivas / ratings válidos. CSAT actualizado = positivas / (ratings válidos menos negativas con SÍ justificable). Solo cuentan las decisiones confirmadas por una persona; las propuestas de la IA no excluyen nada. Las negativas con NO siguen contando. TAL VEZ permanece dentro del cálculo hasta definición posterior.</p>
-        </div>
-      </section>
-
-      <section class="card">
-        <div class="page-section-title">
-          <div>
-            <h2>Tabla principal de auditoría</h2>
-            <p class="small">Los filtros son locales en pantalla. Para recalcular resumen o exportar, usa los botones superiores.</p>
-          </div>
-          <span class="hero-badge hero-badge-soft">{{ contexto.filas|length }} filas</span>
-        </div>
-
-        <div class="csat-filter-grid">
-          <div>
-            <label class="small" for="filtro-agente">Agente</label>
-            <select id="filtro-agente" data-csat-filter="agente">
-              <option value="">Todos</option>
-              {% for agente in contexto.filtros.agentes %}
-                <option value="{{ agente }}">{{ agente }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div>
-            <label class="small" for="filtro-calificacion">Calificación</label>
-            <select id="filtro-calificacion" data-csat-filter="calificacion">
-              <option value="">Todas</option>
-              {% for item in contexto.filtros.calificaciones %}
-                <option value="{{ item }}">{{ item }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div>
-            <label class="small" for="filtro-tipo-rating">Tipo de rating</label>
-            <select id="filtro-tipo-rating" data-csat-filter="tipo">
-              <option value="">Todos</option>
-              {% for item in contexto.filtros.tipos_rating %}
-                <option value="{{ item }}">{{ item }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div>
-            <label class="small" for="filtro-estado">Estado de auditoría</label>
-            <select id="filtro-estado" data-csat-filter="estado">
-              <option value="">Todos</option>
-              {% for item in contexto.filtros.estados %}
-                <option value="{{ item }}">{{ item }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div>
-            <label class="small" for="filtro-motivo">Motivo</label>
-            <select id="filtro-motivo" data-csat-filter="motivo">
-              <option value="">Todos</option>
-              {% for item in contexto.filtros.motivos %}
-                <option value="{{ item }}">{{ item }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div>
-            <label class="small" for="filtro-busqueda">Búsqueda</label>
-            <input id="filtro-busqueda" type="text" data-csat-filter="search" placeholder="Contacto, comentario, email o link">
-          </div>
-        </div>
-
-        <div class="csat-table-actions top-space">
-          <button type="button" class="btn secondary" data-csat-clear-filters>Limpiar filtros</button>
-          <span class="small" data-csat-visible-count>{{ contexto.filas|length }} filas visibles</span>
-        </div>
-
-        <div class="table-wrap top-space">
-          <table class="tabla-ordenable tabla-compacta csat-table" data-csat-table>
-            <thead>
-              <tr>
-                <th>Agente</th>
-                <th>Calificación</th>
-                <th>Tipo rating</th>
-                <th>Comentario</th>
-                <th>Link</th>
-                <th>Nombre</th>
-                <th>Correo</th>
-                <th>Teléfono</th>
-                <th>Fecha</th>
-                <th>Sugerencia IA</th>
-                <th>Justificable</th>
-                <th>Comentarios del auditor</th>
-                <th>Motivo de inconformidad</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for fila in contexto.filas %}
-                {% set tipo_clase = 'is-negativo' if fila.tipo_rating == 'Negativo' else 'is-neutral' if fila.tipo_rating == 'Neutral' else 'is-positivo' if fila.tipo_rating == 'Positivo' else 'is-pendiente' %}
-                <tr
-                  data-agente="{{ fila.agente }}"
-                  data-calificacion="{{ fila.calificacion_visible if fila.calificacion_visible else 'Sin calificación válida' }}"
-                  data-tipo="{{ fila.tipo_rating }}"
-                  data-estado="{{ fila.estado_auditoria }}"
-                  data-motivo="{{ fila.motivo_inconformidad }}"
-                  data-search="{{ (fila.nombre_contacto ~ ' ' ~ fila.correo_contacto ~ ' ' ~ fila.telefono_contacto ~ ' ' ~ fila.comentario ~ ' ' ~ fila.enlace_conversacion ~ ' ' ~ fila.agente)|lower }}"
-                >
-                  <td>{{ fila.agente or 'Sin agente' }}</td>
-                  <td>{{ fila.calificacion_visible or 'Sin calificación válida' }}</td>
-                  <td><span class="csat-chip {{ tipo_clase }}">{{ fila.tipo_rating }}</span></td>
-                  <td>{{ fila.comentario or 'Sin comentario' }}</td>
-                  <td>
-                    {% if fila.enlace_conversacion %}
-                      <a class="csat-link" href="{{ fila.enlace_conversacion }}" target="_blank" rel="noopener noreferrer">Abrir conversación</a>
-                    {% else %}
-                      Sin enlace
-                    {% endif %}
-                    {% if fila.tipo_rating == 'Negativo' and fila.conversation_id %}
-                      <a class="csat-link csat-link--block" href="{{ url_for('auditoria_csat.conversacion_csat', conversation_id=fila.conversation_id) }}" target="_blank" rel="noopener">Ver conversación</a>
-                    {% endif %}
-                  </td>
-                  <td>{{ fila.nombre_contacto or 'Sin nombre' }}</td>
-                  <td>{{ fila.correo_contacto or 'Sin correo' }}</td>
-                  <td>{{ fila.telefono_contacto or 'Sin teléfono' }}</td>
-                  <td>{{ fila.fecha_registrada or fila.fecha_registrada_raw or 'Sin fecha' }}</td>
-                  <td>
-                    {% if fila.ia_estado %}
-                      <div class="csat-ai-note">
-                        <strong>Propuesta IA: {{ fila.ia_justificable or 'sin propuesta' }}{% if fila.ia_motivo %} · {{ fila.ia_motivo }}{% endif %}</strong>
-                        <strong>Confianza {{ fila.ia_confianza }}%</strong>
-                        <span>{{ fila.ia_explicacion }}</span>
-                        {% if fila.ia_evidencia %}
-                          <small>Evidencia: {{ fila.ia_evidencia }}</small>
-                        {% endif %}
-                        <small>Fuente: {{ fila.ia_fuente }}</small>
-                      </div>
-                    {% else %}
-                      <span class="small">Sin sugerencia</span>
-                    {% endif %}
-                  </td>
-                  <td>
-                    <select name="justificable__{{ fila.row_id }}" data-row-estado>
-                      <option value="" {% if not fila.justificable %}selected{% endif %}>Pendiente</option>
-                      {% for opcion in contexto.justificable_options %}
-                        <option value="{{ opcion }}" {% if fila.justificable == opcion %}selected{% endif %}>{{ 'SÍ (no atribuible al agente)' if opcion == 'SÍ' else opcion }}</option>
-                      {% endfor %}
-                    </select>
-                    {% if fila.origen_decision == 'humana' %}
-                      <span class="csat-origin-badge">Decisión humana</span>
-                    {% elif fila.origen_decision == 'ia_aceptada' %}
-                      <span class="csat-origin-badge">Propuesta IA aceptada</span>
-                    {% endif %}
-                  </td>
-                  <td>
-                    <textarea name="comentario_auditor__{{ fila.row_id }}" placeholder="Contexto del auditor">{{ fila.comentario_auditor }}</textarea>
-                  </td>
-                  <td>
-                    <select name="motivo_inconformidad__{{ fila.row_id }}" data-row-motivo>
-                      <option value="" {% if not fila.motivo_inconformidad %}selected{% endif %}>Sin motivo</option>
-                      {% for motivo in contexto.motivos_catalogo %}
-                        <option value="{{ motivo }}" {% if fila.motivo_inconformidad == motivo %}selected{% endif %}>{{ motivo }}</option>
-                      {% endfor %}
-                    </select>
-                  </td>
-                </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      </section>
-    </form>
-
-    <section class="card">
-      <div class="page-section-title">
-        <div>
-          <h2>Gráficos</h2>
-          <p class="small">Lectura rápida sin sumar dependencias pesadas. Los gráficos se renderizan con HTML y CSS.</p>
-        </div>
-        <span class="hero-badge hero-badge-soft">Sin librería extra</span>
-      </div>
-
-      <div class="csat-chart-grid">
-        <article class="csat-chart-card">
-          <h3>Antes de auditoría</h3>
-          <p class="small">Distribución original sobre {{ contexto.graficos.ratings_original.total }} ratings válidos.</p>
-          <div class="bar-chart">
-            {% for item in contexto.graficos.ratings_original.barras %}
-              {% set clase = 'is-success' if item.tipo == 'Positivo' else 'is-warning' if item.tipo == 'Neutral' else 'is-danger' %}
-              <div class="bar-row">
-                <span>{{ item.label }} ({{ item.rating }})</span>
-                <div class="bar-track"><div class="bar-fill {{ clase }}" style="width: {{ item.percent }}%"></div></div>
-                <strong>{{ item.value }} / {{ item.percent }}%</strong>
-              </div>
-            {% endfor %}
-          </div>
-        </article>
-
-        <article class="csat-chart-card">
-          <h3>Después de auditoría</h3>
-          <p class="small">Distribución auditada sobre {{ contexto.graficos.ratings_auditada.total }} ratings válidos, excluyendo negativas con SÍ.</p>
-          <div class="bar-chart">
-            {% for item in contexto.graficos.ratings_auditada.barras %}
-              {% set clase = 'is-success' if item.tipo == 'Positivo' else 'is-warning' if item.tipo == 'Neutral' else 'is-danger' %}
-              <div class="bar-row">
-                <span>{{ item.label }} ({{ item.rating }})</span>
-                <div class="bar-track"><div class="bar-fill {{ clase }}" style="width: {{ item.percent }}%"></div></div>
-                <strong>{{ item.value }} / {{ item.percent }}%</strong>
-                <small class="csat-delta {{ item.delta_class }}">Cambio {{ item.delta_value_label }} / {{ item.delta_percent_label }}</small>
-              </div>
-            {% endfor %}
-          </div>
-        </article>
-
-        <article class="csat-chart-card">
-          <h3>Distribución NO / TAL VEZ / SÍ</h3>
-          <div class="bar-chart">
-            {% set max_value = (contexto.graficos.auditoria | map(attribute='value') | max) or 1 %}
-            {% for item in contexto.graficos.auditoria %}
-              {% set clase = 'is-danger' if item.label == 'NO' else 'is-warning' if item.label == 'TAL VEZ' else 'is-success' %}
-              <div class="bar-row">
-                <span>{{ item.label }}</span>
-                <div class="bar-track"><div class="bar-fill {{ clase }}" style="width: {{ (item.value / max_value * 100) if max_value else 0 }}%"></div></div>
-                <strong>{{ item.value }}</strong>
-              </div>
-            {% endfor %}
-          </div>
-        </article>
-
-        <article class="csat-chart-card">
-          <h3>Motivos de inconformidad</h3>
-          <div class="bar-chart">
-            {% set max_value = (contexto.graficos.motivos | map(attribute='value') | max) or 1 %}
-            {% if contexto.graficos.motivos %}
-              {% for item in contexto.graficos.motivos %}
-                <div class="bar-row">
-                  <span>{{ item.label }}</span>
-                  <div class="bar-track"><div class="bar-fill is-warning" style="width: {{ (item.value / max_value * 100) if max_value else 0 }}%"></div></div>
-                  <strong>{{ item.value }}</strong>
-                </div>
-              {% endfor %}
-            {% else %}
-              <p class="small empty-state">No hay motivos capturados todavía.</p>
-            {% endif %}
-          </div>
-        </article>
-
-        <article class="csat-chart-card">
-          <h3>Resumen por agente</h3>
-          <div class="bar-chart">
-            {% set max_value = (contexto.graficos.agentes | map(attribute='value') | max) or 1 %}
-            {% if contexto.graficos.agentes %}
-              {% for item in contexto.graficos.agentes %}
-                <div class="bar-row">
-                  <span>{{ item.label }}</span>
-                  <div class="bar-track"><div class="bar-fill is-success" style="width: {{ (item.value / max_value * 100) if max_value else 0 }}%"></div></div>
-                  <strong>{{ item.value }}</strong>
-                </div>
-              {% endfor %}
-            {% else %}
-              <p class="small empty-state">No hay agentes visibles.</p>
-            {% endif %}
-          </div>
-        </article>
-      </div>
-    </section>
-
-    <details class="card seccion-desplegable" open>
-      <summary class="titulo-desplegable">
-        <span>Resumen por agente</span>
-        <span class="small">{{ contexto.resumen_agente|length }} agentes</span>
-      </summary>
-      <div class="table-wrap">
-        <table class="tabla-ordenable tabla-compacta">
-          <thead>
-            <tr>
-              {% for col in ["Agente","Total de valoraciones","Negativas","Neutrales","Positivas","NO","TAL VEZ","SÍ","CSAT original","CSAT auditado"] %}
-                <th>{{ col }}</th>
-              {% endfor %}
-            </tr>
-          </thead>
-          <tbody>
-            {% for fila in contexto.resumen_agente %}
-              <tr>
-                <td>{{ fila["Agente"] }}</td>
-                <td>{{ fila["Total de valoraciones"] }}</td>
-                <td>{{ fila["Negativas"] }}</td>
-                <td>{{ fila["Neutrales"] }}</td>
-                <td>{{ fila["Positivas"] }}</td>
-                <td>{{ fila["NO"] }}</td>
-                <td>{{ fila["TAL VEZ"] }}</td>
-                <td>{{ fila["SÍ"] }}</td>
-                <td>{{ fila["CSAT original"] }}%</td>
-                <td>{{ fila["CSAT auditado"] }}%</td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </details>
-
-    <details class="card seccion-desplegable" open>
-      <summary class="titulo-desplegable">
-        <span>Resumen por motivo</span>
-        <span class="small">{{ contexto.resumen_motivo|length }} motivos</span>
-      </summary>
-      <div class="table-wrap">
-        <table class="tabla-ordenable tabla-compacta">
-          <thead>
-            <tr>
-              <th>Motivo de inconformidad</th>
-              <th>Cantidad</th>
-              <th>Porcentaje</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for fila in contexto.resumen_motivo %}
-              <tr>
-                <td>{{ fila["Motivo"] }}</td>
-                <td>{{ fila["Cantidad"] }}</td>
-                <td>{{ fila["Porcentaje"] }}%</td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </details>
-
-    <section class="card">
-      <div class="page-section-title">
-        <div>
-          <h2>Hallazgos rápidos</h2>
-          <p class="small">Base operativa para el reporte exportable hacia IA.</p>
-        </div>
-        <span class="hero-badge hero-badge-soft">Auto-resumen</span>
-      </div>
-
-      <div class="csat-hallazgos">
-        {% if contexto.hallazgos %}
-          {% for hallazgo in contexto.hallazgos %}
-            <div class="csat-hallazgo">{{ hallazgo }}</div>
-          {% endfor %}
-        {% else %}
-          <div class="csat-hallazgo">Todavía no hay suficiente señal para mostrar hallazgos automáticos.</div>
-        {% endif %}
-      </div>
-    </section>
-  {% endif %}
 </div>
 {% endblock %}
 
 {% block scripts %}
   {{ super() }}
-  <script>
-    (function () {
-      const table = document.querySelector("[data-csat-table]");
-      if (!table) return;
-
-      const rows = Array.from(table.querySelectorAll("tbody tr"));
-      const countTarget = document.querySelector("[data-csat-visible-count]");
-      const filterInputs = document.querySelectorAll("[data-csat-filter]");
-      const clearButton = document.querySelector("[data-csat-clear-filters]");
-
-      function norm(value) {
-        return (value || "").toString().trim().toLowerCase();
-      }
-
-      function updateRowDataset(row) {
-        const estadoSelect = row.querySelector("[data-row-estado]");
-        const motivoSelect = row.querySelector("[data-row-motivo]");
-        row.dataset.estado = estadoSelect && estadoSelect.value ? estadoSelect.value : "pendiente";
-        row.dataset.motivo = motivoSelect ? motivoSelect.value : "";
-      }
-
-      function applyFilters() {
-        const values = {};
-        filterInputs.forEach((input) => {
-          values[input.dataset.csatFilter] = norm(input.value);
-        });
-
-        let visible = 0;
-        rows.forEach((row) => {
-          updateRowDataset(row);
-          const matches =
-            (!values.agente || norm(row.dataset.agente) === values.agente) &&
-            (!values.calificacion || norm(row.dataset.calificacion) === values.calificacion) &&
-            (!values.tipo || norm(row.dataset.tipo) === values.tipo) &&
-            (!values.estado || norm(row.dataset.estado) === values.estado) &&
-            (!values.motivo || norm(row.dataset.motivo) === values.motivo) &&
-            (!values.search || norm(row.dataset.search).includes(values.search));
-
-          row.style.display = matches ? "" : "none";
-          if (matches) visible += 1;
-        });
-
-        if (countTarget) {
-          countTarget.textContent = `${visible} filas visibles`;
-        }
-      }
-
-      filterInputs.forEach((input) => {
-        input.addEventListener("input", applyFilters);
-        input.addEventListener("change", applyFilters);
-      });
-
-      rows.forEach((row) => {
-        row.querySelectorAll("[data-row-estado], [data-row-motivo]").forEach((input) => {
-          input.addEventListener("change", applyFilters);
-        });
-      });
-
-      if (clearButton) {
-        clearButton.addEventListener("click", () => {
-          filterInputs.forEach((input) => {
-            input.value = "";
-          });
-          applyFilters();
-        });
-      }
-
-      applyFilters();
-    })();
-  </script>
   <script src="{{ url_for('static', filename='auditoria_csat.js', v=asset_version('auditoria_csat.js')) }}" defer></script>
 {% endblock %}

@@ -274,15 +274,18 @@ python scripts/cargar_manual_auditoria.py "Manual de Procedimientos.pdf" --versi
 
 ## Auditoría CSAT
 
-`/auditoria-csat` trae las encuestas CSAT de Chatwoot de un período, la IA propone si cada negativo (1–2) es atribuible al agente y una persona confirma o corrige. El CSAT ajustado solo descuenta los negativos con decisión confirmada «SÍ (no atribuible al agente)».
+`/auditoria-csat` trae las encuestas CSAT de Chatwoot de un período, la IA propone si cada negativo (1–2) es atribuible al agente y una persona confirma o corrige. El CSAT ajustado solo descuenta los negativos con decisión confirmada «No fue culpa del agente».
 
 Puesta en marcha:
 
 1. Ejecuta `supabase_csat_audits.sql` en el editor SQL de Supabase (crea `csat_audit_periods` y `csat_audit_negatives`).
 2. Usa las variables que ya existen: `CHATWOOT_BASE_URL`, `CHATWOOT_ACCOUNT_ID`, `CHATWOOT_API_ACCESS_TOKEN`, `CHATWOOT_TIMEZONE`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` y la IA de la Auditoría de chats (`AUDITORIA_CHATS_AI_*`). La única variable propia es `CSAT_AI_MAX_CASES` (opcional).
 
+Flujo en 4 pasos (la pantalla marca en qué paso vas): **1. Encuestas** (traer el período), **2. La IA revisa**, **3. Tú confirmas** y **4. Resultado** (CSAT real contra CSAT ajustado y descargas).
+
 Cómo funciona:
 
+- **Fichas**: cada negativo es una ficha con la calificación, el comentario del cliente, la propuesta de la IA en lenguaje claro y tres botones con palabras: «No fue culpa del agente», «Sí fue culpa del agente» y «Dudoso». Cada clic se guarda al instante y la ficha pasa a un resumen («Confirmado: …») con «Cambiar decisión» para reabrirla; el motivo y la nota se envían junto con la decisión. Las pestañas filtran las fichas por estado (pendientes, confirmadas, todas).
 - **Traer de Chatwoot**: elige el período (Semana pasada, Esta semana, Últimos 7 días, Mes pasado, Este mes o Personalizado con fecha inicio y fin) y pulsa «Traer encuestas de Chatwoot». «Hoy» se toma en `CHATWOOT_TIMEZONE`.
 - **Guardado automático**: fuera del modo prueba, el período se guarda en Supabase al traerlo y en cada acción (guardar decisiones, auditar con IA, aceptar propuestas). Solo se guardan el resumen y los negativos con su decisión; no se guardan transcripciones ni datos de contacto. Los períodos con fecha fin de hace más de 12 semanas se borran al guardar.
 - **Re-traer un período ya guardado** actualiza los conteos desde Chatwoot, conserva las decisiones de los negativos que siguen siéndolo y borra los que ya no vuelven o subieron a 3+.

@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import re
+import time
 import unicodedata
 import uuid
 from datetime import date, datetime
@@ -21,6 +22,7 @@ from utils.auditoria_csat_chatwoot import (
 )
 from utils.auditoria_csat_informe import bloque_desde_estado
 from utils.auditoria_csat_store import AuditoriaCsatConfigError
+from utils.auditoria_csat_vista import TEXTO_DECISION, construir_vista
 from utils.chatwoot_reportes import ChatwootClient, _obtener_timezone, _timezone, construir_rango_chatwoot_fechas
 from utils.csat_periodos import TIPOS_PERIODO, formatear_periodo, resolver_periodo
 from utils.archivos import _leer_csv_desde_bytes
@@ -181,6 +183,7 @@ CSAT_IA_MAX_TRANSCRIPT_CHARS = 6000
 # Tiempo total de IA por clic (principal + respaldo). Vercel corta a los 60 s y antes se
 # traen conversaciones de Chatwoot y se guarda en Supabase, así que se deja margen.
 CSAT_IA_PRESUPUESTO_SEGUNDOS = 48
+CSAT_IA_RESPALDO_MINIMO_SEGUNDOS = 10
 
 
 def normalizar_texto(valor):
@@ -630,10 +633,15 @@ def auditar_lote_con_proveedor(filas, config):
     modelos = [config["model"]]
     if config.get("model_respaldo") and config["model_respaldo"] != config["model"]:
         modelos.append(config["model_respaldo"])
+    # Con respaldo, el principal usa la mitad del presupuesto; el respaldo recibe lo que sobra (mínimo fijo).
     timeout = CSAT_IA_PRESUPUESTO_SEGUNDOS // len(modelos)
+    inicio = time.monotonic()
     errores = []
     data = None
     for modelo in modelos:
+        if errores:
+            transcurrido = time.monotonic() - inicio
+            timeout = max(CSAT_IA_RESPALDO_MINIMO_SEGUNDOS, int(CSAT_IA_PRESUPUESTO_SEGUNDOS - transcurrido))
         try:
             data = completar_json(mensajes, dict(config, model=modelo), timeout=timeout)
             break
@@ -773,6 +781,8 @@ def auditar_estado_con_ia(estado, info=None):
 def actualizar_estado_desde_formulario(estado, form):
     for fila in estado.get("rows", []):
         row_id = fila["row_id"]
+        if f"justificable__{row_id}" not in form:
+            continue  # la fila no vino en el formulario: no se toca su decisión
         justificable = normalizar_justificable(form.get(f"justificable__{row_id}"))
         comentario_auditor = limpiar_texto(form.get(f"comentario_auditor__{row_id}"))
         motivo = limpiar_texto(form.get(f"motivo_inconformidad__{row_id}"))
@@ -795,6 +805,73 @@ def actualizar_estado_desde_formulario(estado, form):
             fila["origen_decision"] = "humana" if justificable else ""
 
     return estado
+
+
+def leer_decision_formulario(form):
+    """(row_id, justificable, motivo, nota) de un POST `decidir`.
+
+    El JS envía row_id/justificable/motivo/nota. Sin JS se envía el formulario único de fichas:
+    el botón pulsado trae `decision=<row_id>|<decisión>` y los campos van como motivo__<row_id>.
+    """
+    row_id = limpiar_texto(form.get("row_id"))
+    justificable = form.get("justificable")
+    if row_id and justificable:
+        return row_id, justificable, form.get("motivo"), form.get("nota")
+    decision = form.get("decision") or ""
+    if "|" not in decision:
+        return row_id, justificable, form.get("motivo"), form.get("nota")
+    row_id, justificable = decision.rsplit("|", 1)
+    row_id = limpiar_texto(row_id)
+    return row_id, justificable, form.get(f"motivo__{row_id}"), form.get(f"nota__{row_id}")
+
+
+def aplicar_decision(estado, row_id, justificable, motivo, nota):
+    """Aplica la decisión humana a UN negativo. Devuelve '' si aplicó o el error en español."""
+    fila = next(
+        (
+            f
+            for f in estado.get("rows", [])
+            if str(f.get("row_id")) == str(row_id) and f.get("tipo_rating") == "Negativo"
+        ),
+        None,
+    )
+    if fila is None:
+        return "No se encontró ese negativo."
+    decision = normalizar_justificable(justificable)
+    if not decision:
+        return "Elige una decisión válida."
+    motivo = limpiar_texto(motivo)
+    if motivo not in MOTIVOS_INCONFORMIDAD:
+        motivo = ""
+    fila["justificable"] = decision
+    fila["motivo_inconformidad"] = motivo
+    fila["comentario_auditor"] = limpiar_texto(nota)[:500]
+    fila["origen_decision"] = "humana"
+    fila["estado_auditoria"] = decision
+    fila["csat_flag"] = calcular_flag_csat(fila.get("tipo_rating"), decision)
+    return ""
+
+
+def estado_decision(estado, row_id):
+    return next(
+        (f.get("justificable", "") for f in estado.get("rows", []) if str(f.get("row_id")) == str(row_id)), ""
+    )
+
+
+def respuesta_decision(estado, row_id, ok, error, advertencia, analysis_id):
+    filas = estado.get("rows", []) if estado else []
+    vista = construir_vista(filas, construir_metricas(filas))
+    ficha = next((f for f in vista["fichas"] if str(f.get("row_id")) == str(row_id)), None)
+    return {
+        "ok": ok,
+        "error": error,
+        "advertencia": advertencia,
+        "analysis_id": analysis_id,
+        "ficha": ficha,
+        "kpis": vista["kpis"],
+        "pasos": vista["pasos"],
+        "pestanas": vista["pestanas"],
+    }
 
 
 def aceptar_propuestas_ia(estado):
@@ -1014,12 +1091,12 @@ def construir_top_hallazgos(filas, metricas, resumen_agente, resumen_motivo):
 
     if metricas["negativos_si"]:
         hallazgos.append(
-            f"Negativas excluidas del CSAT auditado por SÍ justificable: {metricas['negativos_si']}."
+            f"Negativas excluidas del CSAT ajustado porque no fueron culpa del agente: {metricas['negativos_si']}."
         )
 
     if metricas["negativos_pendientes"]:
         hallazgos.append(
-            f"Negativas pendientes de auditar: {metricas['negativos_pendientes']}."
+            f"Negativas por confirmar: {metricas['negativos_pendientes']}."
         )
 
     if metricas["ratings_invalidos"]:
@@ -1055,8 +1132,6 @@ def construir_contexto_analisis(estado):
     hallazgos = construir_top_hallazgos(filas, metricas, resumen_agente, resumen_motivo)
     casos_destacados = construir_casos_destacados(filas)
 
-    agentes = sorted({fila.get("agente", "") for fila in filas if fila.get("agente")})
-
     negativos = [fila for fila in filas if fila.get("tipo_rating") == "Negativo"]
 
     return {
@@ -1073,21 +1148,14 @@ def construir_contexto_analisis(estado):
         "ia_modelo": ia_config["model"],
         "ia_tanda": ia_config["max_cases"],
         "metricas": metricas,
-        "filas": filas,
+        "vista": construir_vista(filas, metricas),
         "resumen_agente": resumen_agente,
         "resumen_motivo": resumen_motivo,
         "graficos": graficos,
         "hallazgos": hallazgos,
         "casos_destacados": casos_destacados,
-        "filtros": {
-            "agentes": agentes,
-            "calificaciones": ["1", "2", "3", "4", "5", "Sin calificación válida"],
-            "tipos_rating": TIPOS_RATING,
-            "estados": ESTADOS_AUDITORIA,
-            "motivos": MOTIVOS_INCONFORMIDAD,
-        },
         "motivos_catalogo": MOTIVOS_INCONFORMIDAD,
-        "justificable_options": JUSTIFICABLE_OPTIONS,
+        "texto_decision": TEXTO_DECISION,
     }
 
 
@@ -1152,25 +1220,25 @@ def construir_reporte_ia_markdown(estado):
         f"- Total de respuestas: {metricas['total_respuestas']}",
         f"- Ratings válidos: {metricas['total_validos']}",
         f"- Ratings inválidos o vacíos: {metricas['ratings_invalidos']}",
-        f"- CSAT original: {metricas['csat_original']}%",
-        f"- CSAT actualizado: {metricas['csat_actualizado']}%",
+        f"- CSAT real: {metricas['csat_original']}%",
+        f"- CSAT ajustado: {metricas['csat_actualizado']}%",
         f"- Negativos: {metricas['negativos']}",
         f"- Neutrales: {metricas['neutrales']}",
         f"- Positivos: {metricas['positivos']}",
         "",
         "## Resultado de auditoría",
-        f"- NO: {metricas['negativos_no']} ({metricas['porcentaje_no']}% de negativas)",
-        f"- TAL VEZ: {metricas['negativos_tal_vez']} ({metricas['porcentaje_tal_vez']}% de negativas)",
-        f"- SÍ: {metricas['negativos_si']} ({metricas['porcentaje_si']}% de negativas)",
+        f"- Sí fue culpa del agente: {metricas['negativos_no']} ({metricas['porcentaje_no']}% de negativas)",
+        f"- Dudoso: {metricas['negativos_tal_vez']} ({metricas['porcentaje_tal_vez']}% de negativas)",
+        f"- No fue culpa del agente: {metricas['negativos_si']} ({metricas['porcentaje_si']}% de negativas)",
         f"- Pendientes: {metricas['negativos_pendientes']}",
         "",
-        "## Regla usada para el CSAT actualizado",
+        "## Regla usada para el CSAT ajustado",
         "- Las calificaciones 4 y 5 cuentan como positivas.",
         "- Las calificaciones 1 y 2 cuentan como negativas.",
         "- Las calificaciones 3 quedan como neutrales dentro del denominador.",
-        "- Una negativa marcada como SÍ justificable se excluye del denominador del CSAT auditado.",
-        "- Una negativa marcada como NO sigue contando como negativa válida.",
-        "- Una negativa marcada como TAL VEZ no altera el cálculo y sigue contando hasta nueva definición.",
+        "- Una negativa marcada como «No fue culpa del agente» se excluye del denominador del CSAT ajustado.",
+        "- Una negativa marcada como «Sí fue culpa del agente» sigue contando como negativa válida.",
+        "- Una negativa marcada como «Dudoso» no altera el cálculo y sigue contando hasta nueva definición.",
         "- Las filas sin calificación válida se excluyen del cálculo.",
         "",
         "## Hallazgos principales",
@@ -1183,7 +1251,7 @@ def construir_reporte_ia_markdown(estado):
 
     lineas.extend(["", "## Resumen por agente"])
     if contexto["resumen_agente"]:
-        lineas.append("| Agente | Total | Negativas | Neutrales | Positivas | NO | TAL VEZ | SÍ | CSAT original | CSAT auditado |")
+        lineas.append("| Agente | Total | Negativas | Neutrales | Positivas | Sí fue culpa | Dudoso | No fue culpa | CSAT real | CSAT ajustado |")
         lineas.append("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
         for fila in contexto["resumen_agente"]:
             lineas.append(
@@ -1206,13 +1274,13 @@ def construir_reporte_ia_markdown(estado):
         for fila in contexto["casos_destacados"]:
             lineas.extend(
                 [
-                    f"### {fila.get('agente') or 'Sin agente'} | {fila.get('estado_auditoria')} | Rating {fila.get('calificacion_visible') or 'sin dato'}",
+                    f"### {fila.get('agente') or 'Sin agente'} | {TEXTO_DECISION.get(fila.get('estado_auditoria'), 'Pendiente')} | Rating {fila.get('calificacion_visible') or 'sin dato'}",
                     f"- Fecha: {fila.get('fecha_registrada') or fila.get('fecha_registrada_raw') or 'sin fecha'}",
                     f"- Contacto: {fila.get('nombre_contacto') or 'sin nombre'} | {fila.get('correo_contacto') or 'sin correo'} | {fila.get('telefono_contacto') or 'sin teléfono'}",
                     f"- Motivo: {fila.get('motivo_inconformidad') or 'sin motivo'}",
                     f"- Comentario cliente: {fila.get('comentario') or 'sin comentario'}",
                     f"- Comentario auditor: {fila.get('comentario_auditor') or 'sin comentario'}",
-                    f"- Propuesta IA: {fila.get('ia_justificable') or 'sin propuesta'} | {fila.get('ia_motivo') or 'sin motivo'}",
+                    f"- Propuesta IA: {TEXTO_DECISION.get(fila.get('ia_justificable'), 'sin propuesta')} | {fila.get('ia_motivo') or 'sin motivo'}",
                     f"- Origen de la decisión: {fila.get('origen_decision') or 'sin decidir'}",
                     f"- Link: {fila.get('enlace_conversacion') or 'sin enlace'}",
                     "",
@@ -1299,14 +1367,15 @@ def construir_estado_chatwoot(filas, tipo_periodo, inicio, fin, prueba):
     }
 
 
-def sincronizar_periodo(estado):
+def sincronizar_periodo(estado, retencion=True):
     """Guarda resumen y negativos del período en Supabase. Nunca en modo prueba."""
     if not es_modo_guardado(estado):
         return
     store = obtener_store_csat()
     filas = estado.get("rows", [])
     # La retención va antes del guardado para no borrar el período recién guardado.
-    store.borrar_vencidos(hoy_chatwoot())
+    if retencion:
+        store.borrar_vencidos(hoy_chatwoot())
     periodo = store.guardar_periodo(
         estado.get("tipo_periodo") or "personalizado",
         _fecha_de_periodo(estado["fecha_inicio"]),
@@ -1317,12 +1386,12 @@ def sincronizar_periodo(estado):
     estado["period_id"] = periodo["id"]
 
 
-def persistir_estado(estado):
+def persistir_estado(estado, retencion=True):
     """Guarda el estado temporal y, si corresponde, lo sincroniza. Devuelve una advertencia o ''."""
     advertencia = ""
     if es_modo_guardado(estado):
         try:
-            sincronizar_periodo(estado)
+            sincronizar_periodo(estado, retencion=retencion)
         except AuditoriaCsatConfigError as exc:
             advertencia = mensaje_store_no_configurado(exc)
         except Exception as exc:
@@ -1474,7 +1543,7 @@ def ejecutar_paso_ia(estado, advertencia_previa=""):
         if pendientes:
             mensaje += f" Quedan {pendientes} por revisar."
         else:
-            mensaje += " Ya revisó todos los pendientes: confirma o corrige sus propuestas en la tabla."
+            mensaje += " Ya revisó todos los pendientes: confirma o corrige sus propuestas en las fichas."
     # Se termina si no queda nada, si hay que detenerse o si una tanda no avanzó sin motivo para reintentar.
     fin = not pendientes or info.get("detener") or (not auditadas and not info.get("esperar_segundos"))
     return {
@@ -1505,6 +1574,7 @@ def auditoria_csat():
         "prueba": bool(limpiar_texto(request.values.get("prueba"))),
     }
 
+    accion = ""
     try:
         if request.method == "POST":
             accion = limpiar_texto(request.form.get("accion")) or "analizar_csv"
@@ -1530,8 +1600,27 @@ def auditoria_csat():
                 elif accion == "ver_estado":
                     # Solo muestra el estado recibido (p. ej. al terminar la auditoría con IA), sin tocar decisiones.
                     contexto_analisis = construir_contexto_analisis(estado)
+                elif accion == "decidir":
+                    row_id, justificable, motivo, nota = leer_decision_formulario(request.form)
+                    error = aplicar_decision(estado, row_id, justificable, motivo, nota)
+                    analysis_id = limpiar_texto(request.form.get("analysis_id"))
+                    if not error:
+                        advertencia = persistir_estado(estado, retencion=False)
+                        analysis_id = estado.get("analysis_id") or analysis_id
+                    if quiere_json():
+                        return jsonify(
+                            respuesta_decision(
+                                estado, row_id, not error, error, "" if error else advertencia, analysis_id
+                            )
+                        )
+                    if error:
+                        advertencia = error
+                    else:
+                        mensaje = f"Confirmado: {TEXTO_DECISION.get(estado_decision(estado, row_id), '')}."
+                    contexto_analisis = construir_contexto_analisis(estado)
                 else:
-                    estado = actualizar_estado_desde_formulario(estado, request.form)
+                    if accion == "guardar_auditoria":
+                        estado = actualizar_estado_desde_formulario(estado, request.form)
                     advertencia = persistir_estado(estado)
 
                     if accion == "guardar_auditoria":
@@ -1592,6 +1681,19 @@ def auditoria_csat():
     except Exception as exc:
         logger.exception("Error procesando auditoria_csat")
         advertencia = mensaje_error_publico(exc, "No se pudo procesar la auditoría CSAT")
+
+    if request.method == "POST" and accion == "decidir" and quiere_json():
+        # Fallo antes de poder decidir (estado perdido, Supabase no configurado, etc.).
+        return jsonify(
+            respuesta_decision(
+                estado,
+                leer_decision_formulario(request.form)[0],
+                False,
+                advertencia or "No se pudo guardar la decisión.",
+                "",
+                limpiar_texto(request.form.get("analysis_id")),
+            )
+        )
 
     if request.method == "POST" and quiere_json():
         # El paso a paso de la IA espera JSON también cuando algo falla antes de auditar.
