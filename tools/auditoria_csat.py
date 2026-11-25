@@ -22,6 +22,7 @@ from utils.auditoria_csat_chatwoot import (
 )
 from utils.auditoria_csat_informe import bloque_desde_estado
 from utils.auditoria_csat_store import AuditoriaCsatConfigError
+from utils.auditoria_csat_vista import construir_vista
 from utils.chatwoot_reportes import ChatwootClient, _obtener_timezone, _timezone, construir_rango_chatwoot_fechas
 from utils.csat_periodos import TIPOS_PERIODO, formatear_periodo, resolver_periodo
 from utils.archivos import _leer_csv_desde_bytes
@@ -1080,6 +1081,7 @@ def construir_contexto_analisis(estado):
         "ia_modelo": ia_config["model"],
         "ia_tanda": ia_config["max_cases"],
         "metricas": metricas,
+        "vista": construir_vista(filas, metricas),
         "filas": filas,
         "resumen_agente": resumen_agente,
         "resumen_motivo": resumen_motivo,
