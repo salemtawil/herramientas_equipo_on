@@ -331,3 +331,77 @@ def test_csv_sigue_funcionando(cliente):
     html = r.get_data(as_text=True)
     assert r.status_code == 200 and "CSV cargado" in html
     assert "Modo prueba — nada de esto se guarda" not in html
+
+
+# --- Auditar con IA: todos los negativos, por tandas ---------------------------------------
+
+
+def _ia_propone_si(filas, config):
+    return [{"row_id": f["row_id"], "justificable": "SÍ", "motivo_inconformidad": "OTRO", "confianza": 0.8} for f in filas]
+
+
+def _paso_json(cliente, html):
+    return cliente.post(
+        "/auditoria-csat",
+        data={"accion": "auditar_con_ia", "analysis_id": _hidden(html, "analysis_id"), "period_id": _hidden(html, "period_id")},
+        headers={"Accept": "application/json"},
+    ).get_json()
+
+
+def test_paso_a_paso_revisa_todos_los_negativos(cliente, store, chatwoot, monkeypatch):
+    chatwoot.encuestas = [enc(i, rating=1) for i in range(1, 8)] + [enc(20, rating=5)]
+    monkeypatch.setenv("AUDITORIA_CHATS_AI_API_KEY", "clave-de-prueba")
+    monkeypatch.setattr(herramienta, "auditar_lote_con_proveedor", _ia_propone_si)
+    html = _traer(cliente).get_data(as_text=True)
+
+    primero = _paso_json(cliente, html)
+    assert (primero["auditadas"], primero["pendientes"], primero["total_negativos"], primero["fin"]) == (5, 2, 7, False)
+    segundo = _paso_json(cliente, html)
+    assert (segundo["auditadas"], segundo["pendientes"], segundo["fin"]) == (2, 0, True)
+    assert "period_id=" in segundo["url"]
+    assert all(n["ia_justificable"] == "SÍ" for n in store.negativos(_hidden(html, "period_id")))
+
+
+def test_proveedor_saturado_pide_esperar_y_no_culpa_al_cupo(cliente, store, chatwoot, monkeypatch):
+    from utils.ia_chat import IATemporalError
+
+    chatwoot.encuestas = [enc(1, rating=1), enc(2, rating=2)]
+    monkeypatch.setenv("AUDITORIA_CHATS_AI_API_KEY", "clave-de-prueba")
+
+    def saturado(filas, config):
+        raise IATemporalError("El proveedor de IA está saturado o con fallos (503); se reintentará en 30 s.")
+
+    monkeypatch.setattr(herramienta, "auditar_lote_con_proveedor", saturado)
+    html = _traer(cliente).get_data(as_text=True)
+    datos = _paso_json(cliente, html)
+    assert datos["fin"] is False and datos["esperar_segundos"] == 30 and datos["pendientes"] == 2
+    assert "no es por falta de cupo" in datos["advertencia"]
+    assert "CSAT_AI_MAX_CASES" not in datos["advertencia"]
+
+
+def test_cupo_diario_agotado_detiene(cliente, store, chatwoot, monkeypatch):
+    from utils.ia_chat import IARateLimitError
+
+    chatwoot.encuestas = [enc(1, rating=1)]
+    monkeypatch.setenv("AUDITORIA_CHATS_AI_API_KEY", "clave-de-prueba")
+
+    def sin_cupo(filas, config):
+        raise IARateLimitError("Límite diario de la IA alcanzado; retoma mañana.", diario=True)
+
+    monkeypatch.setattr(herramienta, "auditar_lote_con_proveedor", sin_cupo)
+    datos = _paso_json(cliente, _traer(cliente).get_data(as_text=True))
+    assert datos["fin"] is True and datos["esperar_segundos"] == 0
+    assert "compartido con la Auditoría de chats" in datos["advertencia"]
+
+
+def test_sin_javascript_un_clic_audita_una_tanda_y_dice_cuantos_quedan(cliente, store, chatwoot, monkeypatch):
+    chatwoot.encuestas = [enc(i, rating=1) for i in range(1, 8)]
+    monkeypatch.setenv("AUDITORIA_CHATS_AI_API_KEY", "clave-de-prueba")
+    monkeypatch.setattr(herramienta, "auditar_lote_con_proveedor", _ia_propone_si)
+    html = _traer(cliente).get_data(as_text=True)
+    respuesta = cliente.post(
+        "/auditoria-csat",
+        data={"accion": "auditar_con_ia", "analysis_id": _hidden(html, "analysis_id"), "period_id": _hidden(html, "period_id")},
+    ).get_data(as_text=True)
+    assert "La IA revisó 5 negativo(s). Quedan 2 por revisar." in respuesta
+    assert "data-csat-ia" in respuesta and "auditoria_csat.js" in respuesta

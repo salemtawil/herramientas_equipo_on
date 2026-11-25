@@ -59,7 +59,7 @@ registrar_modo_almacenamiento()
 
 # Versión vigente de cada recurso estático versionado. Súbela al cambiar el archivo:
 # solo la versión vigente recibe caché larga (una URL con otra versión no se cachea).
-ASSET_VERSIONS = {"styles.css": "28", "app.js": "7", "auditoria_chats.js": "6", "auditoria_informe.css": "1", "reporte_exportar.js": "1", "reporte_impresion.css": "1"}
+ASSET_VERSIONS = {"styles.css": "28", "app.js": "7", "auditoria_chats.js": "6", "auditoria_csat.js": "1", "auditoria_informe.css": "1", "reporte_exportar.js": "1", "reporte_impresion.css": "1"}
 
 # Endpoints cuyas pantallas dependen del almacenamiento de turnos.
 ENDPOINTS_CON_AVISO_DE_ALMACENAMIENTO = ("inicio", "turnos_trabajo.", "reporte_agentes.")

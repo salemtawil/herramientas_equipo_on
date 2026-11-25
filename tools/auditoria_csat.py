@@ -8,7 +8,7 @@ import uuid
 from datetime import date, datetime
 
 import pandas as pd
-from flask import Blueprint, Response, render_template, request
+from flask import Blueprint, Response, jsonify, render_template, request, url_for
 
 from utils import auditoria_csat_store
 from utils.auditoria_chats_transcripcion import construir_transcripcion
@@ -29,7 +29,7 @@ from utils.errores import mensaje_error_publico
 from utils.estado_temporal import cargar_json_temporal
 from utils.estado_temporal import guardar_json_temporal
 from utils.estado_temporal import limpiar_estados_temporales_expirados
-from utils.ia_chat import IAConfigError, IARateLimitError, IARespuestaError, completar_json
+from utils.ia_chat import IAConfigError, IARateLimitError, IARespuestaError, IATemporalError, completar_json
 from utils.ia_chat import obtener_config_ia as obtener_config_ia_compartida
 
 auditoria_csat_bp = Blueprint("auditoria_csat", __name__)
@@ -172,7 +172,8 @@ RATING_CATEGORIAS = {
 MAX_CASOS_REPORTE_IA = 8
 ANALYSIS_TTL_HOURS = 24
 STATE_NAMESPACE = "auditoria_csat"
-CSAT_IA_MAX_CASOS_DEFAULT = 10
+# Negativos por tanda: tandas cortas tardan menos y el proveedor falla menos (503).
+CSAT_IA_MAX_CASOS_DEFAULT = 5
 CSAT_IA_MAX_TRANSCRIPT_CHARS = 6000
 # Tiempo total de IA por clic (principal + respaldo). Vercel corta a los 60 s y antes se
 # traen conversaciones de Chatwoot y se guarda en Supabase, así que se deja margen.
@@ -646,9 +647,22 @@ def candidatos_para_ia(filas, max_cases):
     ][:max_cases]
 
 
-def auditar_estado_con_ia(estado):
+def contar_pendientes_ia(filas):
+    """Negativos que la IA todavía no revisó y que nadie decidió a mano."""
+    return len(candidatos_para_ia(filas, len(filas) + 1))
+
+
+def auditar_estado_con_ia(estado, info=None):
+    """Audita una tanda de negativos pendientes. Devuelve (auditadas, advertencias).
+
+    Si se pasa `info` (dict), se rellena con `esperar_segundos` (> 0 cuando conviene reintentar:
+    proveedor saturado o límite por minuto) y `detener` (configuración o cupo diario agotado).
+    """
+    info = info if info is not None else {}
+    info.update(esperar_segundos=0, detener=False)
     config = obtener_ia_config()
     if not ia_disponible(config):
+        info["detener"] = True
         return 0, [
             "Configura AUDITORIA_CHATS_AI_API_KEY (la misma IA de la Auditoría de chats) "
             "para usar la auditoría con IA."
@@ -672,9 +686,20 @@ def auditar_estado_con_ia(estado):
             aplicar_resultado_ia(fila, resultado, resultado.get("_modelo") or config["model"])
             auditadas += 1
     except IAConfigError as exc:
+        info["detener"] = True
         advertencias.append(str(exc))
+    except IATemporalError as exc:
+        info["esperar_segundos"] = exc.esperar_segundos
+        advertencias.append(
+            "El proveedor de IA está saturado o tardó demasiado en responder (no es por falta de cupo)."
+        )
     except IARateLimitError as exc:
-        advertencias.append(f"{exc} Intenta de nuevo más tarde o baja CSAT_AI_MAX_CASES.")
+        if exc.diario:
+            info["detener"] = True
+            advertencias.append(f"{exc} El cupo es compartido con la Auditoría de chats.")
+        else:
+            info["esperar_segundos"] = exc.esperar_segundos
+            advertencias.append(str(exc))
     except IARespuestaError:
         logger.exception("Respuesta inválida de la IA en auditoría CSAT")
         advertencias.append("La IA respondió con un formato inesperado. Intenta de nuevo.")
@@ -986,6 +1011,7 @@ def construir_contexto_analisis(estado):
         "warnings": estado.get("warnings", []),
         "ia_disponible": ia_disponible(ia_config),
         "ia_modelo": ia_config["model"],
+        "ia_tanda": ia_config["max_cases"],
         "metricas": metricas,
         "filas": filas,
         "resumen_agente": resumen_agente,
@@ -1357,6 +1383,56 @@ def unir_advertencias(*textos):
     return " ".join(texto for texto in textos if texto)
 
 
+def quiere_json():
+    mejor = request.accept_mimetypes.best_match(["application/json", "text/html"])
+    return mejor == "application/json" and request.accept_mimetypes["application/json"] > request.accept_mimetypes["text/html"]
+
+
+def ejecutar_paso_ia(estado, advertencia_previa=""):
+    """Audita una tanda de negativos pendientes y guarda. Devuelve el resultado del paso (apto para JSON)."""
+    filas_chatwoot = (
+        candidatos_para_ia(estado.get("rows", []), obtener_ia_config()["max_cases"])
+        if estado.get("modo") == "chatwoot"
+        else []
+    )
+    advertencias_transcripcion = preparar_transcripciones_ia(estado)
+    info = {}
+    auditadas, advertencias_ia = auditar_estado_con_ia(estado, info)
+    # La conversación solo se usa en memoria para la IA; no queda en el estado temporal.
+    for fila in filas_chatwoot:
+        fila["transcripcion_conversacion"] = ""
+    advertencia = unir_advertencias(
+        advertencia_previa, *advertencias_transcripcion, *advertencias_ia, persistir_estado(estado)
+    )
+
+    filas = estado.get("rows", [])
+    pendientes = contar_pendientes_ia(filas)
+    total_negativos = sum(1 for fila in filas if fila.get("tipo_rating") == "Negativo")
+    mensaje = ""
+    if auditadas:
+        mensaje = f"La IA revisó {auditadas} negativo(s)."
+        if pendientes:
+            mensaje += f" Quedan {pendientes} por revisar."
+        else:
+            mensaje += " Ya revisó todos los pendientes: confirma o corrige sus propuestas en la tabla."
+    # Se termina si no queda nada, si hay que detenerse o si una tanda no avanzó sin motivo para reintentar.
+    fin = not pendientes or info.get("detener") or (not auditadas and not info.get("esperar_segundos"))
+    return {
+        "auditadas": auditadas,
+        "pendientes": pendientes,
+        "total_negativos": total_negativos,
+        "mensaje": mensaje,
+        "advertencia": advertencia,
+        "esperar_segundos": 0 if fin else info.get("esperar_segundos", 0),
+        "fin": bool(fin),
+        "url": url_for(
+            "auditoria_csat.auditoria_csat",
+            analysis_id=estado.get("analysis_id") or None,
+            period_id=estado.get("period_id") or None,
+        ),
+    }
+
+
 @auditoria_csat_bp.route("/auditoria-csat", methods=["GET", "POST"])
 def auditoria_csat():
     limpiar_analisis_expirados()
@@ -1403,20 +1479,13 @@ def auditoria_csat():
                             mensaje = "Auditoría actualizada."
                         contexto_analisis = construir_contexto_analisis(estado)
                     elif accion == "auditar_con_ia":
-                        filas_chatwoot = (
-                            candidatos_para_ia(estado.get("rows", []), obtener_ia_config()["max_cases"])
-                            if estado.get("modo") == "chatwoot"
-                            else []
-                        )
-                        advertencias_transcripcion = preparar_transcripciones_ia(estado)
-                        auditadas, advertencias_ia = auditar_estado_con_ia(estado)
-                        for fila in filas_chatwoot:
-                            fila["transcripcion_conversacion"] = ""
-                        advertencia = unir_advertencias(
-                            advertencia, *advertencias_transcripcion, *advertencias_ia, persistir_estado(estado)
-                        )
-                        if auditadas:
-                            mensaje = f"IA auditó {auditadas} negativa(s) pendiente(s). Revisa y confirma o corrige la tabla."
+                        paso = ejecutar_paso_ia(estado, advertencia)
+                        if quiere_json():
+                            return jsonify(paso)
+                        advertencia = paso["advertencia"]
+                        if paso["esperar_segundos"]:
+                            advertencia = unir_advertencias(advertencia, "Vuelve a pulsar en unos segundos.")
+                        mensaje = paso["mensaje"]
                         contexto_analisis = construir_contexto_analisis(estado)
                     elif accion == "aceptar_propuestas_ia":
                         aceptadas = aceptar_propuestas_ia(estado)
@@ -1463,6 +1532,21 @@ def auditoria_csat():
     except Exception as exc:
         logger.exception("Error procesando auditoria_csat")
         advertencia = mensaje_error_publico(exc, "No se pudo procesar la auditoría CSAT")
+
+    if request.method == "POST" and quiere_json():
+        # El paso a paso de la IA espera JSON también cuando algo falla antes de auditar.
+        return jsonify(
+            {
+                "auditadas": 0,
+                "pendientes": 0,
+                "total_negativos": 0,
+                "mensaje": "",
+                "advertencia": advertencia or "No se pudo continuar la auditoría con IA.",
+                "esperar_segundos": 0,
+                "fin": True,
+                "url": url_for("auditoria_csat.auditoria_csat"),
+            }
+        )
 
     if estado and estado.get("modo") == "chatwoot":
         formulario.update(

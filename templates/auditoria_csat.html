@@ -181,7 +181,7 @@
           </div>
           <div class="csat-action-bar">
             <button type="submit" name="accion" value="guardar_auditoria">Actualizar resumen</button>
-            <button type="submit" class="btn secondary" name="accion" value="auditar_con_ia" {% if not contexto.ia_disponible %}disabled{% endif %}>Auditar pendientes con IA</button>
+            <button type="submit" class="btn secondary" name="accion" value="auditar_con_ia" data-csat-ia {% if not contexto.ia_disponible %}disabled{% endif %}>Auditar pendientes con IA</button>
             <button type="submit" class="btn secondary" name="accion" value="aceptar_propuestas_ia">Aceptar propuestas de la IA</button>
             <button type="submit" class="btn secondary" name="accion" value="descargar_csv_auditado">Descargar CSV auditado</button>
             <button type="submit" class="btn secondary" name="accion" value="descargar_reporte_ia">Descargar reporte para IA</button>
@@ -191,6 +191,8 @@
           </div>
         </div>
 
+        <p class="small top-space" data-csat-ia-estado aria-live="polite" hidden></p>
+
         {% if metricas.negativos_pendientes %}
           <div class="warning top-space">{{ metricas.negativos_pendientes }} negativos sin confirmar — el ajustado aún no es definitivo</div>
         {% endif %}
@@ -199,7 +201,7 @@
         <div class="csat-rule-box top-space">
           <strong>Auditoría asistida por IA</strong>
           {% if contexto.ia_disponible %}
-            <p class="small top-space">La IA usa {{ contexto.ia_modelo }} (la misma configuración que la Auditoría de chats) y audita solo negativas pendientes. Solo propone: la decisión queda pendiente hasta que la confirmes o uses «Aceptar propuestas de la IA». Si el CSV incluye transcripción, la revisa; si solo hay link, usa el comentario disponible y baja la confianza.</p>
+            <p class="small top-space">La IA usa {{ contexto.ia_modelo }} (la misma configuración que la Auditoría de chats) y revisa todos los negativos pendientes en tandas de {{ contexto.ia_tanda }}, mostrando el avance. Si el proveedor está saturado, espera y reintenta solo. Solo propone: la decisión queda pendiente hasta que la confirmes o uses «Aceptar propuestas de la IA». Si el CSV incluye transcripción, la revisa; si solo hay link, usa el comentario disponible y baja la confianza.</p>
           {% else %}
             <p class="small top-space">Configura AUDITORIA_CHATS_AI_API_KEY (la misma IA de la Auditoría de chats) para habilitar el botón. Las credenciales se usan solo en backend.</p>
           {% endif %}
@@ -633,4 +635,5 @@
       applyFilters();
     })();
   </script>
+  <script src="{{ url_for('static', filename='auditoria_csat.js', v=asset_version('auditoria_csat.js')) }}" defer></script>
 {% endblock %}

@@ -211,4 +211,4 @@ class IaCompartidaTests(unittest.TestCase):
             auditadas, avisos = auditar_estado_con_ia(estado)
         self.assertEqual(0, auditadas)
         self.assertIn("Límite diario", avisos[0])
-        self.assertIn("CSAT_AI_MAX_CASES", avisos[0])
+        self.assertIn("compartido con la Auditoría de chats", avisos[0])
