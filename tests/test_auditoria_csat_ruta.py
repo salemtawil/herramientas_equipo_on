@@ -375,7 +375,7 @@ def test_proveedor_saturado_pide_esperar_y_no_culpa_al_cupo(cliente, store, chat
     html = _traer(cliente).get_data(as_text=True)
     datos = _paso_json(cliente, html)
     assert datos["fin"] is False and datos["esperar_segundos"] == 30 and datos["pendientes"] == 2
-    assert "no es por falta de cupo" in datos["advertencia"]
+    assert "no es por falta de cupo" in datos["advertencia"].lower()
     assert "CSAT_AI_MAX_CASES" not in datos["advertencia"]
 
 
