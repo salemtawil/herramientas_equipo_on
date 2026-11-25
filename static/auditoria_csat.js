@@ -26,6 +26,18 @@
     const estado = document.querySelector("[data-csat-ia-estado]");
     if (!boton || !estado || !boton.form) return;
     const formulario = boton.form;
+    const campoEstado = formulario.querySelector('input[name="analysis_id"]');
+
+    // Muestra la tabla con el estado final. Se envía por POST porque el estado viaja firmado
+    // en la página (no cabe en una URL) y así no depende de qué servidor atienda la petición.
+    function verEstado() {
+      const accion = document.createElement("input");
+      accion.type = "hidden";
+      accion.name = "accion";
+      accion.value = "ver_estado";
+      formulario.appendChild(accion);
+      formulario.submit();
+    }
 
     async function paso() {
       const datos = new FormData(formulario);
@@ -68,6 +80,8 @@
 
         ultimo = datos;
         revisados += datos.auditadas || 0;
+        // Cada paso devuelve el estado actualizado: el siguiente paso debe partir de él.
+        if (campoEstado && datos.analysis_id) campoEstado.value = datos.analysis_id;
         const avance =
           "Revisados " + revisados + " · quedan " + datos.pendientes + " de " + datos.total_negativos + " negativos.";
         if (datos.fin) {
@@ -86,8 +100,8 @@
       }
 
       // Si hubo avance se recarga para ver las propuestas; si no, se deja el aviso a la vista.
-      if (revisados > 0 && ultimo && ultimo.url) {
-        window.location.assign(ultimo.url);
+      if (revisados > 0 && ultimo) {
+        verEstado();
       } else {
         boton.disabled = false;
       }
