@@ -781,6 +781,8 @@ def auditar_estado_con_ia(estado, info=None):
 def actualizar_estado_desde_formulario(estado, form):
     for fila in estado.get("rows", []):
         row_id = fila["row_id"]
+        if f"justificable__{row_id}" not in form:
+            continue  # la fila no vino en el formulario: no se toca su decisión
         justificable = normalizar_justificable(form.get(f"justificable__{row_id}"))
         comentario_auditor = limpiar_texto(form.get(f"comentario_auditor__{row_id}"))
         motivo = limpiar_texto(form.get(f"motivo_inconformidad__{row_id}"))
@@ -1112,8 +1114,6 @@ def construir_contexto_analisis(estado):
     hallazgos = construir_top_hallazgos(filas, metricas, resumen_agente, resumen_motivo)
     casos_destacados = construir_casos_destacados(filas)
 
-    agentes = sorted({fila.get("agente", "") for fila in filas if fila.get("agente")})
-
     negativos = [fila for fila in filas if fila.get("tipo_rating") == "Negativo"]
 
     return {
@@ -1131,21 +1131,12 @@ def construir_contexto_analisis(estado):
         "ia_tanda": ia_config["max_cases"],
         "metricas": metricas,
         "vista": construir_vista(filas, metricas),
-        "filas": filas,
         "resumen_agente": resumen_agente,
         "resumen_motivo": resumen_motivo,
         "graficos": graficos,
         "hallazgos": hallazgos,
         "casos_destacados": casos_destacados,
-        "filtros": {
-            "agentes": agentes,
-            "calificaciones": ["1", "2", "3", "4", "5", "Sin calificación válida"],
-            "tipos_rating": TIPOS_RATING,
-            "estados": ESTADOS_AUDITORIA,
-            "motivos": MOTIVOS_INCONFORMIDAD,
-        },
         "motivos_catalogo": MOTIVOS_INCONFORMIDAD,
-        "justificable_options": JUSTIFICABLE_OPTIONS,
         "texto_decision": TEXTO_DECISION,
     }
 
@@ -1211,25 +1202,25 @@ def construir_reporte_ia_markdown(estado):
         f"- Total de respuestas: {metricas['total_respuestas']}",
         f"- Ratings válidos: {metricas['total_validos']}",
         f"- Ratings inválidos o vacíos: {metricas['ratings_invalidos']}",
-        f"- CSAT original: {metricas['csat_original']}%",
-        f"- CSAT actualizado: {metricas['csat_actualizado']}%",
+        f"- CSAT real: {metricas['csat_original']}%",
+        f"- CSAT ajustado: {metricas['csat_actualizado']}%",
         f"- Negativos: {metricas['negativos']}",
         f"- Neutrales: {metricas['neutrales']}",
         f"- Positivos: {metricas['positivos']}",
         "",
         "## Resultado de auditoría",
-        f"- NO: {metricas['negativos_no']} ({metricas['porcentaje_no']}% de negativas)",
-        f"- TAL VEZ: {metricas['negativos_tal_vez']} ({metricas['porcentaje_tal_vez']}% de negativas)",
-        f"- SÍ: {metricas['negativos_si']} ({metricas['porcentaje_si']}% de negativas)",
+        f"- Sí fue culpa del agente: {metricas['negativos_no']} ({metricas['porcentaje_no']}% de negativas)",
+        f"- Dudoso: {metricas['negativos_tal_vez']} ({metricas['porcentaje_tal_vez']}% de negativas)",
+        f"- No fue culpa del agente: {metricas['negativos_si']} ({metricas['porcentaje_si']}% de negativas)",
         f"- Pendientes: {metricas['negativos_pendientes']}",
         "",
-        "## Regla usada para el CSAT actualizado",
+        "## Regla usada para el CSAT ajustado",
         "- Las calificaciones 4 y 5 cuentan como positivas.",
         "- Las calificaciones 1 y 2 cuentan como negativas.",
         "- Las calificaciones 3 quedan como neutrales dentro del denominador.",
-        "- Una negativa marcada como SÍ justificable se excluye del denominador del CSAT auditado.",
-        "- Una negativa marcada como NO sigue contando como negativa válida.",
-        "- Una negativa marcada como TAL VEZ no altera el cálculo y sigue contando hasta nueva definición.",
+        "- Una negativa marcada como «No fue culpa del agente» se excluye del denominador del CSAT ajustado.",
+        "- Una negativa marcada como «Sí fue culpa del agente» sigue contando como negativa válida.",
+        "- Una negativa marcada como «Dudoso» no altera el cálculo y sigue contando hasta nueva definición.",
         "- Las filas sin calificación válida se excluyen del cálculo.",
         "",
         "## Hallazgos principales",
@@ -1242,7 +1233,7 @@ def construir_reporte_ia_markdown(estado):
 
     lineas.extend(["", "## Resumen por agente"])
     if contexto["resumen_agente"]:
-        lineas.append("| Agente | Total | Negativas | Neutrales | Positivas | NO | TAL VEZ | SÍ | CSAT original | CSAT auditado |")
+        lineas.append("| Agente | Total | Negativas | Neutrales | Positivas | Sí fue culpa | Dudoso | No fue culpa | CSAT real | CSAT ajustado |")
         lineas.append("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
         for fila in contexto["resumen_agente"]:
             lineas.append(
@@ -1265,13 +1256,13 @@ def construir_reporte_ia_markdown(estado):
         for fila in contexto["casos_destacados"]:
             lineas.extend(
                 [
-                    f"### {fila.get('agente') or 'Sin agente'} | {fila.get('estado_auditoria')} | Rating {fila.get('calificacion_visible') or 'sin dato'}",
+                    f"### {fila.get('agente') or 'Sin agente'} | {TEXTO_DECISION.get(fila.get('estado_auditoria'), 'Pendiente')} | Rating {fila.get('calificacion_visible') or 'sin dato'}",
                     f"- Fecha: {fila.get('fecha_registrada') or fila.get('fecha_registrada_raw') or 'sin fecha'}",
                     f"- Contacto: {fila.get('nombre_contacto') or 'sin nombre'} | {fila.get('correo_contacto') or 'sin correo'} | {fila.get('telefono_contacto') or 'sin teléfono'}",
                     f"- Motivo: {fila.get('motivo_inconformidad') or 'sin motivo'}",
                     f"- Comentario cliente: {fila.get('comentario') or 'sin comentario'}",
                     f"- Comentario auditor: {fila.get('comentario_auditor') or 'sin comentario'}",
-                    f"- Propuesta IA: {fila.get('ia_justificable') or 'sin propuesta'} | {fila.get('ia_motivo') or 'sin motivo'}",
+                    f"- Propuesta IA: {TEXTO_DECISION.get(fila.get('ia_justificable'), 'sin propuesta')} | {fila.get('ia_motivo') or 'sin motivo'}",
                     f"- Origen de la decisión: {fila.get('origen_decision') or 'sin decidir'}",
                     f"- Link: {fila.get('enlace_conversacion') or 'sin enlace'}",
                     "",

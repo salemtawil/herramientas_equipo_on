@@ -638,3 +638,29 @@ def test_csv_usa_fichas(cliente):
     fichas = _fichas(html)
     assert len(fichas) == 1
     assert _hidden(fichas[0], "period_id") == ""
+
+
+def test_guardar_auditoria_sin_campos_por_fila_conserva_decisiones(cliente, store, chatwoot):
+    aid, pid = _dos_negativos(cliente, chatwoot)
+    datos = _decidir(cliente, aid, pid, "1").get_json()
+    r = cliente.post(
+        "/auditoria-csat",
+        data={"accion": "guardar_auditoria", "analysis_id": datos["analysis_id"], "period_id": pid},
+    )
+    assert r.status_code == 200
+    por_id = {str(n["survey_id"]): n for n in store.negativos(pid)}
+    assert por_id["1"]["decision_final"] == "SÍ" and por_id["1"]["origen_decision"] == "humana"
+
+
+def test_reporte_ia_usa_las_palabras_de_la_pantalla(cliente, store, chatwoot):
+    aid, pid = _dos_negativos(cliente, chatwoot)
+    datos = _decidir(cliente, aid, pid, "1").get_json()
+    r = cliente.post(
+        "/auditoria-csat",
+        data={"accion": "descargar_reporte_ia", "analysis_id": datos["analysis_id"], "period_id": pid},
+    )
+    texto = r.get_data(as_text=True)
+    assert r.status_code == 200
+    assert "No fue culpa del agente" in texto and "CSAT real" in texto and "CSAT ajustado" in texto
+    for viejo in ("SÍ justificable", "CSAT actualizado", "CSAT original", "TAL VEZ"):
+        assert viejo not in texto

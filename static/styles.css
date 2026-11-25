@@ -2713,32 +2713,10 @@ th.desc::after {
   margin-top: 0;
 }
 
-.auditoria-csat-page .csat-summary-grid,
-.auditoria-csat-page .csat-chart-grid,
-.auditoria-csat-page .csat-filter-grid {
+.auditoria-csat-page .csat-chart-grid {
   display: grid;
   gap: 14px;
-}
-
-.auditoria-csat-page .csat-summary-grid {
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-}
-
-.auditoria-csat-page .csat-chart-grid {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-}
-
-.auditoria-csat-page .csat-filter-grid {
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  align-items: end;
-}
-
-.auditoria-csat-page .csat-action-bar,
-.auditoria-csat-page .csat-table-actions {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-  align-items: center;
 }
 
 .auditoria-csat-page .csat-chart-card,
@@ -2817,78 +2795,8 @@ th.desc::after {
   background: linear-gradient(90deg, #9dd8b0, #2f8d53);
 }
 
-.auditoria-csat-page .csat-table {
-  min-width: 1460px;
-}
-
-.auditoria-csat-page .csat-table td {
-  vertical-align: top;
-  white-space: normal;
-}
-
-.auditoria-csat-page .csat-table textarea {
-  min-height: 74px;
-  padding: 10px 12px;
-}
-
-.auditoria-csat-page .csat-table select,
-.auditoria-csat-page .csat-table textarea {
-  min-width: 150px;
-}
-
 .auditoria-csat-page .csat-link {
   word-break: break-word;
-}
-
-.auditoria-csat-page .csat-ai-note {
-  display: grid;
-  gap: 6px;
-  min-width: 220px;
-  max-width: 320px;
-}
-
-.auditoria-csat-page .csat-ai-note span,
-.auditoria-csat-page .csat-ai-note small {
-  color: var(--muted);
-  line-height: 1.35;
-}
-
-.auditoria-csat-page .csat-chip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-tag);
-  border: 1px solid var(--border);
-  padding: 5px 10px;
-  font-size: 11px;
-  font-weight: 800;
-  background: var(--surface-muted);
-  color: var(--title);
-  max-width: 100%;
-  text-align: center;
-}
-
-.auditoria-csat-page .csat-chip.is-negativo {
-  background: var(--danger-bg);
-  color: var(--danger-text);
-  border-color: var(--danger-border);
-}
-
-.auditoria-csat-page .csat-chip.is-neutral {
-  background: var(--warning-bg);
-  color: var(--warning-text);
-  border-color: var(--warning-border);
-}
-
-.auditoria-csat-page .csat-chip.is-positivo {
-  background: var(--success-bg);
-  color: var(--success-text);
-  border-color: var(--success-border);
-}
-
-.auditoria-csat-page .csat-chip.is-pendiente {
-  background: var(--surface-muted);
-  color: var(--muted);
 }
 
 .informe-semanal-cs-page .report-editor {
@@ -3131,17 +3039,6 @@ html[data-theme="dark"] .reporte-agentes-page .segmented-control input:checked +
   font-weight: 700;
 }
 
-.auditoria-csat-page .csat-filter-grid {
-  padding: 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--surface-muted) 92%, transparent);
-}
-
-.auditoria-csat-page .csat-table-actions {
-  justify-content: space-between;
-}
-
 .auditoria-csat-page .csat-hallazgo {
   line-height: 1.45;
 }
@@ -3188,11 +3085,6 @@ html[data-theme="dark"] .reporte-agentes-page .segmented-control input:checked +
     align-items: flex-start;
   }
 
-  .auditoria-csat-page .csat-table-actions {
-    width: 100%;
-    justify-content: flex-start;
-  }
-
   .informe-semanal-cs-page .report-workspace {
     grid-template-columns: 1fr;
   }
@@ -3211,8 +3103,7 @@ html[data-theme="dark"] .reporte-agentes-page .segmented-control input:checked +
   .break-admin-page .shift-forms-grid,
   .break-admin-page .break-chip-list,
   .break-admin-page .break-slot-config-grid,
-  .auditoria-csat-page .csat-chart-grid,
-  .auditoria-csat-page .csat-filter-grid {
+  .auditoria-csat-page .csat-chart-grid {
     grid-template-columns: 1fr;
   }
 
@@ -3223,11 +3114,7 @@ html[data-theme="dark"] .reporte-agentes-page .segmented-control input:checked +
 .sheet-inline-actions > .btn,
 .sheet-inline-actions > button,
 .comparativa-toolbar > .btn,
-.comparativa-toolbar > button,
-.auditoria-csat-page .csat-action-bar > .btn,
-.auditoria-csat-page .csat-action-bar > button,
-.auditoria-csat-page .csat-table-actions > .btn,
-.auditoria-csat-page .csat-table-actions > button {
+.comparativa-toolbar > button {
     width: 100%;
   }
 
@@ -3486,7 +3373,6 @@ html[data-theme="dark"] .reporte-agentes-page .segmented-control input:checked +
 .auditoria-csat-page .csat-chart-card,
 .auditoria-csat-page .csat-rule-box,
 .auditoria-csat-page .csat-hallazgo,
-.auditoria-csat-page .csat-filter-grid,
 .informe-semanal-cs-page .report-bitacora-upload,
 .informe-semanal-cs-page .report-help,
 .reporte-agentes-page .chatwoot-report-grid,
@@ -3534,7 +3420,6 @@ html[data-theme="dark"] .reporte-agentes-page .segmented-control input:checked +
 
 /* 3. Lecturas: métricas unidas en un solo instrumento */
 .grid:has(> .metric),
-.auditoria-csat-page .csat-summary-grid,
 .break-admin-page .break-stat-grid {
   gap: 0;
   overflow: hidden;
@@ -3544,7 +3429,6 @@ html[data-theme="dark"] .reporte-agentes-page .segmented-control input:checked +
 }
 
 .grid:has(> .metric) > .metric,
-.auditoria-csat-page .csat-summary-grid > .metric,
 .break-admin-page .break-stat-grid > .break-stat-card {
   border: 0;
   border-radius: 0;
@@ -5106,33 +4990,12 @@ th {
   font-size: 0.9rem;
 }
 
-.csat-origin-badge {
-  display: inline-block;
-  margin-top: 4px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: rgba(100, 116, 139, 0.15);
-  font-size: 0.75rem;
-}
-
-.auditoria-csat-page .csat-periodo-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 14px;
-  align-items: end;
-}
-
 .auditoria-csat-page .csat-check {
   display: flex;
   align-items: center;
   gap: 8px;
   min-height: 44px;
   min-width: 0;
-}
-
-.auditoria-csat-page .csat-link--block {
-  display: block;
-  margin-top: 4px;
 }
 
 .csat-test-banner {
