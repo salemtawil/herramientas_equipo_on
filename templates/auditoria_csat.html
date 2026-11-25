@@ -201,7 +201,7 @@
         <div class="csat-rule-box top-space">
           <strong>Auditoría asistida por IA</strong>
           {% if contexto.ia_disponible %}
-            <p class="small top-space">La IA usa {{ contexto.ia_modelo }} (la misma configuración que la Auditoría de chats) y revisa todos los negativos pendientes en tandas de {{ contexto.ia_tanda }}, mostrando el avance. Si el proveedor está saturado, espera y reintenta solo. Solo propone: la decisión queda pendiente hasta que la confirmes o uses «Aceptar propuestas de la IA». Si el CSV incluye transcripción, la revisa; si solo hay link, usa el comentario disponible y baja la confianza.</p>
+            <p class="small top-space">La IA usa {{ contexto.ia_modelo }} (la misma configuración que la Auditoría de chats) y revisa todos los negativos pendientes ({{ contexto.ia_tanda }} por paso), mostrando el avance. Si el proveedor está saturado, espera y reintenta solo. Solo propone: la decisión queda pendiente hasta que la confirmes o uses «Aceptar propuestas de la IA». Si el CSV incluye transcripción, la revisa; si solo hay link, usa el comentario disponible y baja la confianza.</p>
           {% else %}
             <p class="small top-space">Configura AUDITORIA_CHATS_AI_API_KEY (la misma IA de la Auditoría de chats) para habilitar el botón. Las credenciales se usan solo en backend.</p>
           {% endif %}

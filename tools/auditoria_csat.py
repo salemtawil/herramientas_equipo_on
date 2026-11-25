@@ -172,12 +172,13 @@ RATING_CATEGORIAS = {
 MAX_CASOS_REPORTE_IA = 8
 ANALYSIS_TTL_HOURS = 24
 STATE_NAMESPACE = "auditoria_csat"
-# Negativos por tanda: tandas cortas tardan menos y el proveedor falla menos (503).
-CSAT_IA_MAX_CASOS_DEFAULT = 5
+# Negativos por paso. Igual que la Auditoría de chats: una conversación por petición, para que
+# Gemini responda dentro del tiempo y el respaldo alcance a intentarse.
+CSAT_IA_MAX_CASOS_DEFAULT = 1
 CSAT_IA_MAX_TRANSCRIPT_CHARS = 6000
 # Tiempo total de IA por clic (principal + respaldo). Vercel corta a los 60 s y antes se
 # traen conversaciones de Chatwoot y se guarda en Supabase, así que se deja margen.
-CSAT_IA_PRESUPUESTO_SEGUNDOS = 40
+CSAT_IA_PRESUPUESTO_SEGUNDOS = 48
 
 
 def normalizar_texto(valor):

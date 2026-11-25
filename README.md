@@ -94,7 +94,7 @@ Opcionales según funcionalidad:
 - `AUDITORIA_CHATS_AI_RAZONAMIENTO` (opcional: `low`, `medium`, `high`; menos razonamiento = respuestas más rápidas. Vacío = no se envía)
 - `AUDITORIA_CHATS_AI_CUPO_DIARIO` (peticiones diarias que permite el plan de la IA; solo sirve para avisar en el selector; con la pauta QA-1.1 cada chat usa 2; por defecto `20`, `0` lo oculta)
 - `AUDITORIA_CHATS_MANUAL_VERSION` (versión del manual de procedimientos cargado en Supabase que usan los lotes nuevos; por defecto `3.0`)
-- `CSAT_AI_MAX_CASES` (negativos que la Auditoría CSAT revisa con IA en cada tanda; el botón repite tandas hasta revisar todos los pendientes; por defecto `5`. La Auditoría CSAT usa la misma IA que la Auditoría de chats: `AUDITORIA_CHATS_AI_*`)
+- `CSAT_AI_MAX_CASES` (negativos que la Auditoría CSAT revisa con IA en cada paso; el botón repite pasos hasta revisar todos los pendientes; por defecto `1`, igual que la Auditoría de chats, para que el modelo responda a tiempo y el respaldo alcance a intentarse. La Auditoría CSAT usa la misma IA que la Auditoría de chats: `AUDITORIA_CHATS_AI_*`)
 - `CHATWOOT_BASE_URL`
 - `CHATWOOT_ACCOUNT_ID`
 - `CHATWOOT_API_ACCESS_TOKEN`
@@ -182,7 +182,7 @@ No se cambió ningún límite. En Vercel el cuerpo de cada petición está limit
 | Campos de formulario sin archivo | 8 MB | Textos del informe y estados firmados | Sin cambio | — | `MAX_FORM_MEMORY_SIZE` | 413 |
 | CSV descomprimido | 25 MB | < 5 MB | Sin cambio | — | (constante en `utils/archivos.py`) | Error en pantalla |
 | Archivos de Informe Semanal CS | 40 MB por archivo, sin límite de cantidad | 1–3 archivos | 4 MB en total y 5 archivos | Menos coste de IA por envío | nueva, a definir | 413 / error en pantalla |
-| Casos de CSAT auditados con IA | Todos los pendientes, en tandas de 5 | 5–10 | Sin cambio; considerar tope diario | Cupo de la IA de Auditoría de chats | `CSAT_AI_MAX_CASES` | Mensaje en pantalla |
+| Casos de CSAT auditados con IA | Todos los pendientes, de a 1 por paso | 5–10 | Sin cambio; considerar tope diario | Cupo de la IA de Auditoría de chats | `CSAT_AI_MAX_CASES` | Mensaje en pantalla |
 | Rango de fechas de Chatwoot | Sin máximo | 1–7 días | 31 días | Evita consultas largas | nueva, a definir | Error en pantalla |
 | Duración de la función | 300 s (Hobby y Pro por defecto) | < 60 s | Sin cambio | — | `vercel.json` | 504 de Vercel |
 

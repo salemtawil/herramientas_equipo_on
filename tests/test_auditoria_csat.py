@@ -196,7 +196,7 @@ class IaCompartidaTests(unittest.TestCase):
         with mock.patch.object(csat, "obtener_ia_config", return_value=config), mock.patch.object(csat, "completar_json", falso):
             auditadas, _ = auditar_estado_con_ia(estado)
         # Ambos modelos se reparten el presupuesto para no pasar el límite de 60 s de Vercel.
-        self.assertEqual([("principal", 20), ("respaldo", 20)], modelos)
+        self.assertEqual([("principal", 24), ("respaldo", 24)], modelos)
         self.assertEqual(1, auditadas)
         self.assertEqual("respaldo", estado["rows"][0]["ia_modelo"])
 
