@@ -9,6 +9,7 @@
   // Cada respuesta del servidor trae un analysis_id nuevo; todas las peticiones se envían
   // de una en una y con el más reciente, así que se comparte una sola cadena de envíos.
   let cadena = Promise.resolve();
+  let navegando = false;
   function enSerie(tarea) {
     const resultado = cadena.then(tarea);
     cadena = resultado.catch(() => {});
@@ -51,6 +52,11 @@
     // Muestra la tabla con el estado final. Se envía por POST porque el estado viaja firmado
     // en la página (no cabe en una URL) y así no depende de qué servidor atienda la petición.
     function verEstado() {
+      // Ya no se aceptan más decisiones: la página se va a recargar con el último token.
+      navegando = true;
+      document.querySelectorAll('[data-csat-ficha] button[name="justificable"]').forEach((b) => {
+        b.disabled = true;
+      });
       const accion = document.createElement("input");
       accion.type = "hidden";
       accion.name = "accion";
@@ -124,7 +130,8 @@
 
       // Si hubo avance se recarga para ver las propuestas; si no, se deja el aviso a la vista.
       if (revisados > 0 && ultimo) {
-        verEstado();
+        // Va por la misma cola: espera las decisiones pendientes y parte del token más reciente.
+        enSerie(() => verEstado());
       } else {
         boton.disabled = false;
       }
@@ -296,12 +303,16 @@
           return;
         }
         estadoFicha(formulario, "", false);
-        ponerFicha(formulario, json.ficha);
-        ponerKpis(json.kpis);
-        ponerPasos(json.pasos);
-        ponerPestanas(json.pestanas);
-        ponerListo(json.kpis);
-        mostrarAviso(json.advertencia);
+        try {
+          ponerFicha(formulario, json.ficha);
+          ponerKpis(json.kpis);
+          ponerPasos(json.pasos);
+          ponerPestanas(json.pestanas);
+          ponerListo(json.kpis);
+          mostrarAviso(json.advertencia);
+        } catch (errorVista) {
+          estadoFicha(formulario, "Guardado; recarga la página para ver el estado actualizado.", false);
+        }
       } catch (error) {
         estadoFicha(formulario, "No se pudo guardar (" + error.message + "). Inténtalo de nuevo.", true);
       } finally {
@@ -318,6 +329,7 @@
       const boton = evento.target.closest ? evento.target.closest('[data-csat-ficha] button[name="justificable"]') : null;
       if (!boton) return;
       evento.preventDefault();
+      if (navegando) return;
       enviarDecision(boton.form, boton.value);
     });
 
