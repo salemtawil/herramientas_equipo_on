@@ -5,18 +5,32 @@ import os
 import re
 import unicodedata
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
 import pandas as pd
-import requests
 from flask import Blueprint, Response, render_template, request
 
+from utils import auditoria_csat_store
+from utils.auditoria_chats_transcripcion import construir_transcripcion
+from utils.auditoria_csat_chatwoot import (
+    cargar_transcripciones,
+    filas_desde_encuestas,
+    fusionar_guardado,
+    negativos_para_guardar,
+    resumen_para_guardar,
+)
+from utils.auditoria_csat_informe import bloque_desde_estado
+from utils.auditoria_csat_store import AuditoriaCsatConfigError
+from utils.chatwoot_reportes import ChatwootClient, _obtener_timezone, _timezone, construir_rango_chatwoot_fechas
+from utils.csat_periodos import TIPOS_PERIODO, formatear_periodo, resolver_periodo
 from utils.archivos import _leer_csv_desde_bytes
 from utils.archivos import leer_bytes_archivo_csv
 from utils.errores import mensaje_error_publico
 from utils.estado_temporal import cargar_json_temporal
 from utils.estado_temporal import guardar_json_temporal
 from utils.estado_temporal import limpiar_estados_temporales_expirados
+from utils.ia_chat import IAConfigError, IARateLimitError, IARespuestaError, completar_json
+from utils.ia_chat import obtener_config_ia as obtener_config_ia_compartida
 
 auditoria_csat_bp = Blueprint("auditoria_csat", __name__)
 logger = logging.getLogger(__name__)
@@ -158,13 +172,11 @@ RATING_CATEGORIAS = {
 MAX_CASOS_REPORTE_IA = 8
 ANALYSIS_TTL_HOURS = 24
 STATE_NAMESPACE = "auditoria_csat"
-OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
-OPENAI_CSAT_MODEL_DEFAULT = "gpt-4.1-mini"
-OLLAMA_BASE_URL_DEFAULT = "http://127.0.0.1:11434"
-OLLAMA_CSAT_MODEL_DEFAULT = "qwen2.5:7b"
-OPENAI_CSAT_MAX_CASES_DEFAULT = 10
-OPENAI_CSAT_MAX_TRANSCRIPT_CHARS = 6000
-OPENAI_REQUEST_TIMEOUT = 45
+CSAT_IA_MAX_CASOS_DEFAULT = 10
+CSAT_IA_MAX_TRANSCRIPT_CHARS = 6000
+# Tiempo total de IA por clic (principal + respaldo). Vercel corta a los 60 s y antes se
+# traen conversaciones de Chatwoot y se guarda en Supabase, así que se deja margen.
+CSAT_IA_PRESUPUESTO_SEGUNDOS = 40
 
 
 def normalizar_texto(valor):
@@ -250,6 +262,11 @@ def parsear_fecha(valor):
     texto = limpiar_texto(valor)
     if not texto:
         return None
+
+    try:
+        return datetime.fromisoformat(texto)
+    except ValueError:
+        pass
 
     fecha = pd.to_datetime(texto, errors="coerce", dayfirst=True)
     if pd.isna(fecha):
@@ -406,6 +423,9 @@ def construir_filas_desde_dataframe(df, columnas_resueltas):
                 "ia_modelo": "",
                 "ia_fecha": "",
                 "ia_fuente": "",
+                "ia_justificable": "",
+                "ia_motivo": "",
+                "origen_decision": "",
             }
         )
         filas.append(item)
@@ -431,30 +451,12 @@ def construir_estado_inicial(df, nombre_archivo):
 
 
 def obtener_ia_config():
+    """Misma IA que la Auditoría de chats (AUDITORIA_CHATS_AI_*), más el tope de casos por clic."""
     try:
-        max_cases = int(os.getenv("OPENAI_CSAT_MAX_CASES", OPENAI_CSAT_MAX_CASES_DEFAULT))
+        max_cases = int(os.getenv("CSAT_AI_MAX_CASES", CSAT_IA_MAX_CASOS_DEFAULT))
     except (TypeError, ValueError):
-        max_cases = OPENAI_CSAT_MAX_CASES_DEFAULT
-
-    provider = normalizar_texto(os.getenv("CSAT_AI_PROVIDER")) or "openai"
-    if provider not in {"openai", "ollama"}:
-        provider = "openai"
-
-    return {
-        "provider": provider,
-        "api_key": limpiar_texto(os.getenv("OPENAI_API_KEY")),
-        "model": (
-            limpiar_texto(os.getenv("OLLAMA_CSAT_MODEL")) or OLLAMA_CSAT_MODEL_DEFAULT
-            if provider == "ollama"
-            else limpiar_texto(os.getenv("OPENAI_CSAT_MODEL")) or OPENAI_CSAT_MODEL_DEFAULT
-        ),
-        "ollama_base_url": limpiar_texto(os.getenv("OLLAMA_BASE_URL")) or OLLAMA_BASE_URL_DEFAULT,
-        "max_cases": max(1, max_cases),
-    }
-
-
-def obtener_openai_config():
-    return obtener_ia_config()
+        max_cases = CSAT_IA_MAX_CASOS_DEFAULT
+    return dict(obtener_config_ia_compartida(), max_cases=max(1, max_cases))
 
 
 def limitar_texto(valor, max_chars):
@@ -467,7 +469,7 @@ def limitar_texto(valor, max_chars):
 def construir_caso_auditoria_ia(fila):
     transcript = limitar_texto(
         fila.get("transcripcion_conversacion"),
-        OPENAI_CSAT_MAX_TRANSCRIPT_CHARS,
+        CSAT_IA_MAX_TRANSCRIPT_CHARS,
     )
     fuente = "transcripcion_csv" if transcript else "comentario_csv_sin_transcript"
 
@@ -497,21 +499,6 @@ def construir_instrucciones_auditoria_ia():
         "Si no hay transcripción completa, dilo en la explicación y baja la confianza. "
         "Devuelve un resultado por cada row_id recibido."
     )
-
-
-def construir_payload_auditoria_ia(fila):
-    contenido = construir_caso_auditoria_ia(fila)
-    instrucciones = (
-        "Audita una valoración CSAT negativa de soporte. "
-        "Decide si debe excluirse del CSAT del agente. "
-        "Usa SI cuando el negativo parece injusto, no atribuible al agente, causado por sistema/política/cliente sin solicitud clara, o sin evidencia suficiente contra el agente. "
-        "Usa NO cuando la conversación muestra falla atribuible al agente o mala gestión que justifica contar el negativo. "
-        "Usa TAL VEZ cuando la evidencia es ambigua y requiere revisión humana. "
-        "Elige un motivo exacto de la lista permitida. "
-        "Si no hay transcripción completa, dilo en la explicación y baja la confianza."
-    )
-
-    return instrucciones + "\n\nCaso:\n" + json.dumps(contenido, ensure_ascii=False, indent=2)
 
 
 def construir_payload_lote_auditoria_ia(filas):
@@ -578,124 +565,39 @@ def esquema_lote_auditoria_ia():
     }
 
 
-def extraer_texto_respuesta_openai(data):
-    if data.get("output_text"):
-        return data["output_text"]
-
-    textos = []
-    for item in data.get("output", []):
-        for contenido in item.get("content", []):
-            texto = contenido.get("text")
-            if texto:
-                textos.append(texto)
-    return "\n".join(textos).strip()
-
-
-def auditar_fila_con_ia(fila, config):
-    payload = {
-        "model": config["model"],
-        "input": [
-            {
-                "role": "system",
-                "content": "Eres auditor de calidad CSAT. Responde solo con JSON válido según el esquema.",
-            },
-            {
-                "role": "user",
-                "content": construir_payload_auditoria_ia(fila),
-            },
-        ],
-        "text": {
-            "format": {
-                "type": "json_schema",
-                "name": "auditoria_csat",
-                "strict": True,
-                "schema": esquema_auditoria_ia(),
-            }
+def mensajes_auditoria_ia(filas):
+    esquema = json.dumps(esquema_lote_auditoria_ia(), ensure_ascii=False)
+    return [
+        {
+            "role": "system",
+            "content": (
+                "Eres auditor de calidad CSAT. Responde solo con un objeto JSON válido "
+                f"que cumpla este esquema: {esquema}"
+            ),
         },
-        "max_output_tokens": 600,
-    }
-
-    response = requests.post(
-        OPENAI_RESPONSES_URL,
-        headers={
-            "Authorization": f"Bearer {config['api_key']}",
-            "Content-Type": "application/json",
-        },
-        json=payload,
-        timeout=OPENAI_REQUEST_TIMEOUT,
-    )
-    response.raise_for_status()
-    texto = extraer_texto_respuesta_openai(response.json())
-    return json.loads(texto)
-
-
-def auditar_lote_con_ia(filas, config):
-    payload = {
-        "model": config["model"],
-        "input": [
-            {
-                "role": "system",
-                "content": "Eres auditor de calidad CSAT. Responde solo con JSON válido según el esquema.",
-            },
-            {
-                "role": "user",
-                "content": construir_payload_lote_auditoria_ia(filas),
-            },
-        ],
-        "text": {
-            "format": {
-                "type": "json_schema",
-                "name": "auditoria_csat_lote",
-                "strict": True,
-                "schema": esquema_lote_auditoria_ia(),
-            }
-        },
-        "max_output_tokens": max(1200, 450 * len(filas)),
-    }
-
-    response = requests.post(
-        OPENAI_RESPONSES_URL,
-        headers={
-            "Authorization": f"Bearer {config['api_key']}",
-            "Content-Type": "application/json",
-        },
-        json=payload,
-        timeout=OPENAI_REQUEST_TIMEOUT,
-    )
-    response.raise_for_status()
-    texto = extraer_texto_respuesta_openai(response.json())
-    data = json.loads(texto)
-    return data.get("resultados", [])
-
-
-def auditar_lote_con_ollama(filas, config):
-    base_url = config["ollama_base_url"].rstrip("/")
-    payload = {
-        "model": config["model"],
-        "prompt": construir_payload_lote_auditoria_ia(filas),
-        "system": "Eres auditor de calidad CSAT. Responde solo con JSON válido según el esquema.",
-        "format": esquema_lote_auditoria_ia(),
-        "stream": False,
-        "options": {
-            "temperature": 0,
-        },
-    }
-
-    response = requests.post(
-        f"{base_url}/api/generate",
-        json=payload,
-        timeout=OPENAI_REQUEST_TIMEOUT,
-    )
-    response.raise_for_status()
-    texto = limpiar_texto(response.json().get("response"))
-    data = json.loads(texto)
-    return data.get("resultados", [])
+        {"role": "user", "content": construir_payload_lote_auditoria_ia(filas)},
+    ]
 
 
 def auditar_lote_con_proveedor(filas, config):
-    if config["provider"] == "ollama":
-        return auditar_lote_con_ollama(filas, config)
-    return auditar_lote_con_ia(filas, config)
+    """Audita el lote con la IA compartida; si el modelo principal está saturado o sin cupo, usa el de respaldo."""
+    mensajes = mensajes_auditoria_ia(filas)
+    modelos = [config["model"]]
+    if config.get("model_respaldo") and config["model_respaldo"] != config["model"]:
+        modelos.append(config["model_respaldo"])
+    timeout = CSAT_IA_PRESUPUESTO_SEGUNDOS // len(modelos)
+    for indice, modelo in enumerate(modelos):
+        try:
+            data = completar_json(mensajes, dict(config, model=modelo), timeout=timeout)
+            break
+        except IARateLimitError:
+            if indice == len(modelos) - 1:
+                raise
+
+    resultados = data.get("resultados")
+    if not isinstance(resultados, list):
+        raise IARespuestaError("La IA no devolvió la lista de resultados.")
+    return [dict(resultado, _modelo=modelo) for resultado in resultados if isinstance(resultado, dict)]
 
 
 def aplicar_resultado_ia(fila, resultado, modelo):
@@ -716,30 +618,43 @@ def aplicar_resultado_ia(fila, resultado, modelo):
     explicacion = limitar_texto(resultado.get("explicacion"), 900)
     evidencia = limitar_texto(resultado.get("evidencia"), 700)
 
-    fila["justificable"] = justificable
-    fila["comentario_auditor"] = f"IA: {explicacion}" if explicacion else "IA: sin explicación"
-    fila["motivo_inconformidad"] = motivo
-    fila["estado_auditoria"] = justificable
-    fila["csat_flag"] = calcular_flag_csat(fila.get("tipo_rating"), justificable)
+    fila["ia_justificable"] = justificable
+    fila["ia_motivo"] = motivo
     fila["ia_estado"] = "sugerida"
     fila["ia_confianza"] = formatear_porcentaje(confianza * 100)
     fila["ia_explicacion"] = explicacion
     fila["ia_evidencia"] = evidencia
     fila["ia_modelo"] = modelo
     fila["ia_fecha"] = datetime.utcnow().isoformat()
-    fila["ia_fuente"] = "transcripcion_csv" if fila.get("transcripcion_conversacion") else "comentario_csv_sin_transcript"
+    if fila.get("survey_id") and fila.get("transcripcion_conversacion"):
+        fila["ia_fuente"] = "transcripcion_chatwoot"
+    else:
+        fila["ia_fuente"] = "transcripcion_csv" if fila.get("transcripcion_conversacion") else "comentario_csv_sin_transcript"
+
+
+def ia_disponible(config):
+    return bool(config.get("activa"))
+
+
+def candidatos_para_ia(filas, max_cases):
+    return [
+        fila for fila in filas
+        if fila.get("tipo_rating") == "Negativo"
+        and not fila.get("ia_justificable")
+        and not fila.get("justificable")
+        and fila.get("origen_decision") != "humana"
+    ][:max_cases]
 
 
 def auditar_estado_con_ia(estado):
     config = obtener_ia_config()
-    if config["provider"] == "openai" and not config["api_key"]:
-        return 0, ["Configura OPENAI_API_KEY para usar la auditoría con IA."]
+    if not ia_disponible(config):
+        return 0, [
+            "Configura AUDITORIA_CHATS_AI_API_KEY (la misma IA de la Auditoría de chats) "
+            "para usar la auditoría con IA."
+        ]
 
-    candidatos = [
-        fila for fila in estado.get("rows", [])
-        if fila.get("tipo_rating") == "Negativo"
-        and not fila.get("justificable")
-    ][:config["max_cases"]]
+    candidatos = candidatos_para_ia(estado.get("rows", []), config["max_cases"])
 
     if not candidatos:
         return 0, ["No hay negativas pendientes para auditar con IA."]
@@ -754,31 +669,15 @@ def auditar_estado_con_ia(estado):
             fila = filas_por_id.get(str(resultado.get("row_id")))
             if not fila:
                 continue
-            aplicar_resultado_ia(fila, resultado, config["model"])
+            aplicar_resultado_ia(fila, resultado, resultado.get("_modelo") or config["model"])
             auditadas += 1
-    except requests.exceptions.HTTPError as exc:
-        status_code = exc.response.status_code if exc.response is not None else None
-        if status_code in {401, 403}:
-            advertencias.append(
-                "OpenAI rechazó la credencial. Revisa que OPENAI_API_KEY sea una secret key válida, "
-                "que no tenga espacios/comillas extra, y reinicia Flask después de configurarla."
-            )
-        elif status_code == 429:
-            advertencias.append(
-                "OpenAI devolvió límite de uso o demasiadas solicitudes. "
-                "Intenta de nuevo en unos segundos, baja OPENAI_CSAT_MAX_CASES, o revisa los límites/crédito de tu cuenta."
-            )
-        else:
-            logger.exception("Error auditando lote CSAT con IA")
-            advertencias.append(mensaje_error_publico(exc, "No se pudo auditar el lote con IA"))
-    except requests.exceptions.ConnectionError:
-        if config["provider"] == "ollama":
-            advertencias.append(
-                "No se pudo conectar con Ollama. Verifica que Ollama esté abierto, "
-                f"que el modelo {config['model']} esté instalado, y que {config['ollama_base_url']} responda."
-            )
-        else:
-            advertencias.append("No se pudo conectar con el proveedor de IA.")
+    except IAConfigError as exc:
+        advertencias.append(str(exc))
+    except IARateLimitError as exc:
+        advertencias.append(f"{exc} Intenta de nuevo más tarde o baja CSAT_AI_MAX_CASES.")
+    except IARespuestaError:
+        logger.exception("Respuesta inválida de la IA en auditoría CSAT")
+        advertencias.append("La IA respondió con un formato inesperado. Intenta de nuevo.")
     except Exception as exc:
         logger.exception("Error auditando lote CSAT con IA")
         advertencias.append(mensaje_error_publico(exc, "No se pudo auditar el lote con IA"))
@@ -796,13 +695,36 @@ def actualizar_estado_desde_formulario(estado, form):
         if motivo and motivo not in MOTIVOS_INCONFORMIDAD:
             motivo = ""
 
+        cambio = (
+            justificable != fila.get("justificable", "")
+            or motivo != fila.get("motivo_inconformidad", "")
+            or comentario_auditor != fila.get("comentario_auditor", "")
+        )
+
         fila["justificable"] = justificable
         fila["comentario_auditor"] = comentario_auditor
         fila["motivo_inconformidad"] = motivo
         fila["estado_auditoria"] = justificable or "pendiente"
         fila["csat_flag"] = calcular_flag_csat(fila.get("tipo_rating"), justificable)
+        if cambio:
+            fila["origen_decision"] = "humana" if justificable else ""
 
     return estado
+
+
+def aceptar_propuestas_ia(estado):
+    aceptadas = 0
+    for fila in estado.get("rows", []):
+        propuesta = fila.get("ia_justificable")
+        if not propuesta or fila.get("justificable"):
+            continue
+        fila["justificable"] = propuesta
+        fila["motivo_inconformidad"] = fila.get("ia_motivo", "")
+        fila["origen_decision"] = "ia_aceptada"
+        fila["estado_auditoria"] = propuesta
+        fila["csat_flag"] = calcular_flag_csat(fila.get("tipo_rating"), propuesta)
+        aceptadas += 1
+    return aceptadas
 
 
 def inferir_periodo(filas):
@@ -1050,14 +972,20 @@ def construir_contexto_analisis(estado):
 
     agentes = sorted({fila.get("agente", "") for fila in filas if fila.get("agente")})
 
+    negativos = [fila for fila in filas if fila.get("tipo_rating") == "Negativo"]
+
     return {
         "analysis_id": estado.get("analysis_id", ""),
+        "modo": estado.get("modo") or "csv",
+        "prueba": bool(estado.get("prueba")),
+        "period_id": estado.get("period_id") or "",
+        "periodo_texto": estado.get("periodo_texto") or "",
+        "auditados_humana": sum(1 for fila in negativos if fila.get("origen_decision") == "humana"),
+        "aceptados_ia": sum(1 for fila in negativos if fila.get("origen_decision") == "ia_aceptada"),
         "source_filename": estado.get("source_filename", ""),
         "warnings": estado.get("warnings", []),
-        "ia_disponible": ia_config["provider"] == "ollama" or bool(ia_config["api_key"]),
+        "ia_disponible": ia_disponible(ia_config),
         "ia_modelo": ia_config["model"],
-        "ia_provider": ia_config["provider"],
-        "ia_ollama_base_url": ia_config["ollama_base_url"],
         "metricas": metricas,
         "filas": filas,
         "resumen_agente": resumen_agente,
@@ -1106,6 +1034,9 @@ def construir_dataframe_exportable(filas, columnas_originales):
                 "ia_modelo": fila.get("ia_modelo", ""),
                 "ia_fecha": fila.get("ia_fecha", ""),
                 "ia_fuente": fila.get("ia_fuente", ""),
+                "ia_justificable": fila.get("ia_justificable", ""),
+                "ia_motivo": fila.get("ia_motivo", ""),
+                "origen_decision": fila.get("origen_decision", ""),
             }
         )
         registros.append(item)
@@ -1195,6 +1126,8 @@ def construir_reporte_ia_markdown(estado):
                     f"- Motivo: {fila.get('motivo_inconformidad') or 'sin motivo'}",
                     f"- Comentario cliente: {fila.get('comentario') or 'sin comentario'}",
                     f"- Comentario auditor: {fila.get('comentario_auditor') or 'sin comentario'}",
+                    f"- Propuesta IA: {fila.get('ia_justificable') or 'sin propuesta'} | {fila.get('ia_motivo') or 'sin motivo'}",
+                    f"- Origen de la decisión: {fila.get('origen_decision') or 'sin decidir'}",
                     f"- Link: {fila.get('enlace_conversacion') or 'sin enlace'}",
                     "",
                 ]
@@ -1217,6 +1150,213 @@ def construir_reporte_ia_markdown(estado):
     return "\n".join(lineas)
 
 
+# ---------------------------------------------------------------------------
+# Modo Chatwoot: traer encuestas del período, guardar en Supabase o modo prueba
+# ---------------------------------------------------------------------------
+
+MENSAJE_ESTADO_NO_DISPONIBLE = (
+    "El análisis activo ya no está disponible. "
+    "Puede ocurrir si Flask se reinició o si el estado temporal fue limpiado. "
+    "Vuelve a cargar el CSV o a traer el período de Chatwoot y continúa desde esa misma pantalla."
+)
+
+
+def obtener_chatwoot():
+    return ChatwootClient(timeout=15)
+
+
+def obtener_store_csat():
+    return auditoria_csat_store.obtener_store_csat()
+
+
+def hoy_chatwoot():
+    return datetime.now(_obtener_timezone(_timezone())).date()
+
+
+def mensaje_store_no_configurado(exc):
+    return f"{exc} Mientras tanto, usa «Modo prueba (no se guarda)» para trabajar sin guardar."
+
+
+def es_modo_guardado(estado):
+    return estado.get("modo") == "chatwoot" and not estado.get("prueba")
+
+
+def _fecha_de_periodo(valor):
+    return date.fromisoformat(str(valor)[:10])
+
+
+def traer_filas_chatwoot(inicio, fin):
+    rango = construir_rango_chatwoot_fechas(inicio.isoformat(), fin.isoformat())
+    chatwoot = obtener_chatwoot()
+    encuestas = chatwoot.respuestas_csat(rango.since, rango.until)
+    return filas_desde_encuestas(encuestas, chatwoot, _timezone())
+
+
+def construir_estado_chatwoot(filas, tipo_periodo, inicio, fin, prueba):
+    periodo_texto = formatear_periodo(inicio, fin)
+    return {
+        "analysis_id": "",
+        "modo": "chatwoot",
+        "prueba": bool(prueba),
+        "tipo_periodo": tipo_periodo,
+        "fecha_inicio": inicio.isoformat(),
+        "fecha_fin": fin.isoformat(),
+        "periodo_texto": periodo_texto,
+        "period_id": "",
+        "source_filename": f"Chatwoot {periodo_texto}",
+        "created_at": datetime.utcnow().isoformat(),
+        "original_columns": list(EXPECTED_COLUMNS),
+        "resolved_columns": {},
+        "missing_columns": [],
+        "warnings": [],
+        "rows": filas,
+    }
+
+
+def sincronizar_periodo(estado):
+    """Guarda resumen y negativos del período en Supabase. Nunca en modo prueba."""
+    if not es_modo_guardado(estado):
+        return
+    store = obtener_store_csat()
+    filas = estado.get("rows", [])
+    # La retención va antes del guardado para no borrar el período recién guardado.
+    store.borrar_vencidos(hoy_chatwoot())
+    periodo = store.guardar_periodo(
+        estado.get("tipo_periodo") or "personalizado",
+        _fecha_de_periodo(estado["fecha_inicio"]),
+        _fecha_de_periodo(estado["fecha_fin"]),
+        resumen_para_guardar(filas),
+    )
+    store.reemplazar_negativos(periodo["id"], negativos_para_guardar(filas))
+    estado["period_id"] = periodo["id"]
+
+
+def persistir_estado(estado):
+    """Guarda el estado temporal y, si corresponde, lo sincroniza. Devuelve una advertencia o ''."""
+    advertencia = ""
+    if es_modo_guardado(estado):
+        try:
+            sincronizar_periodo(estado)
+        except AuditoriaCsatConfigError as exc:
+            advertencia = mensaje_store_no_configurado(exc)
+        except Exception as exc:
+            logger.exception("Error guardando auditoría CSAT en Supabase")
+            advertencia = mensaje_error_publico(exc, "No se pudo guardar la auditoría en Supabase")
+    guardar_analisis(estado)
+    return advertencia
+
+
+def traer_de_chatwoot(form):
+    """Devuelve (estado, mensaje, advertencia)."""
+    tipo_periodo = limpiar_texto(form.get("tipo_periodo")) or "semana_pasada"
+    prueba = bool(limpiar_texto(form.get("prueba")))
+    try:
+        inicio, fin = resolver_periodo(
+            tipo_periodo,
+            hoy_chatwoot(),
+            limpiar_texto(form.get("fecha_inicio")) or None,
+            limpiar_texto(form.get("fecha_fin")) or None,
+        )
+    except ValueError as exc:
+        return None, "", str(exc)
+
+    store = None
+    if not prueba:
+        try:
+            store = obtener_store_csat()
+        except AuditoriaCsatConfigError as exc:
+            return None, "", mensaje_store_no_configurado(exc)
+
+    try:
+        filas = traer_filas_chatwoot(inicio, fin)
+    except Exception as exc:
+        logger.exception("Error trayendo encuestas CSAT de Chatwoot")
+        return None, "", mensaje_error_publico(exc, "No se pudieron traer las encuestas de Chatwoot")
+
+    periodo_texto = formatear_periodo(inicio, fin)
+    if not filas:
+        return None, "", f"No hay encuestas en el período {periodo_texto}."
+
+    estado = construir_estado_chatwoot(filas, tipo_periodo, inicio, fin, prueba)
+    if store is not None:
+        try:
+            existente = store.buscar_periodo(inicio, fin)
+            if existente:
+                fusionar_guardado(filas, store.negativos(existente["id"]))
+        except Exception as exc:
+            logger.exception("Error leyendo auditoría CSAT guardada")
+            return None, "", mensaje_error_publico(exc, "No se pudo leer la auditoría guardada")
+
+    advertencia = persistir_estado(estado)
+    sufijo = "Modo prueba: no se guarda." if prueba else "Auditoría guardada."
+    if advertencia:
+        sufijo = "No se guardó."
+    mensaje = f"Se trajeron {len(filas)} encuesta(s) de Chatwoot del {periodo_texto}. {sufijo}"
+    return estado, mensaje, advertencia
+
+
+def reconstruir_estado_guardado(period_id):
+    """Re-trae de Chatwoot el período guardado y le aplica las decisiones guardadas."""
+    store = obtener_store_csat()
+    periodo = store.obtener_periodo(period_id)
+    if not periodo:
+        return None
+    inicio = _fecha_de_periodo(periodo["fecha_inicio"])
+    fin = _fecha_de_periodo(periodo["fecha_fin"])
+    filas = traer_filas_chatwoot(inicio, fin)
+    fusionar_guardado(filas, store.negativos(periodo["id"]))
+    estado = construir_estado_chatwoot(filas, periodo.get("tipo_periodo") or "personalizado", inicio, fin, False)
+    estado["period_id"] = periodo["id"]
+    guardar_analisis(estado)
+    return estado
+
+
+def cargar_estado_chatwoot(fuente):
+    """Estado temporal por analysis_id; si falta y hay period_id, lo reconstruye desde lo guardado."""
+    estado = cargar_analisis(limpiar_texto(fuente.get("analysis_id")))
+    if estado:
+        return estado
+    period_id = limpiar_texto(fuente.get("period_id"))
+    if period_id:
+        return reconstruir_estado_guardado(period_id)
+    return None
+
+
+def preparar_transcripciones_ia(estado):
+    """En modo Chatwoot trae la conversación solo de los negativos que irá a ver la IA."""
+    config = obtener_ia_config()
+    if estado.get("modo") != "chatwoot" or not ia_disponible(config):
+        return []
+    candidatos = candidatos_para_ia(estado.get("rows", []), config["max_cases"])
+    if not candidatos:
+        return []
+    return cargar_transcripciones(candidatos, obtener_chatwoot(), _timezone(), CSAT_IA_MAX_TRANSCRIPT_CHARS)
+
+
+def listar_guardadas():
+    """Devuelve (periodos, aviso). Nunca rompe la pantalla."""
+    try:
+        periodos = obtener_store_csat().listar_periodos()
+    except AuditoriaCsatConfigError as exc:
+        return [], f"{exc} La pantalla sigue funcionando en modo prueba y con CSV."
+    except Exception as exc:
+        logger.exception("Error listando auditorías CSAT guardadas")
+        return [], mensaje_error_publico(exc, "No se pudieron listar las auditorías guardadas")
+    return [
+        dict(
+            periodo,
+            periodo_texto=formatear_periodo(
+                _fecha_de_periodo(periodo["fecha_inicio"]), _fecha_de_periodo(periodo["fecha_fin"])
+            ),
+        )
+        for periodo in periodos
+    ], ""
+
+
+def unir_advertencias(*textos):
+    return " ".join(texto for texto in textos if texto)
+
+
 @auditoria_csat_bp.route("/auditoria-csat", methods=["GET", "POST"])
 def auditoria_csat():
     limpiar_analisis_expirados()
@@ -1224,6 +1364,13 @@ def auditoria_csat():
     mensaje = ""
     advertencia = ""
     contexto_analisis = None
+    estado = None
+    formulario = {
+        "tipo_periodo": limpiar_texto(request.values.get("tipo_periodo")) or "semana_pasada",
+        "fecha_inicio": limpiar_texto(request.values.get("fecha_inicio")),
+        "fecha_fin": limpiar_texto(request.values.get("fecha_fin")),
+        "prueba": bool(limpiar_texto(request.values.get("prueba"))),
+    }
 
     try:
         if request.method == "POST":
@@ -1239,29 +1386,45 @@ def auditoria_csat():
                     guardar_analisis(estado)
                     contexto_analisis = construir_contexto_analisis(estado)
                     mensaje = "CSV cargado y auditoría preparada."
+            elif accion == "traer_chatwoot":
+                estado, mensaje, advertencia = traer_de_chatwoot(request.form)
+                if estado:
+                    contexto_analisis = construir_contexto_analisis(estado)
             else:
-                analysis_id = limpiar_texto(request.form.get("analysis_id"))
-                estado = cargar_analisis(analysis_id)
+                estado = cargar_estado_chatwoot(request.form)
                 if not estado:
-                    advertencia = (
-                        "El análisis activo ya no está disponible. "
-                        "Puede ocurrir si Flask se reinició o si el estado temporal fue limpiado. "
-                        "Vuelve a cargar el CSV y ejecuta la auditoría con IA desde esa misma pantalla."
-                    )
+                    advertencia = MENSAJE_ESTADO_NO_DISPONIBLE
                 else:
                     estado = actualizar_estado_desde_formulario(estado, request.form)
-                    guardar_analisis(estado)
+                    advertencia = persistir_estado(estado)
 
                     if accion == "guardar_auditoria":
-                        mensaje = "Auditoría actualizada."
+                        if not advertencia:
+                            mensaje = "Auditoría actualizada."
                         contexto_analisis = construir_contexto_analisis(estado)
                     elif accion == "auditar_con_ia":
+                        filas_chatwoot = (
+                            candidatos_para_ia(estado.get("rows", []), obtener_ia_config()["max_cases"])
+                            if estado.get("modo") == "chatwoot"
+                            else []
+                        )
+                        advertencias_transcripcion = preparar_transcripciones_ia(estado)
                         auditadas, advertencias_ia = auditar_estado_con_ia(estado)
-                        guardar_analisis(estado)
+                        for fila in filas_chatwoot:
+                            fila["transcripcion_conversacion"] = ""
+                        advertencia = unir_advertencias(
+                            advertencia, *advertencias_transcripcion, *advertencias_ia, persistir_estado(estado)
+                        )
                         if auditadas:
                             mensaje = f"IA auditó {auditadas} negativa(s) pendiente(s). Revisa y confirma o corrige la tabla."
-                        if advertencias_ia:
-                            advertencia = " ".join(advertencias_ia)
+                        contexto_analisis = construir_contexto_analisis(estado)
+                    elif accion == "aceptar_propuestas_ia":
+                        aceptadas = aceptar_propuestas_ia(estado)
+                        advertencia = unir_advertencias(advertencia, persistir_estado(estado))
+                        if aceptadas:
+                            mensaje = f"Se aceptaron {aceptadas} propuesta(s) de la IA como decisión confirmada."
+                        else:
+                            advertencia = unir_advertencias(advertencia, "No hay propuestas de la IA pendientes de aceptar.")
                         contexto_analisis = construir_contexto_analisis(estado)
                     elif accion == "descargar_csv_auditado":
                         df_export = construir_dataframe_exportable(
@@ -1278,24 +1441,80 @@ def auditoria_csat():
                                 "Content-Disposition": "attachment; filename=auditoria_csat_reporte_ia.md"
                             },
                         )
+                    elif accion == "descargar_bloque_informe" and estado.get("modo") == "chatwoot" and estado.get("prueba"):
+                        bloque = bloque_desde_estado(estado, obtener_chatwoot(), _timezone())
+                        return Response(
+                            bloque,
+                            mimetype="text/plain; charset=utf-8",
+                            headers={"Content-Disposition": "attachment; filename=bloque_csat_informe.txt"},
+                        )
                     else:
                         advertencia = "Acción no válida."
                         contexto_analisis = construir_contexto_analisis(estado)
         else:
-            analysis_id = limpiar_texto(request.args.get("analysis_id"))
-            if analysis_id:
-                estado = cargar_analisis(analysis_id)
+            if limpiar_texto(request.args.get("analysis_id")) or limpiar_texto(request.args.get("period_id")):
+                estado = cargar_estado_chatwoot(request.args)
                 if estado:
                     contexto_analisis = construir_contexto_analisis(estado)
                 else:
-                    advertencia = "El análisis solicitado ya no está disponible. Carga el CSV de nuevo."
+                    advertencia = "El análisis solicitado ya no está disponible. Carga el CSV o trae el período de nuevo."
+    except AuditoriaCsatConfigError as exc:
+        advertencia = mensaje_store_no_configurado(exc)
     except Exception as exc:
         logger.exception("Error procesando auditoria_csat")
         advertencia = mensaje_error_publico(exc, "No se pudo procesar la auditoría CSAT")
+
+    if estado and estado.get("modo") == "chatwoot":
+        formulario.update(
+            tipo_periodo=estado.get("tipo_periodo") or formulario["tipo_periodo"],
+            fecha_inicio=estado.get("fecha_inicio") or "",
+            fecha_fin=estado.get("fecha_fin") or "",
+            prueba=bool(estado.get("prueba")),
+        )
+
+    # En modo prueba la pantalla no consulta el almacén: nada de esa request toca Supabase.
+    if formulario["prueba"]:
+        periodos_guardados, aviso_guardadas = [], "En modo prueba no se consultan las auditorías guardadas."
+    else:
+        periodos_guardados, aviso_guardadas = listar_guardadas()
 
     return render_template(
         "auditoria_csat.html",
         mensaje=mensaje,
         advertencia=advertencia,
         contexto=contexto_analisis,
+        formulario=formulario,
+        tipos_periodo=TIPOS_PERIODO,
+        periodos_guardados=periodos_guardados,
+        aviso_guardadas=aviso_guardadas,
+    )
+
+
+@auditoria_csat_bp.route("/auditoria-csat/conversacion/<int:conversation_id>")
+def conversacion_csat(conversation_id):
+    """Conversación traída en vivo de Chatwoot, anonimizada y sin guardar."""
+    lineas = []
+    url_chatwoot = ""
+    error = ""
+    try:
+        chatwoot = obtener_chatwoot()
+        url_chatwoot = chatwoot.url_conversacion(conversation_id)
+        transcripcion = construir_transcripcion(
+            chatwoot.mensajes_de_conversacion(conversation_id), _timezone(), max_chars=20000
+        )
+        lineas = [
+            {"texto": linea, "es_agente": "] Agente:" in linea}
+            for linea in transcripcion.splitlines()
+            if linea.strip()
+        ]
+    except Exception as exc:
+        logger.exception("Error trayendo conversación CSAT de Chatwoot")
+        error = mensaje_error_publico(exc, "No se pudo cargar la conversación")
+
+    return render_template(
+        "auditoria_csat_conversacion.html",
+        conversation_id=conversation_id,
+        lineas=lineas,
+        url_chatwoot=url_chatwoot,
+        error=error,
     )

@@ -523,6 +523,33 @@ class ChatwootClient:
     def listar_agentes(self):
         return self.get(f"/api/v1/accounts/{self.account_id}/agents")
 
+    def respuestas_csat(self, since, until, max_paginas=40):
+        respuestas = []
+        vistos = set()
+        for pagina in range(1, max_paginas + 1):
+            lote = _normalizar_lista_respuesta(
+                self.get(
+                    f"/api/v1/accounts/{self.account_id}/csat_survey_responses",
+                    params={"since": str(since), "until": str(until), "page": pagina},
+                )
+            )
+            if not lote:
+                break
+            for item in lote:
+                item_id = item.get("id")
+                if item_id is not None:
+                    if item_id in vistos:
+                        continue
+                    vistos.add(item_id)
+                respuestas.append(item)
+        return respuestas
+
+    def metricas_csat(self, since, until):
+        return self.get(
+            f"/api/v1/accounts/{self.account_id}/csat_survey_responses/metrics",
+            params={"since": str(since), "until": str(until)},
+        )
+
     def resumen_por_agente(self, rango):
         return self.get(
             f"/api/v2/accounts/{self.account_id}/summary_reports/agent",

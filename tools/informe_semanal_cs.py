@@ -1,12 +1,18 @@
 import io
 import logging
 import os
+from datetime import date
 from pathlib import Path
 
 import requests
 from flask import Blueprint, render_template, request
 
+from utils import auditoria_csat_store
 from utils.archivos import formatear_tamano_bytes
+from utils.auditoria_csat_store import AuditoriaCsatConfigError
+from utils.auditoria_csat_informe import construir_bloque_csat, datos_periodo_anterior
+from utils.chatwoot_reportes import ChatwootClient, _timezone
+from utils.csat_periodos import formatear_periodo
 from utils.errores import mensaje_error_publico
 
 informe_semanal_cs_bp = Blueprint("informe_semanal_cs", __name__)
@@ -207,6 +213,7 @@ Reglas obligatorias:
 - El título principal debe seguir este estilo: "Informe General CS semana del [período]."
 - Si falta información de una sección, conserva el título y deja la sección sin desarrollo o indica "Pendiente" solo si la falta de información es clara.
 - La sección "CSAT y Chats con negativos, Auditoría interna" solo debe completarse si hay datos de CSAT.
+- Si hay una auditoría CSAT confirmada, usa esos datos tal cual (cifras, porcentajes, agentes, motivos y casos) para la sección "CSAT y Chats con negativos, Auditoría interna"; no recalcules ni inventes cifras.
 - La sección "Incidencias" debe conservar detalles importantes: nombres, usuarios, sistemas, errores, procedimientos, responsables, casos y seguimientos.
 - Organiza las incidencias por categorías cuando sea posible, sin borrar detalles accionables.
 - En leaderboard evita lenguaje punitivo. Usa formulaciones como "requiere revisión puntual" u "oportunidad de seguimiento".
@@ -233,6 +240,9 @@ Archivos adicionales extraídos:
 
 Notas manuales:
 {limitar_texto(datos["notas"]) or "Sin notas."}
+
+Auditoría CSAT (datos confirmados):
+{limitar_texto(datos.get("auditoria_csat", "")) or "Sin auditoría CSAT seleccionada."}
 """.strip()
 
 
@@ -422,7 +432,11 @@ def generate_weekly_report_ollama(prompt, config):
 
 def generar_informe_fallback(datos):
     base = limpiar_texto(datos["bitacora"]) or limpiar_texto(datos["notas"]) or limpiar_texto(datos["archivos_adicionales"])
-    tiene_csat = "csat" in base.lower() or "chat negativo" in base.lower()
+    tiene_csat = (
+        "csat" in base.lower()
+        or "chat negativo" in base.lower()
+        or bool(limpiar_texto(datos.get("auditoria_csat")))
+    )
     lineas = [
         f"# {datos['nombre_informe'] or 'Informe Semanal CS'}",
         "",
@@ -436,6 +450,9 @@ def generar_informe_fallback(datos):
             lineas.append("Información base recibida para redactar esta sección:")
             lineas.append("")
             lineas.append(limitar_texto(base, 2500))
+        elif titulo == "CSAT y Chats con negativos, Auditoría interna" and datos.get("auditoria_csat"):
+            lineas.append("")
+            lineas.append(limitar_texto(datos["auditoria_csat"], 2500))
         elif titulo == "CSAT y Chats con negativos, Auditoría interna" and not tiene_csat:
             lineas.append("")
         else:
@@ -462,6 +479,56 @@ def generate_weekly_report(datos):
     return generar_informe_fallback(datos), "fallback", [warning]
 
 
+def obtener_store_csat():
+    return auditoria_csat_store.obtener_store_csat()
+
+
+def obtener_chatwoot():
+    return ChatwootClient(timeout=15)
+
+
+def _fecha_iso(valor):
+    return date.fromisoformat(str(valor)[:10])
+
+
+def listar_auditorias_csat():
+    """Auditorías guardadas para el select; vacío si el almacén no está configurado o falla."""
+    try:
+        periodos = obtener_store_csat().listar_periodos()
+    except AuditoriaCsatConfigError:
+        return []
+    except Exception:
+        logger.warning("No se pudieron listar las auditorías CSAT", exc_info=True)
+        return []
+    return [
+        {
+            "id": periodo["id"],
+            "texto": (
+                f"{formatear_periodo(_fecha_iso(periodo['fecha_inicio']), _fecha_iso(periodo['fecha_fin']))}"
+                f" — {periodo.get('negativos_pendientes') or 0} pendientes"
+            ),
+        }
+        for periodo in periodos
+    ]
+
+
+def aplicar_auditoria_csat(datos, period_id):
+    """Agrega el bloque de la auditoría guardada a `datos`; devuelve los warnings."""
+    store = obtener_store_csat()
+    periodo = store.obtener_periodo(period_id)
+    if not periodo:
+        return ["La auditoría CSAT seleccionada ya no existe."]
+    inicio, fin = _fecha_iso(periodo["fecha_inicio"]), _fecha_iso(periodo["fecha_fin"])
+    anterior = datos_periodo_anterior(store, obtener_chatwoot(), periodo, _timezone())
+    datos["auditoria_csat"] = construir_bloque_csat(periodo, store.negativos(period_id), anterior)
+    if not datos["periodo"]:
+        datos["periodo"] = formatear_periodo(inicio, fin)
+    pendientes = periodo.get("negativos_pendientes") or 0
+    if pendientes:
+        return [f"La auditoría CSAT tiene {pendientes} negativos sin confirmar."]
+    return []
+
+
 @informe_semanal_cs_bp.route("/informe-semanal-cs", methods=["GET", "POST"])
 def informe_semanal_cs():
     mensaje = ""
@@ -476,9 +543,12 @@ def informe_semanal_cs():
         "bitacora": "",
         "archivos_adicionales": "",
         "notas": "",
+        "auditoria_csat": "",
     }
+    auditoria_csat_id = ""
 
     if request.method == "POST":
+        auditoria_csat_id = limpiar_texto(request.form.get("auditoria_csat_id"))
         datos.update(
             {
                 "nombre_informe": limpiar_texto(request.form.get("nombre_informe")),
@@ -510,6 +580,12 @@ def informe_semanal_cs():
                     datos["bitacora"] + "\n\n" + texto_bitacora
                 ).strip()
             datos["archivos_adicionales"] = texto_adicional
+            if auditoria_csat_id:
+                try:
+                    warnings.extend(aplicar_auditoria_csat(datos, auditoria_csat_id))
+                except Exception as exc:
+                    logger.exception("No se pudo cargar la auditoría CSAT")
+                    warnings.append(mensaje_error_publico(exc, "No se pudo cargar la auditoría CSAT"))
 
             informe_generado, fuente_generacion, generation_warnings = generate_weekly_report(datos)
             warnings.extend(generation_warnings)
@@ -527,4 +603,6 @@ def informe_semanal_cs():
         informe_generado=informe_generado,
         fuente_generacion=fuente_generacion,
         ia_estado=obtener_estado_ia(),
+        auditorias_csat=listar_auditorias_csat(),
+        auditoria_csat_id=auditoria_csat_id,
     )
