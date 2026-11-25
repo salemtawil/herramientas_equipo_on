@@ -8,7 +8,7 @@ import uuid
 from datetime import date, datetime
 
 import pandas as pd
-from flask import Blueprint, Response, jsonify, render_template, request, url_for
+from flask import Blueprint, Response, current_app, has_app_context, jsonify, render_template, request, url_for
 
 from utils import auditoria_csat_store
 from utils.auditoria_chats_transcripcion import construir_transcripcion
@@ -26,7 +26,9 @@ from utils.csat_periodos import TIPOS_PERIODO, formatear_periodo, resolver_perio
 from utils.archivos import _leer_csv_desde_bytes
 from utils.archivos import leer_bytes_archivo_csv
 from utils.errores import mensaje_error_publico
+from utils.estado_temporal import cargar_estado_temporal
 from utils.estado_temporal import cargar_json_temporal
+from utils.estado_temporal import guardar_estado_temporal
 from utils.estado_temporal import guardar_json_temporal
 from utils.estado_temporal import limpiar_estados_temporales_expirados
 from utils.ia_chat import IAConfigError, IARateLimitError, IARespuestaError, IATemporalError, completar_json
@@ -321,20 +323,47 @@ def limpiar_analisis_expirados():
     limpiar_estados_temporales_expirados(STATE_NAMESPACE, ttl_hours=ANALYSIS_TTL_HOURS)
 
 
+ESTADO_SALT = "auditoria-csat-estado"
+
+
 def guardar_analisis(estado):
-    analysis_id = limpiar_texto(estado.get("analysis_id")) or str(uuid.uuid4())
+    """Guarda el estado de la auditoría y devuelve su identificador (`analysis_id`).
+
+    Dentro de Flask el estado viaja firmado y comprimido en la propia página: en Vercel cada
+    petición puede caer en un servidor distinto, y un archivo temporal solo existe en uno de
+    ellos. Si el estado es demasiado grande, `guardar_estado_temporal` usa un archivo.
+    """
     estado["updated_at"] = datetime.utcnow().isoformat()
-    estado["analysis_id"] = analysis_id
-    guardar_json_temporal(
+    if not has_app_context():
+        analysis_id = limpiar_texto(estado.get("analysis_id")) or str(uuid.uuid4())
+        estado["analysis_id"] = analysis_id
+        guardar_json_temporal(estado, namespace=STATE_NAMESPACE, state_id=analysis_id)
+        return analysis_id
+
+    estado["analysis_id"] = ""
+    token = guardar_estado_temporal(
         estado,
+        secret_key=current_app.secret_key,
+        salt=ESTADO_SALT,
         namespace=STATE_NAMESPACE,
-        state_id=analysis_id,
+        ttl_hours=ANALYSIS_TTL_HOURS,
     )
-    return analysis_id
+    estado["analysis_id"] = token
+    return token
 
 
 def cargar_analisis(analysis_id):
-    return cargar_json_temporal(analysis_id, namespace=STATE_NAMESPACE)
+    texto = limpiar_texto(analysis_id)
+    if not texto:
+        return None
+    if has_app_context():
+        estado = cargar_estado_temporal(
+            texto, secret_key=current_app.secret_key, salt=ESTADO_SALT, namespace=STATE_NAMESPACE
+        )
+        if estado is not None:
+            estado["analysis_id"] = texto
+            return estado
+    return cargar_json_temporal(texto, namespace=STATE_NAMESPACE)
 
 
 def construir_advertencias_columnas(df, columnas_resueltas):
@@ -1456,11 +1485,8 @@ def ejecutar_paso_ia(estado, advertencia_previa=""):
         "advertencia": advertencia,
         "esperar_segundos": 0 if fin else info.get("esperar_segundos", 0),
         "fin": bool(fin),
-        "url": url_for(
-            "auditoria_csat.auditoria_csat",
-            analysis_id=estado.get("analysis_id") or None,
-            period_id=estado.get("period_id") or None,
-        ),
+        "analysis_id": estado.get("analysis_id") or "",
+        "url": url_for("auditoria_csat.auditoria_csat", period_id=estado.get("period_id") or None),
     }
 
 
@@ -1501,6 +1527,9 @@ def auditoria_csat():
                 estado = cargar_estado_chatwoot(request.form)
                 if not estado:
                     advertencia = MENSAJE_ESTADO_NO_DISPONIBLE
+                elif accion == "ver_estado":
+                    # Solo muestra el estado recibido (p. ej. al terminar la auditoría con IA), sin tocar decisiones.
+                    contexto_analisis = construir_contexto_analisis(estado)
                 else:
                     estado = actualizar_estado_desde_formulario(estado, request.form)
                     advertencia = persistir_estado(estado)

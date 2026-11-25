@@ -284,13 +284,14 @@ def test_auditar_con_ia_no_deja_transcripciones_en_el_temporal(cliente, store, c
 
     monkeypatch.setattr(herramienta, "auditar_lote_con_proveedor", ia_falsa)
     html = _traer(cliente).get_data(as_text=True)
-    analysis_id = _hidden(html, "analysis_id")
-    cliente.post(
+    respuesta = cliente.post(
         "/auditoria-csat",
-        data={"accion": "auditar_con_ia", "analysis_id": analysis_id, "period_id": _hidden(html, "period_id")},
-    )
+        data={"accion": "auditar_con_ia", "analysis_id": _hidden(html, "analysis_id"), "period_id": _hidden(html, "period_id")},
+    ).get_data(as_text=True)
     assert vistos == [True, True]
-    estado = herramienta.cargar_analisis(analysis_id)
+    # El estado que queda (el que lleva la página de respuesta) no guarda las conversaciones.
+    with app.app_context():
+        estado = herramienta.cargar_analisis(_hidden(respuesta, "analysis_id"))
     assert estado["rows"] and all(not f.get("transcripcion_conversacion") for f in estado["rows"])
     assert any(f.get("ia_justificable") for f in estado["rows"])
 
@@ -341,10 +342,14 @@ def _ia_propone_si(filas, config):
     return [{"row_id": f["row_id"], "justificable": "SÍ", "motivo_inconformidad": "OTRO", "confianza": 0.8} for f in filas]
 
 
-def _paso_json(cliente, html):
+def _paso_json(cliente, html, analysis_id=None):
     return cliente.post(
         "/auditoria-csat",
-        data={"accion": "auditar_con_ia", "analysis_id": _hidden(html, "analysis_id"), "period_id": _hidden(html, "period_id")},
+        data={
+            "accion": "auditar_con_ia",
+            "analysis_id": analysis_id or _hidden(html, "analysis_id"),
+            "period_id": _hidden(html, "period_id"),
+        },
         headers={"Accept": "application/json"},
     ).get_json()
 
@@ -358,10 +363,12 @@ def test_paso_a_paso_revisa_todos_los_negativos(cliente, store, chatwoot, monkey
     primero = _paso_json(cliente, html)
     assert (primero["auditadas"], primero["pendientes"], primero["total_negativos"], primero["fin"]) == (1, 6, 7, False)
     pasos = [primero]
-    while not pasos[-1]["fin"]:
-        pasos.append(_paso_json(cliente, html))
+    # Como hace la página: cada paso parte del estado que devolvió el anterior.
+    while not pasos[-1]["fin"] and len(pasos) < 20:
+        pasos.append(_paso_json(cliente, html, pasos[-1]["analysis_id"]))
     assert len(pasos) == 7 and pasos[-1]["pendientes"] == 0
     assert "period_id=" in pasos[-1]["url"]
+    assert pasos[-1]["analysis_id"] and "analysis_id" not in pasos[-1]["url"]
     assert all(n["ia_justificable"] == "SÍ" for n in store.negativos(_hidden(html, "period_id")))
 
 
@@ -408,3 +415,47 @@ def test_sin_javascript_un_clic_audita_una_tanda_y_dice_cuantos_quedan(cliente, 
     ).get_data(as_text=True)
     assert "La IA revisó 1 negativo(s). Quedan 6 por revisar." in respuesta
     assert "data-csat-ia" in respuesta and "auditoria_csat.js" in respuesta
+
+
+
+# --- El estado viaja firmado en la página: no depende de qué servidor atiende -----------------
+
+
+def test_estado_viaja_en_la_pagina_aunque_se_borre_el_temporal(cliente, store, chatwoot, monkeypatch, tmp_path):
+    """En Vercel cada petición puede caer en otro servidor sin los archivos temporales del anterior."""
+    chatwoot.encuestas = [enc(1, rating=1), enc(2, rating=2), enc(3, rating=5)]
+    monkeypatch.setenv("AUDITORIA_CHATS_AI_API_KEY", "clave-de-prueba")
+    monkeypatch.setattr(herramienta, "auditar_lote_con_proveedor", _ia_propone_si)
+    html = _traer(cliente, prueba="1").get_data(as_text=True)
+    # Otro servidor: directorio temporal vacío.
+    monkeypatch.setenv("TEMP", str(tmp_path))
+    monkeypatch.setenv("TMP", str(tmp_path))
+
+    paso = _paso_json(cliente, html)
+    assert paso["auditadas"] == 1 and paso["pendientes"] == 1
+    segundo = cliente.post(
+        "/auditoria-csat",
+        data={"accion": "auditar_con_ia", "analysis_id": paso["analysis_id"]},
+        headers={"Accept": "application/json"},
+    ).get_json()
+    assert (segundo["auditadas"], segundo["pendientes"], segundo["fin"]) == (1, 0, True)
+
+    vista = cliente.post("/auditoria-csat", data={"accion": "ver_estado", "analysis_id": segundo["analysis_id"]})
+    texto = vista.get_data(as_text=True)
+    assert vista.status_code == 200
+    assert texto.count("Propuesta IA: SÍ") == 2
+    assert "Modo prueba" in texto
+
+
+def test_ver_estado_no_borra_decisiones(cliente, store, chatwoot):
+    chatwoot.encuestas = [enc(1, rating=1)]
+    html = _traer(cliente).get_data(as_text=True)
+    guardado = cliente.post(
+        "/auditoria-csat",
+        data={"accion": "guardar_auditoria", "analysis_id": _hidden(html, "analysis_id"), "period_id": _hidden(html, "period_id"), "justificable__1": "NO"},
+    ).get_data(as_text=True)
+    vista = cliente.post(
+        "/auditoria-csat", data={"accion": "ver_estado", "analysis_id": _hidden(guardado, "analysis_id")}
+    ).get_data(as_text=True)
+    assert re.search(r'<option value="NO"\s+selected', vista)
+    assert store.negativos(_hidden(html, "period_id"))[0]["decision_final"] == "NO"
