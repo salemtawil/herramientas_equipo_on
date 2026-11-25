@@ -172,12 +172,13 @@ RATING_CATEGORIAS = {
 MAX_CASOS_REPORTE_IA = 8
 ANALYSIS_TTL_HOURS = 24
 STATE_NAMESPACE = "auditoria_csat"
-# Negativos por tanda: tandas cortas tardan menos y el proveedor falla menos (503).
-CSAT_IA_MAX_CASOS_DEFAULT = 5
+# Negativos por paso. Igual que la Auditoría de chats: una conversación por petición, para que
+# Gemini responda dentro del tiempo y el respaldo alcance a intentarse.
+CSAT_IA_MAX_CASOS_DEFAULT = 1
 CSAT_IA_MAX_TRANSCRIPT_CHARS = 6000
 # Tiempo total de IA por clic (principal + respaldo). Vercel corta a los 60 s y antes se
 # traen conversaciones de Chatwoot y se guarda en Supabase, así que se deja margen.
-CSAT_IA_PRESUPUESTO_SEGUNDOS = 40
+CSAT_IA_PRESUPUESTO_SEGUNDOS = 48
 
 
 def normalizar_texto(valor):
@@ -580,6 +581,20 @@ def mensajes_auditoria_ia(filas):
     ]
 
 
+def motivo_fallo_ia(exc):
+    """Motivo corto y legible de un fallo del proveedor de IA."""
+    texto = str(exc).lower()
+    if getattr(exc, "diario", False):
+        return "cupo diario agotado"
+    if "no respondió a tiempo" in texto or "timeout" in texto:
+        return "tardó demasiado en responder"
+    if "saturado" in texto or "(5" in texto:
+        return "saturado (error 5xx)"
+    if "por minuto" in texto:
+        return "límite por minuto"
+    return "no disponible"
+
+
 def auditar_lote_con_proveedor(filas, config):
     """Audita el lote con la IA compartida; si el modelo principal está saturado o sin cupo, usa el de respaldo."""
     mensajes = mensajes_auditoria_ia(filas)
@@ -587,13 +602,25 @@ def auditar_lote_con_proveedor(filas, config):
     if config.get("model_respaldo") and config["model_respaldo"] != config["model"]:
         modelos.append(config["model_respaldo"])
     timeout = CSAT_IA_PRESUPUESTO_SEGUNDOS // len(modelos)
-    for indice, modelo in enumerate(modelos):
+    errores = []
+    data = None
+    for modelo in modelos:
         try:
             data = completar_json(mensajes, dict(config, model=modelo), timeout=timeout)
             break
-        except IARateLimitError:
-            if indice == len(modelos) - 1:
-                raise
+        except IARateLimitError as exc:
+            errores.append((modelo, exc))
+    if data is None:
+        detalle = " · ".join(f"{nombre}: {motivo_fallo_ia(exc)}" for nombre, exc in errores)
+        temporales = [exc for _, exc in errores if not exc.diario]
+        if temporales:
+            error = IATemporalError(detalle, esperar_segundos=temporales[0].esperar_segundos)
+        elif len(errores) == 1:
+            error = errores[0][1]
+        else:
+            error = IARateLimitError(f"Todos los modelos agotaron su cupo diario ({detalle}).", diario=True)
+        error.modelos_probados = [nombre for nombre, _ in errores]
+        raise error
 
     resultados = data.get("resultados")
     if not isinstance(resultados, list):
@@ -690,9 +717,13 @@ def auditar_estado_con_ia(estado, info=None):
         advertencias.append(str(exc))
     except IATemporalError as exc:
         info["esperar_segundos"] = exc.esperar_segundos
-        advertencias.append(
-            "El proveedor de IA está saturado o tardó demasiado en responder (no es por falta de cupo)."
-        )
+        aviso = f"La IA no respondió ({exc}). No es por falta de cupo."
+        if len(getattr(exc, "modelos_probados", [config["model"]])) < 2:
+            aviso += (
+                " No hay modelo de respaldo: configura AUDITORIA_CHATS_AI_MODEL_RESPALDO en Vercel "
+                "para que entre otro modelo cuando este se sature."
+            )
+        advertencias.append(aviso)
     except IARateLimitError as exc:
         if exc.diario:
             info["detener"] = True

@@ -196,7 +196,7 @@ class IaCompartidaTests(unittest.TestCase):
         with mock.patch.object(csat, "obtener_ia_config", return_value=config), mock.patch.object(csat, "completar_json", falso):
             auditadas, _ = auditar_estado_con_ia(estado)
         # Ambos modelos se reparten el presupuesto para no pasar el límite de 60 s de Vercel.
-        self.assertEqual([("principal", 20), ("respaldo", 20)], modelos)
+        self.assertEqual([("principal", 24), ("respaldo", 24)], modelos)
         self.assertEqual(1, auditadas)
         self.assertEqual("respaldo", estado["rows"][0]["ia_modelo"])
 
@@ -212,3 +212,35 @@ class IaCompartidaTests(unittest.TestCase):
         self.assertEqual(0, auditadas)
         self.assertIn("Límite diario", avisos[0])
         self.assertIn("compartido con la Auditoría de chats", avisos[0])
+
+
+class AvisoModelosTests(unittest.TestCase):
+    """Cuando la IA no responde, el aviso dice qué modelos se probaron y si falta el respaldo."""
+
+    def _config(self, respaldo):
+        return {"activa": True, "api_key": "k", "model": "gemini-principal", "model_respaldo": respaldo, "max_cases": 5, "base_url": "http://ia.local"}
+
+    def test_sin_respaldo_sugiere_configurarlo(self):
+        from utils.ia_chat import IATemporalError
+
+        with mock.patch.object(csat, "obtener_ia_config", return_value=self._config("")), mock.patch.object(
+            csat, "completar_json", side_effect=IATemporalError("El proveedor de IA está saturado o con fallos (503); se reintentará en 30 s.")
+        ):
+            _, avisos = auditar_estado_con_ia({"rows": [fila_negativa()]})
+        self.assertIn("gemini-principal: saturado", avisos[0])
+        self.assertIn("AUDITORIA_CHATS_AI_MODEL_RESPALDO", avisos[0])
+
+    def test_con_respaldo_nombra_ambos_modelos(self):
+        from utils.ia_chat import IATemporalError
+
+        errores = [
+            IATemporalError("El proveedor de IA está saturado o con fallos (503); se reintentará en 30 s."),
+            IATemporalError("El proveedor de IA no respondió a tiempo (ReadTimeout); se reintentará en 30 s."),
+        ]
+        with mock.patch.object(csat, "obtener_ia_config", return_value=self._config("gemini-respaldo")), mock.patch.object(
+            csat, "completar_json", side_effect=errores
+        ):
+            _, avisos = auditar_estado_con_ia({"rows": [fila_negativa()]})
+        self.assertIn("gemini-principal: saturado", avisos[0])
+        self.assertIn("gemini-respaldo: tardó demasiado", avisos[0])
+        self.assertNotIn("AUDITORIA_CHATS_AI_MODEL_RESPALDO", avisos[0])

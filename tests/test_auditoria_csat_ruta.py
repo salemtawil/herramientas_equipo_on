@@ -275,6 +275,7 @@ def test_auditar_con_ia_carga_transcripcion_solo_de_candidatos(cliente, store, c
 def test_auditar_con_ia_no_deja_transcripciones_en_el_temporal(cliente, store, chatwoot, monkeypatch):
     chatwoot.encuestas = [enc(1, rating=1), enc(2, rating=2)]
     monkeypatch.setenv("AUDITORIA_CHATS_AI_API_KEY", "clave-de-prueba")
+    monkeypatch.setenv("CSAT_AI_MAX_CASES", "2")
     vistos = []
 
     def ia_falsa(filas, config):
@@ -355,10 +356,12 @@ def test_paso_a_paso_revisa_todos_los_negativos(cliente, store, chatwoot, monkey
     html = _traer(cliente).get_data(as_text=True)
 
     primero = _paso_json(cliente, html)
-    assert (primero["auditadas"], primero["pendientes"], primero["total_negativos"], primero["fin"]) == (5, 2, 7, False)
-    segundo = _paso_json(cliente, html)
-    assert (segundo["auditadas"], segundo["pendientes"], segundo["fin"]) == (2, 0, True)
-    assert "period_id=" in segundo["url"]
+    assert (primero["auditadas"], primero["pendientes"], primero["total_negativos"], primero["fin"]) == (1, 6, 7, False)
+    pasos = [primero]
+    while not pasos[-1]["fin"]:
+        pasos.append(_paso_json(cliente, html))
+    assert len(pasos) == 7 and pasos[-1]["pendientes"] == 0
+    assert "period_id=" in pasos[-1]["url"]
     assert all(n["ia_justificable"] == "SÍ" for n in store.negativos(_hidden(html, "period_id")))
 
 
@@ -375,7 +378,7 @@ def test_proveedor_saturado_pide_esperar_y_no_culpa_al_cupo(cliente, store, chat
     html = _traer(cliente).get_data(as_text=True)
     datos = _paso_json(cliente, html)
     assert datos["fin"] is False and datos["esperar_segundos"] == 30 and datos["pendientes"] == 2
-    assert "no es por falta de cupo" in datos["advertencia"]
+    assert "no es por falta de cupo" in datos["advertencia"].lower()
     assert "CSAT_AI_MAX_CASES" not in datos["advertencia"]
 
 
@@ -403,5 +406,5 @@ def test_sin_javascript_un_clic_audita_una_tanda_y_dice_cuantos_quedan(cliente, 
         "/auditoria-csat",
         data={"accion": "auditar_con_ia", "analysis_id": _hidden(html, "analysis_id"), "period_id": _hidden(html, "period_id")},
     ).get_data(as_text=True)
-    assert "La IA revisó 5 negativo(s). Quedan 2 por revisar." in respuesta
+    assert "La IA revisó 1 negativo(s). Quedan 6 por revisar." in respuesta
     assert "data-csat-ia" in respuesta and "auditoria_csat.js" in respuesta
