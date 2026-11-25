@@ -807,6 +807,24 @@ def actualizar_estado_desde_formulario(estado, form):
     return estado
 
 
+def leer_decision_formulario(form):
+    """(row_id, justificable, motivo, nota) de un POST `decidir`.
+
+    El JS envía row_id/justificable/motivo/nota. Sin JS se envía el formulario único de fichas:
+    el botón pulsado trae `decision=<row_id>|<decisión>` y los campos van como motivo__<row_id>.
+    """
+    row_id = limpiar_texto(form.get("row_id"))
+    justificable = form.get("justificable")
+    if row_id and justificable:
+        return row_id, justificable, form.get("motivo"), form.get("nota")
+    decision = form.get("decision") or ""
+    if "|" not in decision:
+        return row_id, justificable, form.get("motivo"), form.get("nota")
+    row_id, justificable = decision.rsplit("|", 1)
+    row_id = limpiar_texto(row_id)
+    return row_id, justificable, form.get(f"motivo__{row_id}"), form.get(f"nota__{row_id}")
+
+
 def aplicar_decision(estado, row_id, justificable, motivo, nota):
     """Aplica la decisión humana a UN negativo. Devuelve '' si aplicó o el error en español."""
     fila = next(
@@ -1525,7 +1543,7 @@ def ejecutar_paso_ia(estado, advertencia_previa=""):
         if pendientes:
             mensaje += f" Quedan {pendientes} por revisar."
         else:
-            mensaje += " Ya revisó todos los pendientes: confirma o corrige sus propuestas en la tabla."
+            mensaje += " Ya revisó todos los pendientes: confirma o corrige sus propuestas en las fichas."
     # Se termina si no queda nada, si hay que detenerse o si una tanda no avanzó sin motivo para reintentar.
     fin = not pendientes or info.get("detener") or (not auditadas and not info.get("esperar_segundos"))
     return {
@@ -1583,14 +1601,8 @@ def auditoria_csat():
                     # Solo muestra el estado recibido (p. ej. al terminar la auditoría con IA), sin tocar decisiones.
                     contexto_analisis = construir_contexto_analisis(estado)
                 elif accion == "decidir":
-                    row_id = limpiar_texto(request.form.get("row_id"))
-                    error = aplicar_decision(
-                        estado,
-                        row_id,
-                        request.form.get("justificable"),
-                        request.form.get("motivo"),
-                        request.form.get("nota"),
-                    )
+                    row_id, justificable, motivo, nota = leer_decision_formulario(request.form)
+                    error = aplicar_decision(estado, row_id, justificable, motivo, nota)
                     analysis_id = limpiar_texto(request.form.get("analysis_id"))
                     if not error:
                         advertencia = persistir_estado(estado, retencion=False)
@@ -1675,7 +1687,7 @@ def auditoria_csat():
         return jsonify(
             respuesta_decision(
                 estado,
-                limpiar_texto(request.form.get("row_id")),
+                leer_decision_formulario(request.form)[0],
                 False,
                 advertencia or "No se pudo guardar la decisión.",
                 "",

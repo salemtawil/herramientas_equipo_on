@@ -71,6 +71,12 @@ def _estrellas(calificacion):
         return 0
 
 
+def _enlace_seguro(valor):
+    """Solo se usa como href un enlace http(s); el CSV puede traer cualquier texto (p. ej. javascript:)."""
+    enlace = str(valor or "").strip()
+    return enlace if enlace.lower().startswith(("http://", "https://")) else ""
+
+
 def _ficha(fila):
     ia_decision = fila.get("ia_justificable") or ""
     ia = None
@@ -90,7 +96,7 @@ def _ficha(fila):
         "fecha": fila.get("fecha_registrada", ""),
         "comentario": fila.get("comentario", ""),
         "conversation_id": fila.get("conversation_id") or None,
-        "enlace": fila.get("enlace_conversacion", ""),
+        "enlace": _enlace_seguro(fila.get("enlace_conversacion")),
         "ia": ia,
         "justificable": justificable,
         "decision_texto": TEXTO_DECISION.get(justificable, ""),

@@ -156,14 +156,15 @@
       </div>
 
       {% if vista.fichas %}
-        <div class="csat-fichas">
+        {# Un solo formulario para todas las fichas: el token firmado va una vez, no una por ficha. #}
+        <form method="post" class="csat-fichas" id="csat-fichas" data-csat-fichas>
+          <input type="hidden" name="accion" value="decidir">
+          <input type="hidden" name="analysis_id" value="{{ contexto.analysis_id }}">
+          <input type="hidden" name="period_id" value="{{ contexto.period_id }}">
+          {% if contexto.prueba %}<input type="hidden" name="prueba" value="1">{% endif %}
           {% for f in vista.fichas %}
             {% set fid = "csat-ficha-" ~ loop.index %}
-            <form method="post" class="csat-ficha" data-csat-ficha data-row-id="{{ f.row_id }}" data-confirmada="{{ 1 if f.confirmada else 0 }}" aria-labelledby="{{ fid }}-agente">
-              <input type="hidden" name="accion" value="decidir">
-              <input type="hidden" name="analysis_id" value="{{ contexto.analysis_id }}">
-              <input type="hidden" name="period_id" value="{{ contexto.period_id }}">
-              <input type="hidden" name="row_id" value="{{ f.row_id }}">
+            <article class="csat-ficha" data-csat-ficha data-row-id="{{ f.row_id }}" data-confirmada="{{ 1 if f.confirmada else 0 }}" aria-labelledby="{{ fid }}-agente">
 
               <header class="csat-ficha__cabecera">
                 <div class="csat-ficha__quien">
@@ -213,7 +214,7 @@
                   {% for valor in ["SÍ", "NO", "TAL VEZ"] %}
                     {% set sugerido = f.ia and f.ia.decision == valor %}
                     {% set actual = f.justificable == valor %}
-                    <button type="submit" name="justificable" value="{{ valor }}" class="csat-decision__boton {{ clase_decision[valor] }}{% if sugerido %} is-sugerido{% endif %}{% if actual %} is-actual{% endif %}" aria-pressed="{{ 'true' if actual else 'false' }}">
+                    <button type="submit" name="decision" value="{{ f.row_id }}|{{ valor }}" data-justificable="{{ valor }}" class="csat-decision__boton {{ clase_decision[valor] }}{% if sugerido %} is-sugerido{% endif %}{% if actual %} is-actual{% endif %}" aria-pressed="{{ 'true' if actual else 'false' }}">
                       <span aria-hidden="true">{{ marca_decision[valor] }}</span> {{ contexto.texto_decision[valor] }}{% if sugerido %} <span class="csat-decision__tag">sugerido por la IA</span>{% endif %}
                     </button>
                   {% endfor %}
@@ -222,7 +223,7 @@
                 <div class="csat-ficha__campos">
                   <div>
                     <label class="small" for="{{ fid }}-motivo">Motivo</label>
-                    <select id="{{ fid }}-motivo" name="motivo">
+                    <select id="{{ fid }}-motivo" name="motivo__{{ f.row_id }}">
                       <option value="" {% if not f.motivo %}selected{% endif %}>Sin motivo</option>
                       {% for motivo in contexto.motivos_catalogo %}
                         <option value="{{ motivo }}" {% if f.motivo == motivo %}selected{% endif %}>{{ motivo }}</option>
@@ -231,14 +232,14 @@
                   </div>
                   <div>
                     <label class="small" for="{{ fid }}-nota">Nota del auditor (opcional)</label>
-                    <textarea id="{{ fid }}-nota" name="nota" rows="2" placeholder="Contexto para el informe">{{ f.nota }}</textarea>
+                    <textarea id="{{ fid }}-nota" name="nota__{{ f.row_id }}" rows="2" placeholder="Contexto para el informe">{{ f.nota }}</textarea>
                   </div>
                 </div>
                 <p class="csat-ficha__estado" data-csat-ficha-estado aria-live="polite"></p>
               </details>
-            </form>
+            </article>
           {% endfor %}
-        </div>
+        </form>
       {% else %}
         <p class="small empty-state">No hay negativos (calificación 1–2) en esta auditoría.</p>
       {% endif %}

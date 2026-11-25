@@ -9,11 +9,23 @@
   // Cada respuesta del servidor trae un analysis_id nuevo; todas las peticiones se envían
   // de una en una y con el más reciente, así que se comparte una sola cadena de envíos.
   let cadena = Promise.resolve();
+  let enCola = 0;
   let navegando = false;
   function enSerie(tarea) {
+    enCola += 1;
     const resultado = cadena.then(tarea);
-    cadena = resultado.catch(() => {});
+    cadena = resultado.catch(() => {}).then(() => {
+      enCola -= 1;
+    });
     return resultado;
+  }
+
+  // Ya no se aceptan más decisiones: la página se va a recargar con el último token.
+  function bloquearDecisiones() {
+    navegando = true;
+    document.querySelectorAll('[data-csat-ficha] button[name="decision"]').forEach((b) => {
+      b.disabled = true;
+    });
   }
 
   function guardarToken(valor) {
@@ -48,17 +60,10 @@
     const estado = document.querySelector("[data-csat-ia-estado]");
     if (!boton || !estado || !boton.form) return;
     const formulario = boton.form;
+    const aceptarTodo = formulario.querySelector('button[value="aceptar_propuestas_ia"]');
 
-    // Muestra la tabla con el estado final. Se envía por POST porque el estado viaja firmado
+    // Recarga las fichas con el estado final. Se envía por POST porque el estado viaja firmado
     // en la página (no cabe en una URL) y así no depende de qué servidor atienda la petición.
-    // Ya no se aceptan más decisiones: la página se va a recargar con el último token.
-    function bloquearDecisiones() {
-      navegando = true;
-      document.querySelectorAll('[data-csat-ficha] button[name="justificable"]').forEach((b) => {
-        b.disabled = true;
-      });
-    }
-
     function verEstado() {
       bloquearDecisiones();
       const accion = document.createElement("input");
@@ -89,6 +94,8 @@
     async function auditarTodo(evento) {
       evento.preventDefault();
       boton.disabled = true;
+      // Aceptar mientras la IA propone dejaría fuera las propuestas que aún no llegaron.
+      if (aceptarTodo) aceptarTodo.disabled = true;
       estado.hidden = false;
       estado.textContent = "La IA está revisando los negativos…";
       let fallos = 0;
@@ -139,6 +146,7 @@
         enSerie(() => verEstado());
       } else {
         boton.disabled = false;
+        if (aceptarTodo) aceptarTodo.disabled = false;
       }
     }
 
@@ -237,8 +245,8 @@
     return el;
   }
 
-  function ponerResumen(formulario, ficha) {
-    const resumen = formulario.querySelector("[data-csat-ficha-resumen]");
+  function ponerResumen(contenedor, ficha) {
+    const resumen = contenedor.querySelector("[data-csat-ficha-resumen]");
     if (!resumen) return;
     const insignia = elemento("span", "csat-insignia " + claseDecision(ficha.justificable));
     const marca = elemento("span", "", "✓");
@@ -257,37 +265,56 @@
     resumen.append(insignia, detalle);
   }
 
-  function ponerFicha(formulario, ficha) {
+  // Valor de la decisión de un botón: «<row_id>|<SÍ|NO|TAL VEZ>» (se parte por el último «|»).
+  function decisionDeBoton(boton) {
+    const valor = boton.value || "";
+    return boton.getAttribute("data-justificable") || valor.slice(valor.lastIndexOf("|") + 1);
+  }
+
+  function ponerFicha(contenedor, ficha) {
     if (!ficha) return;
-    formulario.setAttribute("data-confirmada", ficha.confirmada ? "1" : "0");
-    formulario.querySelectorAll('button[name="justificable"]').forEach((boton) => {
-      const actual = boton.value === ficha.justificable;
+    contenedor.setAttribute("data-confirmada", ficha.confirmada ? "1" : "0");
+    contenedor.querySelectorAll('button[name="decision"]').forEach((boton) => {
+      const actual = decisionDeBoton(boton) === ficha.justificable;
       boton.classList.toggle("is-actual", actual);
       boton.setAttribute("aria-pressed", actual ? "true" : "false");
     });
     if (ficha.confirmada) {
-      ponerResumen(formulario, ficha);
-      const cuerpo = formulario.querySelector("[data-csat-ficha-cuerpo]");
+      ponerResumen(contenedor, ficha);
+      const cuerpo = contenedor.querySelector("[data-csat-ficha-cuerpo]");
       if (cuerpo) cuerpo.open = false;
     }
   }
 
-  function estadoFicha(formulario, texto, esError) {
-    const el = formulario.querySelector("[data-csat-ficha-estado]");
+  function estadoFicha(contenedor, texto, esError) {
+    const el = contenedor.querySelector("[data-csat-ficha-estado]");
     if (!el) return;
     el.textContent = texto || "";
     el.style.color = esError ? "var(--status-bad, #b42318)" : "";
   }
 
-  function enviarDecision(formulario, justificable) {
+  function valorCampo(contenedor, prefijo) {
+    const campo = contenedor.querySelector('[name^="' + prefijo + '__"]');
+    return campo ? campo.value : "";
+  }
+
+  // Las fichas comparten un formulario; cada decisión se envía solo con los datos de su fila.
+  function enviarDecision(contenedor, formulario, justificable) {
     return enSerie(async () => {
-      estadoFicha(formulario, "Guardando…", false);
-      formulario.classList.add("is-guardando");
+      estadoFicha(contenedor, "Guardando…", false);
+      contenedor.classList.add("is-guardando");
       try {
-        const datos = new FormData(formulario);
+        const datos = new FormData();
         datos.set("accion", "decidir");
+        datos.set("analysis_id", ultimoToken(formulario));
+        const periodo = formulario.querySelector('input[name="period_id"]');
+        if (periodo) datos.set("period_id", periodo.value);
+        const prueba = formulario.querySelector('input[name="prueba"]');
+        if (prueba) datos.set("prueba", prueba.value);
+        datos.set("row_id", contenedor.getAttribute("data-row-id") || "");
         datos.set("justificable", justificable);
-        datos.set("analysis_id", ultimoToken(formulario) || datos.get("analysis_id"));
+        datos.set("motivo", valorCampo(contenedor, "motivo"));
+        datos.set("nota", valorCampo(contenedor, "nota"));
         const respuesta = await fetch(formulario.getAttribute("action") || window.location.pathname, {
           method: "POST",
           body: datos,
@@ -303,25 +330,25 @@
         if (json) guardarToken(json.analysis_id);
         if (!respuesta.ok && !json) throw new Error("HTTP " + respuesta.status);
         if (!json || !json.ok) {
-          estadoFicha(formulario, (json && json.error) || "No se pudo guardar. Inténtalo de nuevo.", true);
+          estadoFicha(contenedor, (json && json.error) || "No se pudo guardar. Inténtalo de nuevo.", true);
           if (json) mostrarAviso(json.advertencia);
           return;
         }
-        estadoFicha(formulario, "", false);
+        estadoFicha(contenedor, "", false);
         try {
-          ponerFicha(formulario, json.ficha);
+          ponerFicha(contenedor, json.ficha);
           ponerKpis(json.kpis);
           ponerPasos(json.pasos);
           ponerPestanas(json.pestanas);
           ponerListo(json.kpis);
           mostrarAviso(json.advertencia);
         } catch (errorVista) {
-          estadoFicha(formulario, "Guardado; recarga la página para ver el estado actualizado.", false);
+          estadoFicha(contenedor, "Guardado; recarga la página para ver el estado actualizado.", false);
         }
       } catch (error) {
-        estadoFicha(formulario, "No se pudo guardar (" + error.message + "). Inténtalo de nuevo.", true);
+        estadoFicha(contenedor, "No se pudo guardar (" + error.message + "). Inténtalo de nuevo.", true);
       } finally {
-        formulario.classList.remove("is-guardando");
+        contenedor.classList.remove("is-guardando");
       }
     });
   }
@@ -331,11 +358,13 @@
     if (!document.querySelector("[data-csat-ficha]")) return;
 
     document.addEventListener("click", (evento) => {
-      const boton = evento.target.closest ? evento.target.closest('[data-csat-ficha] button[name="justificable"]') : null;
+      const boton = evento.target.closest ? evento.target.closest('[data-csat-ficha] button[name="decision"]') : null;
       if (!boton) return;
       evento.preventDefault();
       if (navegando) return;
-      enviarDecision(boton.form, boton.value);
+      const contenedor = boton.closest("[data-csat-ficha]");
+      if (!contenedor || !boton.form) return;
+      enviarDecision(contenedor, boton.form, decisionDeBoton(boton));
     });
 
     // «Cambiar decisión» es el <summary> del <details>: solo reabre la ficha, no envía nada.
@@ -360,8 +389,61 @@
     if (activa) filtrar(activa.getAttribute("data-csat-pestana"));
   }
 
+  // ---- Barra de acciones: «Aceptar todo» y descargas esperan las decisiones en curso ----
+
+  function esDescarga(accion) {
+    return String(accion || "").startsWith("descargar");
+  }
+
+  function mostrarProcesando(texto) {
+    const overlay = document.getElementById("global-processing-overlay");
+    const textoOverlay = document.getElementById("global-processing-text");
+    if (!overlay) return;
+    if (textoOverlay && texto) textoOverlay.textContent = texto;
+    overlay.classList.add("is-visible");
+    overlay.setAttribute("aria-hidden", "false");
+  }
+
+  function iniciarAcciones() {
+    const formulario = document.querySelector("[data-csat-acciones]");
+    if (!formulario) return;
+    let esperando = false;
+
+    // En captura: corre antes que los manejadores genéricos de app.js (overlay y doble envío),
+    // que no deben deshabilitar los campos mientras se espera la cola.
+    formulario.addEventListener(
+      "submit",
+      (evento) => {
+        const boton = evento.submitter || null;
+        const accion = boton && boton.name === "accion" ? boton.value : "";
+        if (!accion) return;
+        if (!esDescarga(accion)) bloquearDecisiones();
+        if (enCola === 0 && !esperando) return;
+        evento.preventDefault();
+        evento.stopImmediatePropagation();
+        if (esperando) return;
+        esperando = true;
+        if (!esDescarga(accion)) mostrarProcesando("Guardando las últimas decisiones…");
+        // Va por la misma cola: sale cuando terminó la última decisión, con su token.
+        enSerie(() => {
+          const campo = document.createElement("input");
+          campo.type = "hidden";
+          campo.name = "accion";
+          campo.value = accion;
+          formulario.appendChild(campo);
+          formulario.submit();
+          // submit() ya armó los datos: se quita para no duplicar «accion» en el siguiente envío.
+          campo.remove();
+          esperando = false;
+        });
+      },
+      true
+    );
+  }
+
   document.addEventListener("DOMContentLoaded", () => {
     iniciarFichas();
     iniciar();
+    iniciarAcciones();
   });
 })();

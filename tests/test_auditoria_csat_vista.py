@@ -93,3 +93,16 @@ def test_contexto_incluye_vista():
     vista = construir_contexto_analisis({"rows": filas})["vista"]
     assert set(vista) == {"kpis", "pasos", "fichas", "pestanas"}
     assert construir_vista(filas, {"csat_original": 1, "csat_actualizado": 1, "negativos_pendientes": 1})["kpis"]["por_confirmar"] == 1
+
+
+def test_enlace_solo_http_o_https():
+    fichas = construir_fichas(
+        [
+            _neg(1, enlace_conversacion="javascript:alert(1)"),
+            _neg(2, enlace_conversacion="https://chat.test/c/2"),
+            _neg(3, enlace_conversacion=" HTTP://chat.test/c/3"),
+            _neg(4, enlace_conversacion="data:text/html,x"),
+        ]
+    )
+    por_id = {f["row_id"]: f["enlace"] for f in fichas}
+    assert por_id == {1: "", 2: "https://chat.test/c/2", 3: "HTTP://chat.test/c/3", 4: ""}
