@@ -100,7 +100,7 @@
           <span><span data-csat-kpi="csat_ajustado">{{ kpis.csat_ajustado }}</span>%</span>
           <span class="csat-kpi__delta {{ 'is-up' if kpis.delta > 0 else 'is-down' if kpis.delta < 0 else 'is-igual' }}" data-csat-kpi="delta">{% if kpis.delta > 0 %}▲ {{ kpis.delta }}{% elif kpis.delta < 0 %}▼ {{ kpis.delta|abs }}{% else %}= 0{% endif %}</span>
         </div>
-        <p class="csat-kpi__nota">Sin <span data-csat-kpi="excluidos">{{ kpis.excluidos }}</span> negativos que no fueron culpa del agente</p>
+        <p class="csat-kpi__nota">{% if kpis.excluidos %}Sin <span data-csat-kpi="excluidos">{{ kpis.excluidos }}</span> negativos que no fueron culpa del agente{% else %}Ningún negativo excluido todavía<span data-csat-kpi="excluidos" hidden>0</span>{% endif %}</p>
       </div>
       <div class="metric csat-kpi">
         <div class="label">Negativos</div>
