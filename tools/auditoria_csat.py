@@ -174,7 +174,9 @@ ANALYSIS_TTL_HOURS = 24
 STATE_NAMESPACE = "auditoria_csat"
 CSAT_IA_MAX_CASOS_DEFAULT = 10
 CSAT_IA_MAX_TRANSCRIPT_CHARS = 6000
-CSAT_IA_TIMEOUT = 45
+# Tiempo total de IA por clic (principal + respaldo). Vercel corta a los 60 s y antes se
+# traen conversaciones de Chatwoot y se guarda en Supabase, así que se deja margen.
+CSAT_IA_PRESUPUESTO_SEGUNDOS = 40
 
 
 def normalizar_texto(valor):
@@ -580,14 +582,17 @@ def mensajes_auditoria_ia(filas):
 def auditar_lote_con_proveedor(filas, config):
     """Audita el lote con la IA compartida; si el modelo principal está saturado o sin cupo, usa el de respaldo."""
     mensajes = mensajes_auditoria_ia(filas)
-    modelo = config["model"]
-    try:
-        data = completar_json(mensajes, config, timeout=CSAT_IA_TIMEOUT)
-    except IARateLimitError:
-        if not config.get("model_respaldo"):
-            raise
-        modelo = config["model_respaldo"]
-        data = completar_json(mensajes, dict(config, model=modelo), timeout=CSAT_IA_TIMEOUT)
+    modelos = [config["model"]]
+    if config.get("model_respaldo") and config["model_respaldo"] != config["model"]:
+        modelos.append(config["model_respaldo"])
+    timeout = CSAT_IA_PRESUPUESTO_SEGUNDOS // len(modelos)
+    for indice, modelo in enumerate(modelos):
+        try:
+            data = completar_json(mensajes, dict(config, model=modelo), timeout=timeout)
+            break
+        except IARateLimitError:
+            if indice == len(modelos) - 1:
+                raise
 
     resultados = data.get("resultados")
     if not isinstance(resultados, list):

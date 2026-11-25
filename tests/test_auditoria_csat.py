@@ -188,14 +188,15 @@ class IaCompartidaTests(unittest.TestCase):
         modelos = []
 
         def falso(mensajes, cfg, timeout=60):
-            modelos.append(cfg["model"])
+            modelos.append((cfg["model"], timeout))
             if cfg["model"] == "principal":
                 raise IARateLimitError("Límite diario de la IA alcanzado; retoma mañana.", diario=True)
             return respuesta
 
         with mock.patch.object(csat, "obtener_ia_config", return_value=config), mock.patch.object(csat, "completar_json", falso):
             auditadas, _ = auditar_estado_con_ia(estado)
-        self.assertEqual(["principal", "respaldo"], modelos)
+        # Ambos modelos se reparten el presupuesto para no pasar el límite de 60 s de Vercel.
+        self.assertEqual([("principal", 20), ("respaldo", 20)], modelos)
         self.assertEqual(1, auditadas)
         self.assertEqual("respaldo", estado["rows"][0]["ia_modelo"])
 
