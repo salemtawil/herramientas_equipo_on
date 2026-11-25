@@ -95,6 +95,20 @@ def _hidden(html, nombre):
     return encontrado.group(1) if encontrado else ""
 
 
+def _ficha_de(html, row_id):
+    return re.search(rf'<form[^>]*data-csat-ficha data-row-id="{row_id}".*?</form>', html, re.S).group(0)
+
+
+def _decision_actual(html, row_id):
+    """Valor del botón de decisión marcado como actual en la ficha de esa fila."""
+    actual = re.search(r'value="([^"]+)"[^>]*class="[^"]*is-actual', _ficha_de(html, row_id))
+    return actual.group(1) if actual else ""
+
+
+def _kpi(html, clave):
+    return re.search(rf'data-csat-kpi="{clave}">([^<]*)<', html).group(1).strip()
+
+
 def test_get_muestra_formulario_chatwoot_y_csv_en_details(cliente, store):
     html = cliente.get("/auditoria-csat").get_data(as_text=True)
     assert 'value="traer_chatwoot"' in html
@@ -114,7 +128,7 @@ def test_traer_chatwoot_guarda_periodo(cliente, store):
     assert periodo["total_encuestas"] == 3 and periodo["negativos_pendientes"] == 1
     assert [n["survey_id"] for n in store.negativos(periodo["id"])] == [1]
     assert _hidden(html, "period_id") == periodo["id"]
-    assert "1 negativos sin confirmar — el ajustado aún no es definitivo" in html
+    assert _kpi(html, "por_confirmar") == "1" and 'data-confirmada="0"' in _ficha_de(html, "1")
     assert "Auditados a mano: 0 · Aceptados de la IA: 0" in html
     assert "/auditoria-csat/conversacion/501" in html and "Ver conversación" in html
     assert "Modo prueba — nada de esto se guarda" not in html
@@ -180,7 +194,7 @@ def test_guardar_decision_sincroniza_y_cuenta_origen(cliente, store):
     periodo = store.obtener_periodo(period_id)
     assert periodo["negativos_pendientes"] == 0 and periodo["csat_ajustado"] == 100.0
     assert "Auditados a mano: 1 · Aceptados de la IA: 0" in html2
-    assert "negativos sin confirmar" not in html2
+    assert _kpi(html2, "por_confirmar") == "0" and 'data-confirmada="1"' in _ficha_de(html2, "1")
 
 
 def test_reabrir_guardada_sin_temporal_reconstruye_decisiones(cliente, store, monkeypatch):
@@ -199,8 +213,7 @@ def test_reabrir_guardada_sin_temporal_reconstruye_decisiones(cliente, store, mo
     r = cliente.get(f"/auditoria-csat?period_id={period_id}")
     html2 = r.get_data(as_text=True)
     assert r.status_code == 200
-    select = re.search(r'<select name="justificable__1".*?</select>', html2, re.S).group(0)
-    assert re.search(r'<option value="SÍ"\s+selected', select)
+    assert _decision_actual(html2, "1") == "SÍ"
     assert _hidden(html2, "period_id") == period_id
 
 
@@ -447,7 +460,7 @@ def test_estado_viaja_en_la_pagina_aunque_se_borre_el_temporal(cliente, store, c
     vista = cliente.post("/auditoria-csat", data={"accion": "ver_estado", "analysis_id": segundo["analysis_id"]})
     texto = vista.get_data(as_text=True)
     assert vista.status_code == 200
-    assert texto.count("Propuesta IA: SÍ") == 2
+    assert texto.count('data-csat-ia-propuesta="SÍ"') == 2 and texto.count("La IA cree") == 2
     assert "Modo prueba" in texto
 
 
@@ -461,7 +474,7 @@ def test_ver_estado_no_borra_decisiones(cliente, store, chatwoot):
     vista = cliente.post(
         "/auditoria-csat", data={"accion": "ver_estado", "analysis_id": _hidden(guardado, "analysis_id")}
     ).get_data(as_text=True)
-    assert re.search(r'<option value="NO"\s+selected', vista)
+    assert _decision_actual(vista, "1") == "NO"
     assert store.negativos(_hidden(html, "period_id"))[0]["decision_final"] == "NO"
 
 
@@ -564,3 +577,64 @@ def test_decidir_no_aplica_retencion(cliente, store, chatwoot, monkeypatch):
     monkeypatch.setattr(store, "borrar_vencidos", lambda hoy: llamadas.append(hoy))
     assert _decidir(cliente, aid, pid, "1").get_json()["ok"]
     assert llamadas == []
+
+
+# --- Pantalla por pasos y fichas ---
+
+
+def _fichas(html):
+    return re.findall(r"<form[^>]*data-csat-ficha[^>]*>.*?</form>", html, re.S)
+
+
+def test_pagina_muestra_pasos_kpis_y_fichas(cliente, store, chatwoot):
+    chatwoot.encuestas = [enc(1, rating=1), enc(2, rating=2), enc(3, rating=5)]
+    html = _traer(cliente).get_data(as_text=True)
+    assert 'data-csat-paso="confirmar"' in html
+    assert 'data-csat-kpi="csat_ajustado"' in html
+    assert len(_fichas(html)) == 2
+    assert "No fue culpa del agente" in html
+    assert "SÍ justificable" not in html and "CSAT actualizado" not in html
+
+
+def test_ficha_con_propuesta_ia_en_lenguaje_claro(cliente, store, chatwoot, monkeypatch):
+    chatwoot.encuestas = [enc(1, rating=1)]
+    monkeypatch.setenv("AUDITORIA_CHATS_AI_API_KEY", "clave-de-prueba")
+    monkeypatch.setattr(herramienta, "auditar_lote_con_proveedor", _ia_propone_si)
+    html = _traer(cliente).get_data(as_text=True)
+    respuesta = cliente.post(
+        "/auditoria-csat",
+        data={"accion": "auditar_con_ia", "analysis_id": _hidden(html, "analysis_id"), "period_id": _hidden(html, "period_id")},
+    ).get_data(as_text=True)
+    (ficha,) = _fichas(respuesta)
+    assert "La IA cree" in ficha and "No fue culpa del agente" in ficha
+    assert re.search(r'value="SÍ"[^>]*class="[^"]*is-sugerido', ficha) or re.search(
+        r'class="[^"]*is-sugerido[^"]*"[^>]*value="SÍ"', ficha
+    )
+
+
+def test_pagina_sin_auditoria_explica_los_pasos(cliente, store):
+    html = cliente.get("/auditoria-csat").get_data(as_text=True)
+    assert "Tú confirmas" in html
+    assert "data-csat-ficha" not in html
+
+
+def test_csv_usa_fichas(cliente):
+    encabezado = ",".join(herramienta.EXPECTED_COLUMNS)
+    valores = []
+    for columna in herramienta.EXPECTED_COLUMNS:
+        normal = herramienta.normalizar_texto(columna)
+        if "calificacion" in normal:
+            valores.append("1")
+        elif "fecha" in normal:
+            valores.append("2025-11-10 10:00")
+        else:
+            valores.append("x")
+    csv = (encabezado + "\n" + ",".join(valores) + "\n").encode("utf-8")
+    html = cliente.post(
+        "/auditoria-csat",
+        data={"accion": "analizar_csv", "archivo": (io.BytesIO(csv), "csat.csv")},
+        content_type="multipart/form-data",
+    ).get_data(as_text=True)
+    fichas = _fichas(html)
+    assert len(fichas) == 1
+    assert _hidden(fichas[0], "period_id") == ""

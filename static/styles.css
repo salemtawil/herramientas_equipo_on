@@ -2756,7 +2756,8 @@ th.desc::after {
   background: var(--surface-muted);
 }
 
-.auditoria-csat-page .csat-chart-card h3 {
+.auditoria-csat-page .csat-chart-card h3,
+.auditoria-csat-page .csat-chart-card h4 {
   margin-bottom: 12px;
 }
 
@@ -5145,4 +5146,579 @@ th {
 
 .csat-test-banner strong {
   display: block;
+}
+
+/* ---------- Auditoría CSAT por pasos y fichas ---------- */
+
+.auditoria-csat-page [hidden] {
+  display: none !important;
+}
+
+.csat-oculto-visual {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Barra superior */
+.auditoria-csat-page .csat-barra__estado {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.auditoria-csat-page .csat-traer,
+.auditoria-csat-page .csat-csv {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3);
+}
+
+.auditoria-csat-page .csat-traer__campo {
+  flex: 1 1 180px;
+  min-width: 0;
+  max-width: 280px;
+}
+
+.auditoria-csat-page .csat-traer__campo label.small {
+  display: block;
+}
+
+/* Las fechas solo hacen falta con "Personalizado"; sin :has() se ven siempre. */
+.auditoria-csat-page .csat-traer:has(#csat-tipo-periodo option[value="personalizado"]:not(:checked)) .csat-traer__fecha {
+  display: none;
+}
+
+.auditoria-csat-page .csat-traer .csat-check {
+  min-height: var(--control-height);
+}
+
+/* Pasos */
+.auditoria-csat-page .csat-pasos {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: csat-paso;
+}
+
+.auditoria-csat-page .csat-paso {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  counter-increment: csat-paso;
+}
+
+.auditoria-csat-page .csat-paso__marca {
+  display: grid;
+  flex: 0 0 28px;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 50%;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.auditoria-csat-page .csat-paso__marca::before {
+  content: counter(csat-paso);
+}
+
+.auditoria-csat-page .csat-paso__texto {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.auditoria-csat-page .csat-paso__texto strong {
+  color: var(--title);
+  font-size: 14px;
+}
+
+.auditoria-csat-page .csat-paso__detalle {
+  color: var(--muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.auditoria-csat-page .csat-paso.is-hecho {
+  border-color: var(--success-border);
+}
+
+.auditoria-csat-page .csat-paso.is-hecho .csat-paso__marca {
+  border-color: var(--status-ok);
+  background: var(--success-bg);
+  color: var(--success-text);
+}
+
+.auditoria-csat-page .csat-paso.is-hecho .csat-paso__marca::before {
+  content: "\2713";
+}
+
+.auditoria-csat-page .csat-paso.is-actual {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+
+.auditoria-csat-page .csat-paso.is-actual .csat-paso__marca {
+  border-color: var(--primary);
+  background: var(--primary-solid);
+  color: var(--primary-contrast);
+}
+
+.auditoria-csat-page .csat-pasos--intro {
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+
+/* KPIs */
+.auditoria-csat-page .csat-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.auditoria-csat-page .csat-kpi {
+  min-width: 0;
+}
+
+.auditoria-csat-page .csat-kpi .value {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+
+.auditoria-csat-page .csat-kpi--principal {
+  border-color: var(--primary);
+}
+
+.auditoria-csat-page .csat-kpi__delta {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.auditoria-csat-page .csat-kpi__delta.is-up {
+  color: var(--good-text);
+}
+
+.auditoria-csat-page .csat-kpi__delta.is-down {
+  color: var(--bad-text);
+}
+
+.auditoria-csat-page .csat-kpi__delta.is-igual {
+  color: var(--muted);
+}
+
+.auditoria-csat-page .csat-kpi__nota {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.auditoria-csat-page .csat-kpi--pendiente .value {
+  color: var(--warn-text-strong);
+}
+
+/* Revisión: pestañas y acciones */
+.auditoria-csat-page .csat-revision__barra {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.auditoria-csat-page .csat-pestanas,
+.auditoria-csat-page .csat-acciones,
+.auditoria-csat-page .csat-resultado__descargas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.auditoria-csat-page .csat-pestana {
+  border-color: var(--border-strong);
+  background: var(--surface-strong);
+  color: var(--text);
+  box-shadow: none;
+}
+
+.auditoria-csat-page .csat-pestana:hover {
+  background: var(--surface-hover);
+  color: var(--title);
+}
+
+.auditoria-csat-page .csat-pestana.is-activa {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  color: var(--title);
+}
+
+.auditoria-csat-page .csat-pestana__conteo {
+  min-width: 24px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--surface-muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.auditoria-csat-page .csat-ia-estado {
+  margin: var(--space-3) 0 0;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--primary);
+  border-radius: var(--radius-md);
+  background: var(--surface-muted);
+  font-size: 14px;
+}
+
+.auditoria-csat-page .csat-revision__nota {
+  margin: var(--space-3) 0 0;
+  color: var(--muted);
+}
+
+.auditoria-csat-page .csat-listo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+  margin-top: var(--space-4);
+  padding: 14px 16px;
+  border: 1px solid var(--success-border);
+  border-radius: var(--radius-md);
+  background: var(--success-bg);
+  color: var(--success-text);
+}
+
+/* Fichas */
+.auditoria-csat-page .csat-fichas {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+
+.auditoria-csat-page .csat-ficha {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--warning-border);
+  border-radius: var(--radius-md);
+  background: var(--tile);
+}
+
+.auditoria-csat-page .csat-ficha[data-confirmada="1"] {
+  border-left-color: var(--status-ok);
+  background: var(--surface);
+}
+
+.auditoria-csat-page .csat-ficha__cabecera {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+}
+
+.auditoria-csat-page .csat-ficha__quien {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  min-width: 0;
+}
+
+.auditoria-csat-page .csat-ficha__quien strong {
+  color: var(--title);
+  font-size: 15px;
+}
+
+.auditoria-csat-page .csat-estrellas {
+  color: var(--status-warn);
+  letter-spacing: 1px;
+}
+
+.auditoria-csat-page .csat-ficha__fecha {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.auditoria-csat-page .csat-cita {
+  margin: 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--status-warn);
+  border-radius: var(--radius-sm);
+  background: var(--surface-muted);
+  color: var(--title);
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+
+.auditoria-csat-page .csat-cita.is-vacia {
+  border-left-color: var(--border-strong);
+  color: var(--muted);
+  font-size: 14px;
+  font-style: italic;
+}
+
+.auditoria-csat-page .csat-ficha__resumen {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+}
+
+.auditoria-csat-page .csat-ficha[data-confirmada="0"] .csat-ficha__resumen,
+.auditoria-csat-page .csat-ficha[data-confirmada="0"] .csat-cambiar {
+  display: none;
+}
+
+.auditoria-csat-page .csat-insignia {
+  display: inline-block;
+  max-width: 100%;
+  padding: 3px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  line-height: 1.45;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.auditoria-csat-page .csat-ficha__detalle {
+  color: var(--muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.auditoria-csat-page .is-si {
+  --csat-tono-bg: var(--success-bg);
+  --csat-tono-borde: var(--success-border);
+  --csat-tono-texto: var(--success-text);
+}
+
+.auditoria-csat-page .is-no {
+  --csat-tono-bg: var(--danger-bg);
+  --csat-tono-borde: var(--danger-border);
+  --csat-tono-texto: var(--danger-text);
+}
+
+.auditoria-csat-page .is-dudoso {
+  --csat-tono-bg: var(--warning-bg);
+  --csat-tono-borde: var(--warning-border);
+  --csat-tono-texto: var(--warning-text);
+}
+
+.auditoria-csat-page .csat-insignia.is-si,
+.auditoria-csat-page .csat-insignia.is-no,
+.auditoria-csat-page .csat-insignia.is-dudoso {
+  border-color: var(--csat-tono-borde);
+  background: var(--csat-tono-bg);
+  color: var(--csat-tono-texto);
+}
+
+.auditoria-csat-page .csat-ficha__cuerpo[open] {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.auditoria-csat-page .csat-cambiar {
+  width: fit-content;
+  color: var(--primary);
+  font-size: 13.5px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.auditoria-csat-page .csat-cambiar::-webkit-details-marker {
+  display: none;
+}
+
+.auditoria-csat-page .csat-ficha__cuerpo[open] > .csat-cambiar {
+  display: none;
+}
+
+/* Propuesta de la IA */
+.auditoria-csat-page .csat-ia {
+  margin: 0;
+  padding: 10px 14px;
+  border: 1px solid color-mix(in srgb, var(--primary) 35%, var(--border));
+  border-radius: var(--radius-md);
+  background: var(--primary-soft);
+}
+
+.auditoria-csat-page .csat-ia.is-vacia {
+  border-style: dashed;
+  border-color: var(--border-strong);
+  background: transparent;
+  color: var(--muted);
+  font-size: 13.5px;
+}
+
+.auditoria-csat-page .csat-ia p {
+  margin: 0;
+}
+
+.auditoria-csat-page .csat-ia__titulo {
+  color: var(--title);
+  font-weight: 600;
+}
+
+.auditoria-csat-page .csat-ia__titulo strong {
+  color: var(--csat-tono-texto, var(--title));
+}
+
+.auditoria-csat-page .csat-ia .csat-ia__meta,
+.auditoria-csat-page .csat-ia .csat-ia__evidencia {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+/* Decisión */
+.auditoria-csat-page .csat-decision {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.auditoria-csat-page .csat-decision__boton {
+  min-height: 44px;
+  border: 1px solid var(--csat-tono-borde);
+  background: var(--csat-tono-bg);
+  color: var(--csat-tono-texto);
+  box-shadow: none;
+  justify-content: flex-start;
+  white-space: normal;
+  text-align: left;
+}
+
+.auditoria-csat-page .csat-decision__boton:hover {
+  border-color: var(--csat-tono-texto);
+  background: var(--csat-tono-bg);
+  color: var(--csat-tono-texto);
+}
+
+.auditoria-csat-page .csat-decision__boton.is-sugerido {
+  border-style: dashed;
+  border-color: var(--csat-tono-texto);
+}
+
+.auditoria-csat-page .csat-decision__boton.is-actual {
+  border-style: solid;
+  border-color: var(--csat-tono-texto);
+  box-shadow: inset 0 0 0 1px var(--csat-tono-texto);
+}
+
+.auditoria-csat-page .csat-decision__tag {
+  padding: 1px 6px;
+  border: 1px solid currentColor;
+  border-radius: var(--radius-tag);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.auditoria-csat-page .csat-ficha__campos {
+  display: grid;
+  grid-template-columns: minmax(180px, 260px) minmax(0, 1fr);
+  gap: var(--space-3);
+}
+
+.auditoria-csat-page .csat-ficha__campos label.small {
+  display: block;
+}
+
+.auditoria-csat-page .csat-ficha__campos textarea {
+  min-height: var(--control-height);
+  resize: vertical;
+}
+
+.auditoria-csat-page .csat-ficha__estado {
+  margin: 0;
+  font-size: 13px;
+}
+
+.auditoria-csat-page .csat-ficha__estado:empty {
+  display: none;
+}
+
+/* Resultado */
+.auditoria-csat-page .csat-resultado__titulo {
+  margin: var(--space-5) 0 var(--space-3);
+  font-size: 16px;
+}
+
+.auditoria-csat-page .csat-rule-box p {
+  margin: 6px 0 0;
+}
+
+@media (max-width: 900px) {
+  .auditoria-csat-page .csat-pasos,
+  .auditoria-csat-page .csat-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .auditoria-csat-page .csat-traer__campo {
+    flex-basis: 100%;
+    max-width: none;
+  }
+
+  .auditoria-csat-page .csat-traer > button,
+  .auditoria-csat-page .csat-csv > button,
+  .auditoria-csat-page .csat-acciones,
+  .auditoria-csat-page .csat-acciones > button,
+  .auditoria-csat-page .csat-resultado__descargas > button,
+  .auditoria-csat-page .csat-decision__boton {
+    width: 100%;
+  }
+
+  .auditoria-csat-page .csat-ficha {
+    padding: var(--space-3);
+  }
+
+  .auditoria-csat-page .csat-ficha__campos {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 420px) {
+  .auditoria-csat-page .csat-paso {
+    flex-direction: column;
+    gap: var(--space-2);
+  }
 }

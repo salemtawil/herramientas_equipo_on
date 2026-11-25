@@ -1071,12 +1071,12 @@ def construir_top_hallazgos(filas, metricas, resumen_agente, resumen_motivo):
 
     if metricas["negativos_si"]:
         hallazgos.append(
-            f"Negativas excluidas del CSAT auditado por SÍ justificable: {metricas['negativos_si']}."
+            f"Negativas excluidas del CSAT ajustado porque no fueron culpa del agente: {metricas['negativos_si']}."
         )
 
     if metricas["negativos_pendientes"]:
         hallazgos.append(
-            f"Negativas pendientes de auditar: {metricas['negativos_pendientes']}."
+            f"Negativas por confirmar: {metricas['negativos_pendientes']}."
         )
 
     if metricas["ratings_invalidos"]:
@@ -1146,6 +1146,7 @@ def construir_contexto_analisis(estado):
         },
         "motivos_catalogo": MOTIVOS_INCONFORMIDAD,
         "justificable_options": JUSTIFICABLE_OPTIONS,
+        "texto_decision": TEXTO_DECISION,
     }
 
 
