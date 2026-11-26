@@ -92,9 +92,9 @@
       {% endfor %}
     {% endwith %}
     {% if modo_prueba %}
-      <div class="warning top-space">Modo prueba: no se guarda. No hay decisiones, IA ni exportación.</div>
+      <div class="warning top-space">Modo prueba: es una <strong>muestra de hasta {{ max_chats_prueba }} chats</strong> del rango y no se guarda. No hay decisiones, IA ni exportación. Para revisar todos los chats del rango, crea una revisión guardada.</div>
       {% if cortado_por_tiempo %}<div class="warning top-space">Se evaluaron {{ evaluados }} chats antes del límite de tiempo; acorta el rango.</div>{% endif %}
-      {% if parcial %}<div class="warning top-space">Resultado parcial: {{ max_chats_prueba }} de al menos {{ vistos }} chats. Acorta el rango o crea una revisión guardada para verlos todos.</div>{% endif %}
+      {% if parcial %}<div class="warning top-space">Muestra: {{ max_chats_prueba }} de al menos {{ vistos }} chats del rango (sin contar llamadas). La revisión guardada recorre todos.</div>{% endif %}
     {% endif %}
     {% if revision.csat_error %}<div class="warning top-space">No se pudo leer el CSAT; se omitió la regla CSAT bajo.</div>{% endif %}
     {% if error_listado %}<div class="warning top-space">{{ error_listado }}</div>{% endif %}

@@ -213,9 +213,9 @@ def test_modo_prueba_no_usa_store(cliente, monkeypatch):
     respuesta = cliente.post("/incidencias-chats/revisiones", data=_datos(prueba="1"))
     html = respuesta.get_data(as_text=True)
     assert respuesta.status_code == 200
-    assert "Modo prueba: no se guarda" in html
+    assert "Modo prueba: es una <strong>muestra de hasta" in html
     assert "<mark>me cobraron dos veces</mark>" in html
-    assert "Resultado parcial" not in html
+    assert "Muestra: " not in html
 
 
 def test_modo_prueba_parcial_muestra_vistos(cliente, monkeypatch):
@@ -223,7 +223,7 @@ def test_modo_prueba_parcial_muestra_vistos(cliente, monkeypatch):
     monkeypatch.setattr(herramienta, "obtener_chatwoot", lambda: ChatwootFalso(n=40))
     html = cliente.post("/incidencias-chats/revisiones", data=_datos(prueba="1")).get_data(as_text=True)
     # Con 20 de máximo basta la primera página (25 chats vistos).
-    assert f"Resultado parcial: {herramienta.MAX_CHATS_PRUEBA} de al menos 25 chats" in html
+    assert f"Muestra: {herramienta.MAX_CHATS_PRUEBA} de al menos 25 chats del rango" in html
 
 
 def test_modo_prueba_rango_maximo_12_horas(entorno, cliente):

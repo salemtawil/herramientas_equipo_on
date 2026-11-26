@@ -166,6 +166,10 @@ def _entero(valor):
         return None
 
 
+def _es_llamada_listado(conversacion):
+    return (_entero(conversacion.get("calls_count")) or 0) > 0
+
+
 def _fila_chat(revision, conversacion):
     """Fila nueva del listado. Todas las filas llevan las mismas claves (requisito de PostgREST)."""
     created_at = int(conversacion.get("created_at") or 0)
@@ -181,7 +185,9 @@ def _fila_chat(revision, conversacion):
         "resuelto": False,
         "status": conversacion.get("status"),
         "last_activity_at": _entero(conversacion.get("last_activity_at")),
-        "estado": "pendiente",
+        # Chatwoot marca las llamadas con calls_count: se descartan sin leer sus mensajes.
+        "estado": "descartado" if _es_llamada_listado(conversacion) else "pendiente",
+        "motivo_descarte": "llamada" if _es_llamada_listado(conversacion) else None,
         "intentos": 0,
         "incidencias": [],
         "ia_estado": None,
@@ -192,7 +198,7 @@ def _fila_chat(revision, conversacion):
 
 def _reutilizar(store, fila):
     """Copia la evaluación previa si el chat ya estaba resuelto y no tuvo actividad nueva."""
-    if fila["status"] != "resolved" or fila["last_activity_at"] is None:
+    if fila.get("estado") == "descartado" or fila["status"] != "resolved" or fila["last_activity_at"] is None:
         return fila
     previa = store.ultima_evaluacion(fila["conversation_id"], fila["review_id"])
     if (
@@ -223,9 +229,12 @@ def _listar_pagina(store, revision, chatwoot, maximo=None):
     pagina = int(revision.get("pagina_listado") or 1)
     conversaciones = chatwoot.conversaciones_en_rango(since, until, page=pagina, inbox_ids=bandejas or None)
     en_rango = [c for c in conversaciones or [] if c.get("id") is not None and _en_alcance(c, since, until, bandejas)]
+    chats_en_rango = [c for c in en_rango if not _es_llamada_listado(c)]
     if maximo is not None:
-        cupo = max(0, maximo - len(store.listar_chats(revision["id"])))
-        elegidas = en_rango[:cupo]
+        # El máximo de Modo prueba cuenta solo chats: las llamadas se anotan como descartadas sin gastarlo.
+        ya = sum(1 for c in store.listar_chats(revision["id"]) if c.get("motivo_descarte") != "llamada")
+        cupo = max(0, maximo - ya)
+        elegidas = [c for c in en_rango if _es_llamada_listado(c)] + chats_en_rango[:cupo]
     else:
         elegidas = en_rango
     insertados = store.insertar_chats([_reutilizar(store, _fila_chat(revision, c)) for c in elegidas])
@@ -244,7 +253,7 @@ def _listar_pagina(store, revision, chatwoot, maximo=None):
     if terminado:
         cambios["estado"] = "evaluando"
     store.actualizar_revision(revision["id"], cambios)
-    return {"vistos": len(en_rango), "insertados": insertados, "terminado": terminado, "pagina": pagina}
+    return {"vistos": len(chats_en_rango), "insertados": insertados, "terminado": terminado, "pagina": pagina}
 
 
 def _paso_listado(store, revision, chatwoot):
@@ -539,9 +548,10 @@ def revision_en_memoria(
         if revision.get("estado") == "listando":
             resultado = _listar_pagina(store, revision, chatwoot, maximo=maximo)
             vistos += resultado["vistos"]
-            if not resultado["terminado"] and len(store.listar_chats(review_id)) >= maximo:
+            muestra = sum(1 for c in store.listar_chats(review_id) if c.get("motivo_descarte") != "llamada")
+            if not resultado["terminado"] and muestra >= maximo:
                 # Parcial si se vieron chats en rango que quedaron fuera por el máximo.
-                parcial = vistos > len(store.listar_chats(review_id))
+                parcial = vistos > muestra
                 store.actualizar_revision(review_id, {"estado": "evaluando"})
             continue
         paso = ejecutar_paso(

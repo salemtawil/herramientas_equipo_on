@@ -417,3 +417,34 @@ def test_revision_en_memoria_sin_corte_y_csat_acotado():
     assert resultado["cortado_por_tiempo"] is False and resultado["evaluados"] == 5
     assert chatwoot.llamadas_csat[0][2] == motor.MAX_PAGINAS_CSAT_PRUEBA
     assert motor.MAX_CHATS_PRUEBA == 20
+
+
+def _escenario_con_llamadas(n, llamadas):
+    """Como en Chatwoot real: las llamadas vienen marcadas con calls_count en el listado."""
+    chatwoot = _escenario(n, llamadas=llamadas)
+    for conversacion in chatwoot.conversaciones:
+        conversacion["calls_count"] = 1 if conversacion["id"] in llamadas else 0
+    return chatwoot
+
+
+def test_llamada_por_calls_count_se_descarta_sin_leer():
+    chatwoot = _escenario_con_llamadas(5, llamadas={2, 4})
+    store = MemoriaIncidenciasStore()
+    revision = motor.crear_revision(store, since=SINCE, until=UNTIL, bandejas=[BANDEJA], usar_ia=False, creado_por="")
+    _correr(store, revision["id"], chatwoot)
+    chats = {c["conversation_id"]: c for c in store.listar_chats(revision["id"])}
+    assert chats[2]["estado"] == "descartado" and chats[2]["motivo_descarte"] == "llamada"
+    assert chats[4]["estado"] == "descartado"
+    assert 2 not in chatwoot.lecturas and 4 not in chatwoot.lecturas
+    assert chats[1]["estado"] == "evaluado"
+
+
+def test_prueba_la_muestra_no_gasta_cupo_en_llamadas():
+    llamadas = set(range(1, 31))  # las 30 primeras son llamadas, luego 10 chats
+    chatwoot = _escenario_con_llamadas(40, llamadas=llamadas)
+    resultado = motor.revision_en_memoria(chatwoot, since=SINCE, until=UNTIL, bandejas=[BANDEJA], maximo=5)
+    evaluados = [c for c in resultado["chats"] if c["estado"] == "evaluado"]
+    assert len(evaluados) == 5
+    assert not (set(chatwoot.lecturas) & llamadas)
+    assert resultado["parcial"] is True
+    assert resultado["vistos"] >= 10  # chats (no llamadas) vistos en el rango
