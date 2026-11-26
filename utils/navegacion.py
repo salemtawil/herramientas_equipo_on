@@ -47,6 +47,15 @@ HERRAMIENTAS = [
         "destacada": False,
     },
     {
+        "endpoint": "incidencias_chats.index",
+        "prefijo": "incidencias_chats.",
+        "grupo": "Calidad",
+        "titulo": "Incidencias de chats",
+        "icono": "calidad",
+        "descripcion": "Revisa los chats de un rango de horas y resalta reportes de clientes y mala atención.",
+        "destacada": False,
+    },
+    {
         "endpoint": "auditoria_salientes.auditoria_salientes",
         "prefijo": None,
         "grupo": "Calidad",

@@ -29,17 +29,17 @@ def test_script_de_cabecera_marca_js_antes_de_cargar_estilos():
     html = app.test_client().get("/").get_data(as_text=True)
     head = html[: html.index("</head>")]
     assert head.index('classList.add("js")') < head.index("styles.css")
-    assert "styles.css?v=31" in head
+    assert "styles.css?v=32" in head
 
 
 def test_todas_las_rutas_principales_mantienen_la_navegacion():
     cliente = app.test_client()
     rutas = ["/", "/usuarios-activos/", "/reporte-agentes", "/turnos-trabajo", "/comparar-csv",
              "/usuarios-a-sheets", "/auditoria-csat", "/auditoria-salientes", "/break-admin",
-             "/informe-semanal-cs", "/auditoria-chats/"]
+             "/informe-semanal-cs", "/auditoria-chats/", "/incidencias-chats/"]
     for ruta in rutas:
         html = cliente.get(ruta).get_data(as_text=True)
-        assert len(re.findall(r'<a class="sidebar-link[ "]', html)) == 11, ruta
+        assert len(re.findall(r'<a class="sidebar-link[ "]', html)) == 12, ruta
         assert html.count('aria-current="page"') == 1, ruta
         assert 'href="#contenido-principal"' in html, ruta
 

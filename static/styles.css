@@ -5593,3 +5593,120 @@ th {
     gap: var(--space-2);
   }
 }
+
+/* ---------- Incidencias de chats ---------- */
+
+.ic-rango {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--space-3);
+}
+
+.ic-rango > *,
+.ic-filtros > * {
+  min-width: 0;
+}
+
+.ic-opciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+}
+
+.ic-filtros {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--space-3);
+}
+
+.ic-filtros select {
+  min-width: 180px;
+  max-width: 100%;
+}
+
+.ic-tabla td {
+  vertical-align: top;
+}
+
+.ic-chat {
+  white-space: nowrap;
+}
+
+.ic-evidencia {
+  min-width: 260px;
+  max-width: 520px;
+  overflow-wrap: anywhere;
+}
+
+.ic-evidencia mark {
+  padding: 0 2px;
+  border-radius: 3px;
+  background: var(--warning-bg);
+  color: var(--warning-text);
+  box-shadow: inset 0 -1px 0 var(--warning-border);
+}
+
+.ic-ia,
+.ic-estado {
+  min-width: 160px;
+}
+
+.ic-etiqueta {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 1px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-tag);
+  background: var(--surface-muted);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.ic-ia .ic-etiqueta,
+.ic-estado .ic-etiqueta {
+  margin-left: 0;
+}
+
+.ic-etiqueta--alta,
+.ic-etiqueta--confirmada {
+  border-color: var(--danger-border);
+  background: var(--danger-bg);
+  color: var(--danger-text);
+}
+
+.ic-etiqueta--media,
+.ic-etiqueta--abierto {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+  color: var(--warning-text);
+}
+
+.ic-etiqueta--atendida {
+  border-color: var(--success-border);
+  background: var(--success-bg);
+  color: var(--success-text);
+}
+
+.ic-decidir {
+  margin-top: var(--space-1);
+}
+
+.ic-decidir summary {
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.ic-decidir__form {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.ic-decidir__form label {
+  display: grid;
+  gap: 2px;
+}

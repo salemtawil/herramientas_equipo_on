@@ -9,6 +9,7 @@ from utils.navegacion import grupos_de_navegacion, herramienta_activa
 cargar_env_local()
 
 from tools.auditoria_chats import auditoria_chats_bp
+from tools.incidencias_chats import incidencias_chats_bp
 from tools.auditoria_csat import auditoria_csat_bp
 from tools.auditoria_salientes import auditoria_salientes_bp
 from tools.break_admin import break_admin_bp
@@ -51,6 +52,7 @@ app.register_blueprint(comparar_csv_bp)
 app.register_blueprint(usuarios_a_sheets_bp)
 app.register_blueprint(auditoria_csat_bp)
 app.register_blueprint(auditoria_chats_bp)
+app.register_blueprint(incidencias_chats_bp)
 app.register_blueprint(auditoria_salientes_bp)
 app.register_blueprint(break_admin_bp)
 app.register_blueprint(informe_semanal_cs_bp)
@@ -59,7 +61,7 @@ registrar_modo_almacenamiento()
 
 # Versión vigente de cada recurso estático versionado. Súbela al cambiar el archivo:
 # solo la versión vigente recibe caché larga (una URL con otra versión no se cachea).
-ASSET_VERSIONS = {"styles.css": "31", "app.js": "7", "auditoria_chats.js": "6", "auditoria_csat.js": "5", "auditoria_informe.css": "1", "reporte_exportar.js": "1", "reporte_impresion.css": "1"}
+ASSET_VERSIONS = {"styles.css": "32", "app.js": "7", "auditoria_chats.js": "6", "incidencias_chats.js": "1", "auditoria_csat.js": "5", "auditoria_informe.css": "1", "reporte_exportar.js": "1", "reporte_impresion.css": "1"}
 
 # Endpoints cuyas pantallas dependen del almacenamiento de turnos.
 ENDPOINTS_CON_AVISO_DE_ALMACENAMIENTO = ("inicio", "turnos_trabajo.", "reporte_agentes.")

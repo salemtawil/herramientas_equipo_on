@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+
+{% block title %}Incidencias de chats{% endblock %}
+{% block page_name %}Incidencias de chats{% endblock %}
+
+{% block content %}
+<div class="page-stack incidencias-chats-page">
+  <section class="card page-hero">
+    <div class="page-section-title">
+      <div>
+        <h1>Incidencias de chats</h1>
+        <p>Revisa todos los chats de un rango de horas con reglas fijas y resalta los reportes de clientes (cobros, fallas, frustración) y la mala atención. Opcionalmente, la IA confirma los casos marcados.</p>
+      </div>
+      <span class="hero-badge">Calidad</span>
+    </div>
+
+    <div class="grid top-space ac-config">
+      <div class="metric">
+        <div class="label">Chatwoot</div>
+        <div class="value ac-config__valor">{{ "Conectado" if not error_chatwoot else "Sin conexión" }}</div>
+      </div>
+      <div class="metric">
+        <div class="label">IA</div>
+        <div class="value ac-config__valor">{{ "Disponible" if ia_activa else "Sin clave" }}</div>
+      </div>
+      <div class="metric">
+        <div class="label">Supabase</div>
+        <div class="value ac-config__valor">{{ "Listo" if not error_store else "Solo Modo prueba" }}</div>
+      </div>
+    </div>
+
+    {% with mensajes = get_flashed_messages(with_categories=true) %}
+      {% for categoria, texto in mensajes %}
+        <div class="{% if categoria == 'success' %}success{% else %}warning{% endif %} top-space">{{ texto }}</div>
+      {% endfor %}
+    {% endwith %}
+    {% if error_store %}<div class="warning top-space">{{ error_store }} Ejecuta también <code>supabase_chat_incidents.sql</code> en Supabase. Mientras tanto puedes usar el Modo prueba, que no guarda nada.</div>{% endif %}
+    {% if error_chatwoot %}<div class="warning top-space">{{ error_chatwoot }}</div>{% endif %}
+    {% for aviso in avisos %}<div class="warning top-space">{{ aviso }}</div>{% endfor %}
+  </section>
+
+  <section class="card" aria-labelledby="ic-nueva-titulo">
+    <div class="page-section-title">
+      <div>
+        <h2 id="ic-nueva-titulo">Nueva revisión</h2>
+        <p class="small">Rango máximo: {{ max_horas }} horas. Las horas son locales.</p>
+      </div>
+    </div>
+
+    <form method="post" action="{{ url_for('incidencias_chats.crear') }}" data-processing-message="Preparando la revisión...">
+      <div class="row-2">
+        <div>
+          <label class="small" for="ic-turno">Turno (rellena las horas)</label>
+          <select id="ic-turno" name="turno" data-ic-turno>
+            <option value="">Rango a mano</option>
+            {% for nombre, horas in turnos.items() %}
+              <option value="{{ nombre }}" data-desde="{{ horas[0] }}" data-hasta="{{ horas[1] }}">{{ nombre }} · {{ horas[0] }}–{{ horas[1] }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="small" for="ic-creado-por">Tu nombre (opcional)</label>
+          <input type="text" id="ic-creado-por" name="creado_por" maxlength="80" value="{{ creado_por }}" autocomplete="name">
+        </div>
+      </div>
+
+      <div class="ic-rango top-space">
+        <div>
+          <label class="small" for="ic-desde-fecha">Desde (día)</label>
+          <input type="date" id="ic-desde-fecha" name="desde_fecha" value="{{ hoy }}" required data-ic-desde-fecha>
+        </div>
+        <div>
+          <label class="small" for="ic-desde-hora">Desde (hora)</label>
+          <input type="time" id="ic-desde-hora" name="desde_hora" value="00:00" required data-ic-desde-hora>
+        </div>
+        <div>
+          <label class="small" for="ic-hasta-fecha">Hasta (día)</label>
+          <input type="date" id="ic-hasta-fecha" name="hasta_fecha" value="{{ hoy }}" required data-ic-hasta-fecha>
+        </div>
+        <div>
+          <label class="small" for="ic-hasta-hora">Hasta (hora)</label>
+          <input type="time" id="ic-hasta-hora" name="hasta_hora" value="{{ hora_actual }}" required data-ic-hasta-hora>
+        </div>
+      </div>
+
+      {% if bandejas %}
+        <fieldset class="top-space ac-selector">
+          <legend class="small">Bandejas de entrada</legend>
+          <p class="small ac-selector__resumen">Solo se revisan chats de las bandejas marcadas. Las de llamadas o voz vienen desmarcadas.</p>
+          <div class="ac-grupo__agentes ac-bandejas">
+            {% for bandeja in bandejas %}
+              <label class="ac-agente">
+                <input type="checkbox" name="bandejas" value="{{ bandeja.id }}"{% if bandeja.marcada %} checked{% endif %}>
+                <span>{{ bandeja.nombre }}{% if bandeja.tipo %} <span class="small">· {{ bandeja.tipo }}</span>{% endif %}</span>
+              </label>
+            {% endfor %}
+          </div>
+        </fieldset>
+      {% endif %}
+
+      <div class="ic-opciones top-space">
+        <label class="ac-agente">
+          <input type="checkbox" name="usar_ia" value="1"{% if not ia_activa %} disabled{% endif %}>
+          <span>Confirmar con IA los chats marcados{% if not ia_activa %} <span class="small">· sin AUDITORIA_CHATS_AI_API_KEY</span>{% endif %}</span>
+        </label>
+        <label class="ac-agente">
+          <input type="checkbox" name="prueba" value="1"{% if error_store %} checked{% endif %}>
+          <span>Modo prueba <span class="small">· no guarda nada, sin IA, hasta {{ max_chats_prueba }} chats y {{ max_horas_prueba }} horas</span></span>
+        </label>
+      </div>
+      {% if ia_activa %}<p class="small top-space">Con IA, el texto de los chats marcados se envía al proveedor configurado; correos, teléfonos y números largos se ocultan antes de enviarlo.</p>{% endif %}
+
+      <div class="top-space acciones-barra">
+        <button type="submit" {% if not puede_crear %}disabled{% endif %}>Revisar chats</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="card" aria-labelledby="ic-revisiones-titulo">
+    <div class="page-section-title">
+      <div>
+        <h2 id="ic-revisiones-titulo">Revisiones recientes</h2>
+      </div>
+      <span class="hero-badge hero-badge-soft">{{ revisiones|length }}</span>
+    </div>
+    {% if revisiones %}
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Rango</th><th>Creada por</th><th>IA</th><th>Con incidencias</th><th>Estado</th><th></th></tr>
+          </thead>
+          <tbody>
+            {% for revision in revisiones %}
+              <tr>
+                <td>{{ fecha_hora(revision.since) }} – {{ fecha_hora(revision.until) }}</td>
+                <td>{{ revision.creado_por or "—" }}</td>
+                <td>{{ "Sí" if revision.usar_ia else "No" }}</td>
+                <td>{{ (revision.contadores or {}).get("con_incidencias", "—") }}</td>
+                <td>{{ estados_revision.get(revision.estado, revision.estado) }}</td>
+                <td><a href="{{ url_for('incidencias_chats.ver', review_id=revision.id) }}">Abrir</a></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="small">Todavía no hay revisiones guardadas.</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='incidencias_chats.js', v=asset_version('incidencias_chats.js')) }}" defer></script>
+{% endblock %}

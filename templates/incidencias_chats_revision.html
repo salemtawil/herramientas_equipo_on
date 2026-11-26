@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+
+{% block title %}Revisión · Incidencias de chats{% endblock %}
+{% block page_name %}Incidencias de chats{% endblock %}
+
+{% macro tabla_incidencias(filas, vacio) %}
+  {% if filas %}
+    <div class="table-wrap">
+      <table class="ic-tabla">
+        <thead>
+          <tr><th>Chat</th><th>Hora</th><th>Agente</th><th>Categoría</th><th>Evidencia</th><th>IA</th><th>Estado</th></tr>
+        </thead>
+        <tbody>
+          {% for fila in filas %}
+            <tr>
+              <td class="ic-chat">
+                {% if url_conversacion %}
+                  <a href="{{ url_conversacion(fila.conversation_id) }}" target="_blank" rel="noopener noreferrer">#{{ fila.conversation_id }}</a>
+                {% else %}#{{ fila.conversation_id }}{% endif %}
+                {% if fila.status != "resolved" %}<span class="ic-etiqueta ic-etiqueta--abierto">abierto</span>{% endif %}
+              </td>
+              <td>{{ fecha_hora(fila.ts) }}</td>
+              <td>{{ fila.agente_nombre or "—" }}</td>
+              <td>
+                {{ fila.etiqueta }}
+                {% if fila.severidad %}<span class="ic-etiqueta ic-etiqueta--{{ fila.severidad }}">{{ fila.severidad }}</span>{% endif %}
+              </td>
+              <td class="ic-evidencia">{{ fila.antes }}{% if fila.marca %}<mark>{{ fila.marca }}</mark>{% endif %}{{ fila.despues }}</td>
+              <td class="ic-ia">
+                {% set texto = texto_ia(fila) %}
+                {% if texto %}
+                  <span class="ic-etiqueta{% if fila.ia_confirmada is sameas true %} ic-etiqueta--confirmada{% elif fila.ia_confirmada is sameas false %} ic-etiqueta--descartada{% endif %}">{{ texto }}</span>
+                  {% if fila.ia_motivo %}<div class="small">{{ fila.ia_motivo }}</div>{% endif %}
+                {% else %}—{% endif %}
+              </td>
+              <td class="ic-estado">
+                <div data-ic-estado="{{ fila.conversation_id }}">
+                  {% if fila.decision %}
+                    <span class="ic-etiqueta ic-etiqueta--{{ fila.decision.decision }}">{{ decisiones_texto.get(fila.decision.decision, fila.decision.decision) }}</span>
+                    <div class="small">por {{ fila.decision.por }}{% if fila.decision.nota %} · {{ fila.decision.nota }}{% endif %}</div>
+                  {% else %}
+                    <span class="small">Sin decidir</span>
+                  {% endif %}
+                </div>
+                {% if not modo_prueba %}
+                  <details class="ic-decidir">
+                    <summary>Decidir</summary>
+                    <form method="post" action="{{ url_for('incidencias_chats.decidir', conversation_id=fila.conversation_id) }}" class="ic-decidir__form" data-ic-decision data-allow-resubmit>
+                      <input type="hidden" name="review_id" value="{{ revision.id }}">
+                      <input type="hidden" name="agente" value="{{ agente }}">
+                      <input type="hidden" name="clave" value="{{ clave }}">
+                      <label class="small">Tu nombre
+                        <input type="text" name="por" maxlength="80" value="{{ por_guardado }}" required data-ic-por>
+                      </label>
+                      <label class="small">Nota (opcional)
+                        <input type="text" name="nota" maxlength="500">
+                      </label>
+                      <div class="acciones-barra">
+                        <button type="submit" name="decision" value="atendida">Atendida</button>
+                        <button type="submit" name="decision" value="falso_positivo" class="btn secondary">Falso positivo</button>
+                      </div>
+                      <p class="small" data-ic-decision-mensaje aria-live="polite"></p>
+                    </form>
+                  </details>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="small">{{ vacio }}</p>
+  {% endif %}
+{% endmacro %}
+
+{% block content %}
+<div class="page-stack incidencias-chats-page">
+  <section class="card page-hero">
+    <div class="page-section-title">
+      <div>
+        <p class="small"><a href="{{ url_for('incidencias_chats.index') }}">← Incidencias de chats</a></p>
+        <h1>Revisión {{ fecha_hora(revision.since) }} – {{ fecha_hora(revision.until) }}</h1>
+        <p>{% if revision.bandejas %}{{ revision.bandejas|length }} bandeja(s){% else %}Todas las bandejas{% endif %} · IA: {{ "sí" if revision.usar_ia else "no" }}{% if revision.creado_por %} · Creada por {{ revision.creado_por }}{% endif %}</p>
+      </div>
+      <span class="hero-badge{% if terminado %} is-ready{% endif %}" data-ic-estado-revision>{{ "Modo prueba" if modo_prueba else estado_texto }}</span>
+    </div>
+
+    {% with mensajes = get_flashed_messages(with_categories=true) %}
+      {% for categoria, texto in mensajes %}
+        <div class="{% if categoria == 'success' %}success{% else %}warning{% endif %} top-space">{{ texto }}</div>
+      {% endfor %}
+    {% endwith %}
+    {% if modo_prueba %}
+      <div class="warning top-space">Modo prueba: no se guarda. No hay decisiones, IA ni exportación.</div>
+      {% if parcial %}<div class="warning top-space">Resultado parcial: {{ max_chats_prueba }} de al menos {{ vistos }} chats. Acorta el rango o crea una revisión guardada para verlos todos.</div>{% endif %}
+    {% endif %}
+    {% if revision.csat_error %}<div class="warning top-space">No se pudo leer el CSAT; se omitió la regla CSAT bajo.</div>{% endif %}
+    {% if error_listado %}<div class="warning top-space">{{ error_listado }}</div>{% endif %}
+
+    <div class="grid top-space ic-contadores">
+      <div class="metric"><div class="label">Chats</div><div class="value" data-ic-contador="total">{{ progreso.total }}</div></div>
+      <div class="metric"><div class="label">Evaluados</div><div class="value" data-ic-contador="evaluados">{{ progreso.evaluados }}</div></div>
+      <div class="metric"><div class="label">Con incidencias</div><div class="value" data-ic-contador="con_incidencias">{{ progreso.con_incidencias }}</div></div>
+      <div class="metric"><div class="label">Descartados</div><div class="value" data-ic-contador="descartados">{{ progreso.descartados }}</div></div>
+      <div class="metric"><div class="label">Errores</div><div class="value" data-ic-contador="errores">{{ progreso.errores }}</div></div>
+    </div>
+
+    {% if not modo_prueba %}
+      {% set hechos = progreso.evaluados + progreso.descartados + progreso.errores %}
+      <div class="ac-progreso top-space" data-ic-progreso{% if not terminado %} data-ic-paso-url="{{ url_for('incidencias_chats.paso', review_id=revision.id) }}"{% endif %}>
+        <progress max="{{ progreso.total or 1 }}" value="{{ hechos if progreso.total else (1 if terminado else 0) }}" aria-label="Chats revisados">{{ hechos }} / {{ progreso.total }}</progress>
+        <p class="small" data-ic-progreso-texto>{{ hechos }} / {{ progreso.total }} chats revisados</p>
+        <p class="small" data-ic-mensaje aria-live="polite"></p>
+      </div>
+
+      <div class="acciones-barra top-space">
+        {% if not terminado %}
+          <form method="post" action="{{ url_for('incidencias_chats.paso', review_id=revision.id) }}" data-allow-resubmit>
+            <button type="submit" class="btn secondary">Avanzar un paso</button>
+          </form>
+          <button type="button" class="btn secondary" data-ic-pausar hidden>Pausar</button>
+        {% endif %}
+        {% if progreso.errores %}
+          <form method="post" action="{{ url_for('incidencias_chats.reintentar_errores', review_id=revision.id) }}">
+            <button type="submit" class="btn secondary">Reintentar {{ progreso.errores }} con error</button>
+          </form>
+        {% endif %}
+        <a class="btn secondary" href="{{ url_for('incidencias_chats.exportar_csv', review_id=revision.id) }}">Descargar CSV</a>
+      </div>
+    {% endif %}
+  </section>
+
+  {% if not modo_prueba and (listas.agentes or listas.claves) %}
+    <section class="card" aria-label="Filtros">
+      <form method="get" action="{{ url_for('incidencias_chats.ver', review_id=revision.id) }}" class="ic-filtros">
+        <div>
+          <label class="small" for="ic-agente">Agente</label>
+          <select id="ic-agente" name="agente">
+            <option value="">Todos</option>
+            {% for nombre in listas.agentes %}<option value="{{ nombre }}"{% if nombre == agente %} selected{% endif %}>{{ nombre }}</option>{% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="small" for="ic-clave">Categoría</label>
+          <select id="ic-clave" name="clave">
+            <option value="">Todas</option>
+            {% for valor, etiqueta in listas.claves %}<option value="{{ valor }}"{% if valor == clave %} selected{% endif %}>{{ etiqueta }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="acciones-barra">
+          <button type="submit" class="btn secondary">Filtrar</button>
+          {% if agente or clave %}<a class="btn secondary" href="{{ url_for('incidencias_chats.ver', review_id=revision.id) }}">Quitar filtros</a>{% endif %}
+        </div>
+      </form>
+    </section>
+  {% endif %}
+
+  <section class="card" aria-labelledby="ic-cliente-titulo">
+    <div class="page-section-title">
+      <div>
+        <h2 id="ic-cliente-titulo">Reportes de clientes</h2>
+        <p class="small">Cobros, fallas y frustración que escribió el cliente. Lo resaltado es la frase que activó la regla.</p>
+      </div>
+      <span class="hero-badge hero-badge-soft">{{ listas.cliente|length }}</span>
+    </div>
+    {{ tabla_incidencias(listas.cliente, "Sin reportes de clientes en este rango.") }}
+  </section>
+
+  <section class="card" aria-labelledby="ic-atencion-titulo">
+    <div class="page-section-title">
+      <div>
+        <h2 id="ic-atencion-titulo">Mala atención</h2>
+        <p class="small">Esperas largas, chats sin respuesta, cierres abruptos y CSAT bajo.</p>
+      </div>
+      <span class="hero-badge hero-badge-soft">{{ listas.atencion|length }}</span>
+    </div>
+    {{ tabla_incidencias(listas.atencion, "Sin problemas de atención en este rango.") }}
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='incidencias_chats.js', v=asset_version('incidencias_chats.js')) }}" defer></script>
+{% endblock %}
