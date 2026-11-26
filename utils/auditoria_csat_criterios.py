@@ -4,8 +4,9 @@
 Fuente: procedimiento y rúbrica entregados por el equipo de CS (2026-11-25).
 """
 
+# Rúbrica: menos de 60% = culpa del agente; 60–69% = dudoso; 70% o más = no es culpa (sin reglas fuertes rotas).
 CORTE_RUBRICA = 70
-FRANJA_DUDOSO = (60, 70)
+FRANJA_DUDOSO = (60, 69)
 
 RUBRICA = [
     ("Presentación inicial: saludo claro, se identifica (nombre/empresa)", 5),
@@ -72,13 +73,13 @@ Cómo decidir cada negativo («justificable»):
 - «NO» = SÍ fue culpa del agente (el negativo cuenta). Úsalo si el agente rompió una regla fuerte:
   primera respuesta de más de 5 min (más de 3 min en «He llegado»); cerró sin confirmar si el usuario seguía
   en línea o sin despedida, o dejó el chat más de 15 min sin respuesta del usuario; dio información incorrecta
-  o falsas expectativas; confirmó una falla del sistema sin autorización; o la rúbrica da menos de {CORTE_RUBRICA}%.
+  o falsas expectativas; confirmó una falla del sistema sin autorización; o la rúbrica da menos de {FRANJA_DUDOSO[0]}%.
 - «SI» = NO fue culpa del agente (el negativo se excluye). Úsalo si el agente siguió el procedimiento
   (rúbrica de {CORTE_RUBRICA}% o más) y la molestia viene del sistema, de una política, del resultado
   (rechazados, llegada no procesada) o del propio usuario; también si el usuario cerró antes de 3 min sin
   respuesta o si la atención siguió por llamada (código PMF) o por otra plataforma (ladesk o crisp).
-- «TAL VEZ» = dudoso, lo revisa una persona: no hay conversación suficiente, la rúbrica queda entre
-  {FRANJA_DUDOSO[0]}% y {FRANJA_DUDOSO[1]}%, o las reglas entran en conflicto.
+- «TAL VEZ» = dudoso, lo revisa una persona: no hay conversación suficiente, la rúbrica queda
+  entre {FRANJA_DUDOSO[0]}% y {FRANJA_DUDOSO[1]}% (sin reglas fuertes rotas), o las reglas entran en conflicto.
 - El motivo dice de qué se queja el cliente; la decisión sale de cómo atendió el agente.
 """
 

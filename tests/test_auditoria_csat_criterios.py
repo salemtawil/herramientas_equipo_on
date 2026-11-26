@@ -66,3 +66,9 @@ def test_filas_nuevas_inician_sin_puntaje():
 def test_instrucciones_dicen_que_tiempo_usar_para_el_agente():
     texto = criterios.construir_instrucciones()
     assert "primera_respuesta_agente" in texto and "esperas_largas_oficiales" in texto
+
+
+def test_bandas_de_rubrica_sin_solaparse():
+    texto = criterios.construir_instrucciones()
+    assert "menos de 60%" in texto and "entre 60% y 69%" in texto and "70% o más" in texto
+    assert "menos de 70%" not in texto

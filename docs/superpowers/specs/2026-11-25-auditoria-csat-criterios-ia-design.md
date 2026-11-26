@@ -15,12 +15,12 @@ molestia viene de algo fuera de su control, el negativo no cuenta en su contra.
   primera respuesta > 5 min (en «He llegado» > 3 min); cerró sin confirmar si el usuario seguía en
   línea o sin despedida, o dejó el chat > 15 min sin respuesta del usuario; dio información
   incorrecta o falsas expectativas; confirmó una falla del sistema sin autorización;
-  **o rúbrica < 70%**.
+  **o rúbrica < 60%**.
 - **«No fue culpa del agente» (SÍ)** si siguió el procedimiento (rúbrica ≥ 70%) y la molestia viene
   del sistema, una política, el resultado (rechazados, llegada no procesada) o el propio usuario;
   también si el usuario cerró antes de 3 min sin respuesta, o si la atención siguió por llamada
   (nota tipo `PMF-XXXXX-NNN`) o por otro canal (enlace `compinche.ladesk.com` o `app.crisp.chat`).
-- **«Dudoso» (TAL VEZ)**: sin conversación suficiente, rúbrica entre 60% y 70%, o reglas en conflicto.
+- **«Dudoso» (TAL VEZ)**: sin conversación suficiente, rúbrica entre 60% y 69% (sin reglas fuertes rotas), o reglas en conflicto. *(Corte aclarado por el usuario tras la revisión final: < 60 culpa · 60–69 dudoso · ≥ 70 no culpa.)*
 - **Atenuantes**: la presentación no se penaliza por ahora; demora, tiempo de resolución o no
   revisar historial/filtros pesan menos si el tono fue empático, la explicación clara y la
   despedida correcta.
@@ -56,7 +56,7 @@ reportar, posible compensación aprobada por el encargado); «No visualiza / No 
 ## Diseño
 
 1. **`utils/auditoria_csat_criterios.py`** (nuevo): constantes con la regla, la rúbrica con pesos,
-   corte 70% y franja de dudoso 60–70%, atenuantes, definiciones de motivos y el resumen del
+   corte 70% y franja de dudoso 60–69%, atenuantes, definiciones de motivos y el resumen del
    procedimiento; función que arma las instrucciones de la IA. Único lugar a editar si cambia el
    procedimiento.
 2. **Conversación completa**: en modo Chatwoot la IA recibe `construir_transcripcion_v2` (notas
