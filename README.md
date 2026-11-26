@@ -91,6 +91,7 @@ Opcionales según funcionalidad:
 - `AUDITORIA_CHATS_AI_MODEL` (por defecto `openai/gpt-oss-120b`)
 - `AUDITORIA_CHATS_AI_API_KEY` (sin clave, la auditoría con IA queda desactivada)
 - `AUDITORIA_CHATS_AI_MODEL_RESPALDO` (opcional: modelo que se usa si el principal está saturado, tarda demasiado o agotó su cupo diario)
+- `INCIDENCIAS_CHATS_AI_CUPO_DIARIO` (opcional, Incidencias de chats: máximo de chats confirmados con IA por día; 10 por defecto)
 - `AUDITORIA_CHATS_AI_RAZONAMIENTO` (opcional: `low`, `medium`, `high`; menos razonamiento = respuestas más rápidas. Vacío = no se envía)
 - `AUDITORIA_CHATS_AI_CUPO_DIARIO` (peticiones diarias que permite el plan de la IA; solo sirve para avisar en el selector; con la pauta QA-1.1 cada chat usa 2; por defecto `20`, `0` lo oculta)
 - `AUDITORIA_CHATS_MANUAL_VERSION` (versión del manual de procedimientos cargado en Supabase que usan los lotes nuevos; por defecto `3.0`)

@@ -116,6 +116,15 @@ class SupabaseIncidenciasStore:
         cambios = dict(cambios, updated_at=_ahora_iso())
         return self._uno(self.client.table(TABLA_CHATS).update(cambios).eq("id", chat_id))
 
+    def reclamar_ia(self, chat_id, desde, hacia):
+        """Compare-and-set sobre `ia_estado`: devuelve el chat si este proceso lo tomó, o None."""
+        return self._uno(
+            self.client.table(TABLA_CHATS)
+            .update({"ia_estado": hacia, "updated_at": _ahora_iso()})
+            .eq("id", chat_id)
+            .eq("ia_estado", desde)
+        )
+
     def listar_chats(self, review_id):
         return self._todas(
             lambda: self.client.table(TABLA_CHATS).select("*").eq("review_id", review_id).order("created_at").order("id")
@@ -245,6 +254,13 @@ class MemoriaIncidenciasStore:
             return None
         self.chats[chat_id].update(copy.deepcopy(cambios), updated_at=_ahora_iso(), _actualizado=self._orden())
         return copy.deepcopy(self.chats[chat_id])
+
+    def reclamar_ia(self, chat_id, desde, hacia):
+        chat = self.chats.get(chat_id)
+        if not chat or chat.get("ia_estado") != desde:
+            return None
+        chat.update(ia_estado=hacia, updated_at=_ahora_iso(), _actualizado=self._orden())
+        return copy.deepcopy(chat)
 
     def listar_chats(self, review_id):
         chats = sorted((c for c in self.chats.values() if c.get("review_id") == review_id), key=lambda c: c["_orden"])

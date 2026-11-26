@@ -6,7 +6,9 @@ Cada petición HTTP ejecuta un paso acotado (apto para Vercel); todo el estado v
 import time
 from datetime import datetime, timedelta, timezone
 
+from utils.auditoria_chats_transcripcion import construir_transcripcion_v2
 from utils.chatwoot_reportes import _obtener_timezone, _timezone
+from utils.incidencias_chats_ia import paso_ia
 from utils.incidencias_chats_reglas import REGLAS_VERSION, evaluar_chat
 from utils.incidencias_chats_store import IncidenciasError, MemoriaIncidenciasStore
 
@@ -271,7 +273,9 @@ def _evaluar_uno(store, revision, chat, chatwoot, ahora):
     if resultado["descartado"]:
         cambios.update(estado="descartado", motivo_descarte=resultado["descartado"], incidencias=[])
     else:
-        cambios.update(estado="evaluado", incidencias=resultado["incidencias"])
+        cambios.update(estado="evaluado", incidencias=resultado["incidencias"], ia_estado=None, transcripcion_tmp=None)
+        if revision.get("usar_ia") and resultado["incidencias"]:
+            cambios.update(ia_estado="pendiente", transcripcion_tmp=construir_transcripcion_v2(mensajes, _timezone()))
     store.actualizar_chat(chat["id"], cambios)
 
 
@@ -297,8 +301,9 @@ def _paso_evaluacion(store, revision, chatwoot, ahora, reloj):
 
 
 def _paso_ia(store, revision, config_ia, ahora):
-    """Paso de IA (Task 5): revisa con IA los chats evaluados. Sin implementar: `ia_estado` queda en None."""
-    return None
+    """Confirmación con IA de los chats marcados (ver `incidencias_chats_ia`); la fecha del cupo es la local."""
+    hoy = datetime.fromtimestamp(int(ahora), _obtener_timezone(_timezone())).date()
+    return paso_ia(store, revision, config_ia, hoy)
 
 
 def _finalizar(store, review_id):
