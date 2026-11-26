@@ -291,3 +291,72 @@ def test_veredicto_ia_en_filas_y_csv():
     sin = dict(chat, ia_estado="sin_cupo", ia_resultado=None, incidencias=chat["incidencias"][:1])
     f = list(motor._filas_incidencias([sin], {}))[0]
     assert f["ia_confirmada"] is None and f["ia_motivo"] == ""
+
+
+def _store_con_pendiente():
+    store = MemoriaIncidenciasStore()
+    rid = _revision(store)["id"]
+    store.insertar_chats([{
+        "review_id": rid, "conversation_id": 9, "estado": "evaluado", "ia_estado": "pendiente",
+        "transcripcion_tmp": "t", "incidencias": [{"severidad": "alta", "etiqueta": "a", "evidencia": "e"}],
+    }])
+    return store, rid
+
+
+def test_ia_usa_timeout_menor_al_limite_de_vercel(monkeypatch):
+    timeouts = []
+
+    def falsa(mensajes, config, timeout=60):
+        timeouts.append(timeout)
+        return OK
+
+    monkeypatch.setattr(ia, "completar_json", falsa)
+    store, rid = _store_con_pendiente()
+    ia.paso_ia(store, store.obtener_revision(rid), dict(CONFIG, model="principal"), _hoy())
+    assert timeouts and all(t < 60 for t in timeouts)
+
+
+def test_ia_pasa_al_modelo_de_respaldo_y_reparte_el_tiempo(monkeypatch):
+    llamadas = []
+
+    def falsa(mensajes, config, timeout=60):
+        llamadas.append((config["model"], timeout))
+        if config["model"] == "principal":
+            raise IATemporalError("saturado")
+        return OK
+
+    monkeypatch.setattr(ia, "completar_json", falsa)
+    store, rid = _store_con_pendiente()
+    ia.paso_ia(store, store.obtener_revision(rid), dict(CONFIG, model="principal", model_respaldo="respaldo"), _hoy())
+    assert [m for m, _ in llamadas] == ["principal", "respaldo"]
+    assert sum(t for _, t in llamadas) < 60
+    assert _por_conv(store, rid)[9]["ia_estado"] == "hecha"
+
+
+def test_ia_anonimiza_motivo_y_resumen(monkeypatch):
+    respuesta = {
+        "incidencias": [{"indice": 1, "confirmada": True, "motivo": "escribió ana@correo.com"}],
+        "resumen": "Su teléfono es 04141234567.",
+        "incidencias_extra": [],
+    }
+    monkeypatch.setattr(ia, "completar_json", IAFalsa([respuesta]))
+    store, rid = _store_con_pendiente()
+    ia.paso_ia(store, store.obtener_revision(rid), CONFIG, _hoy())
+    resultado = _por_conv(store, rid)[9]["ia_resultado"]
+    assert "ana@correo.com" not in resultado["incidencias"][0]["motivo"]
+    assert "04141234567" not in resultado["resumen"]
+
+
+def test_ia_no_configurada_tiene_su_propio_mensaje(monkeypatch):
+    monkeypatch.setattr(ia, "completar_json", IAFalsa())
+    store, rid = _store_con_pendiente()
+    r = ia.paso_ia(store, store.obtener_revision(rid), {"activa": False}, _hoy())
+    assert "no está configurada" in r["mensaje"]
+
+
+def test_ia_sin_cupo_tiene_su_propio_mensaje(monkeypatch):
+    monkeypatch.setenv("INCIDENCIAS_CHATS_AI_CUPO_DIARIO", "0")
+    monkeypatch.setattr(ia, "completar_json", IAFalsa())
+    store, rid = _store_con_pendiente()
+    r = ia.paso_ia(store, store.obtener_revision(rid), CONFIG, _hoy())
+    assert "Sin cupo de IA hoy" in r["mensaje"]

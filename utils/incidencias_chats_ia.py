@@ -6,7 +6,8 @@ Un paso procesa un solo chat (una llamada a la IA), apto para el límite de Verc
 import os
 from datetime import datetime, timedelta, timezone
 
-from utils.ia_chat import IAConfigError, IARateLimitError, IARespuestaError, completar_json
+from utils.auditoria_chats_transcripcion import anonimizar
+from utils.ia_chat import IAConfigError, IARateLimitError, IARespuestaError, IATemporalError, completar_json
 from utils.incidencias_chats_reglas import fragmento
 
 CUPO_DEFECTO = 10
@@ -14,6 +15,8 @@ MAX_EXTRAS = 5
 MAX_REINTENTOS_IA = 3
 # Una llamada a la IA cabe en un paso (<60 s): pasado este margen, el claim «procesando» quedó abandonado.
 SEGUNDOS_IA_ABANDONADA = 90
+# Tiempo total para la IA dentro de un paso (Vercel corta a los 60 s); se reparte entre principal y respaldo.
+PRESUPUESTO_IA_SEGUNDOS = 45
 
 PROMPT_IA = """Eres un auditor de calidad de atención al cliente. Recibirás la transcripción anonimizada de un chat \
 de soporte y una lista numerada de incidencias que un sistema de reglas detectó en él.
@@ -86,7 +89,8 @@ def _mensajes(chat):
 
 
 def _texto(valor, maximo=500):
-    return str(valor or "").strip()[:maximo]
+    # Lo que escribe la IA puede repetir datos del chat: se anonimiza antes de guardarlo.
+    return " ".join(anonimizar(str(valor or "")).split())[:maximo]
 
 
 def _normalizar(data, total):
@@ -130,6 +134,31 @@ def _incidencia_extra(extra, chat):
     }
 
 
+def _llamar_ia(mensajes, config_ia):
+    """Modelo principal y, si está saturado o sin cupo, el de respaldo (como `auditoria_chats_motor`).
+
+    El tiempo total se reparte entre los modelos para que el paso no supere el límite de Vercel.
+    """
+    modelos = [config_ia.get("model")]
+    respaldo = config_ia.get("model_respaldo")
+    if respaldo and respaldo != modelos[0]:
+        modelos.append(respaldo)
+    timeout = PRESUPUESTO_IA_SEGUNDOS // len(modelos)
+    errores = []
+    for modelo in modelos:
+        try:
+            return completar_json(mensajes, dict(config_ia, model=modelo), timeout=timeout)
+        except IARateLimitError as exc:
+            errores.append((modelo, exc))
+    if len(errores) == 1:
+        raise errores[0][1]
+    detalle = " · ".join(f"{modelo}: {exc}" for modelo, exc in errores)
+    temporales = [e for _, e in errores if not e.diario]
+    if temporales:
+        raise IATemporalError(f"Ningún modelo respondió ({detalle})", esperar_segundos=temporales[0].esperar_segundos)
+    raise IARateLimitError(f"Todos los modelos agotaron su cupo diario ({detalle})", diario=True)
+
+
 def _fallo(store, chat, mensaje):
     store.actualizar_chat(chat["id"], {"ia_estado": "error", "ia_resultado": None, "transcripcion_tmp": None})
     return _respuesta(store, chat["review_id"], "ia", mensaje)
@@ -146,7 +175,10 @@ def paso_ia(store, revision, config_ia, hoy):
             return _respuesta(store, review_id, "espera", "Hay un chat con la IA en otra pestaña.", esperar_segundos=5)
         return None
 
-    if not (config_ia or {}).get("activa") or store.usos_ia(hoy) >= cupo_ia():
+    if not (config_ia or {}).get("activa"):
+        _a_sin_cupo(store, pendientes)
+        return _respuesta(store, review_id, "ia", "La IA no está configurada: los chats quedan sin confirmar.")
+    if store.usos_ia(hoy) >= cupo_ia():
         _a_sin_cupo(store, pendientes)
         return _respuesta(store, review_id, "ia", "Sin cupo de IA hoy: los chats restantes quedan sin confirmar.")
 
@@ -166,7 +198,7 @@ def paso_ia(store, revision, config_ia, hoy):
         return _respuesta(store, review_id, "espera", "Otro proceso está tomando el siguiente chat.", esperar_segundos=2)
 
     try:
-        resultado = _normalizar(completar_json(_mensajes(chat), config_ia), len(chat.get("incidencias") or []))
+        resultado = _normalizar(_llamar_ia(_mensajes(chat), config_ia), len(chat.get("incidencias") or []))
     except IARateLimitError as exc:
         if exc.diario:
             _a_sin_cupo(store, pendientes + [chat] if chat not in pendientes else pendientes)
