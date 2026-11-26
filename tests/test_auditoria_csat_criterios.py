@@ -61,3 +61,8 @@ def test_filas_nuevas_inician_sin_puntaje():
                         "Enlace a la conversación": "", "Fecha registrada": "2025-11-10"}])
     fila = csat.construir_estado_inicial(df, "x.csv")["rows"][0]
     assert fila["ia_puntaje"] == "" and fila["ia_reglas"] == []
+
+
+def test_instrucciones_dicen_que_tiempo_usar_para_el_agente():
+    texto = criterios.construir_instrucciones()
+    assert "primera_respuesta_agente" in texto and "esperas_largas_oficiales" in texto
