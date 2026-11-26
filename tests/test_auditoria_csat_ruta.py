@@ -790,3 +790,6 @@ def test_ficha_muestra_rubrica_y_reglas_incumplidas(cliente, store, chatwoot, mo
     assert "Rúbrica 58%" in texto
     assert "Rompió: primera respuesta de 7 min; cerró sin despedida" in texto
     assert texto.count("Rúbrica ") == 1  # la ficha sin puntaje no muestra rúbrica
+    # La IA ya decidió: la ficha queda plegada, pero el porqué de la IA se ve sin abrirla.
+    for ficha in _fichas(texto):
+        assert ficha.index("La IA cree") < ficha.index("<details")

@@ -185,6 +185,19 @@
                 <p class="csat-cita is-vacia">Sin comentario del cliente</p>
               {% endif %}
 
+              {% if f.ia %}
+                <div class="csat-ia" data-csat-ia-propuesta="{{ f.ia.decision }}">
+                  <p class="csat-ia__titulo"><span aria-hidden="true">🤖</span> La IA cree: <strong class="{{ clase_decision.get(f.ia.decision, '') }}">{{ f.ia.texto }}</strong></p>
+                  <p class="csat-ia__meta">
+                    {% if f.ia.motivo %}Motivo: {{ f.ia.motivo }}{% endif %}{% if f.ia.motivo and f.ia.confianza not in ("", None) %} · {% endif %}{% if f.ia.confianza not in ("", None) %}{{ f.ia.confianza }}% seguro{% endif %}{% if f.ia.puntaje not in ("", None) %} · Rúbrica {{ f.ia.puntaje }}%{% endif %}
+                  </p>
+                  {% if f.ia.reglas %}<p class="csat-ia__reglas">Rompió: {{ f.ia.reglas|join("; ") }}</p>{% endif %}
+                  {% if f.ia.evidencia %}<p class="csat-ia__evidencia">Evidencia: «{{ f.ia.evidencia }}»</p>{% endif %}
+                </div>
+              {% else %}
+                <p class="csat-ia is-vacia">La IA todavía no la revisó.</p>
+              {% endif %}
+
               <div class="csat-ficha__resumen" data-csat-ficha-resumen>
                 <span class="csat-insignia {{ clase_decision.get(f.justificable, '') }}">
                   <span aria-hidden="true">✓</span> Confirmado: <span data-csat-resumen-decision>{{ f.decision_texto }}</span>{% if f.origen_texto %} · <span data-csat-resumen-origen>{{ f.origen_texto }}</span>{% endif %}
@@ -196,19 +209,6 @@
 
               <details class="csat-ficha__cuerpo" data-csat-ficha-cuerpo {% if not f.confirmada %}open{% endif %}>
                 <summary class="csat-cambiar" data-csat-cambiar>Cambiar decisión</summary>
-
-                {% if f.ia %}
-                  <div class="csat-ia" data-csat-ia-propuesta="{{ f.ia.decision }}">
-                    <p class="csat-ia__titulo"><span aria-hidden="true">🤖</span> La IA cree: <strong class="{{ clase_decision.get(f.ia.decision, '') }}">{{ f.ia.texto }}</strong></p>
-                    <p class="csat-ia__meta">
-                      {% if f.ia.motivo %}Motivo: {{ f.ia.motivo }}{% endif %}{% if f.ia.motivo and f.ia.confianza not in ("", None) %} · {% endif %}{% if f.ia.confianza not in ("", None) %}{{ f.ia.confianza }}% seguro{% endif %}{% if f.ia.puntaje not in ("", None) %} · Rúbrica {{ f.ia.puntaje }}%{% endif %}
-                    </p>
-                    {% if f.ia.reglas %}<p class="csat-ia__reglas">Rompió: {{ f.ia.reglas|join("; ") }}</p>{% endif %}
-                    {% if f.ia.evidencia %}<p class="csat-ia__evidencia">Evidencia: «{{ f.ia.evidencia }}»</p>{% endif %}
-                  </div>
-                {% else %}
-                  <p class="csat-ia is-vacia">La IA todavía no la revisó.</p>
-                {% endif %}
 
                 <fieldset class="csat-decision">
                   <legend class="csat-oculto-visual">¿Fue culpa del agente?</legend>
