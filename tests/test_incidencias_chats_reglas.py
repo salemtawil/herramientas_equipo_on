@@ -263,3 +263,32 @@ def test_reglas_cliente_no_filtra_correo_con_la_frase():
         incidencia = reglas_cliente([_m(1, 0, texto, 0)], _conv())[0]
         assert "@" not in incidencia["evidencia"] and "mail.com" not in incidencia["evidencia"]
         assert "@" not in incidencia["coincidencia"]
+
+
+def test_sin_atencion_no_se_marca_si_solo_agradece():
+    mensajes = [_m(1, 0, "Muchas gracias", 0)]
+    assert "sin_atencion" not in _claves(reglas_atencion(mensajes, _conv("resolved"), ahora=5000))
+
+
+def test_sin_atencion_no_se_marca_si_solo_hay_mensajes_vacios():
+    mensajes = [_m(1, 0, "", 0), _m(2, 0, "   ", 10)]
+    assert "sin_atencion" not in _claves(reglas_atencion(mensajes, _conv("resolved"), ahora=5000))
+
+
+def test_sin_atencion_con_solo_un_adjunto():
+    adjunto = dict(_m(1, 0, "", 0), attachments=[{"file_type": "image"}])
+    incidencias = reglas_atencion([adjunto], _conv("resolved"), ahora=5000)
+    assert _claves(incidencias) == ["sin_atencion"]
+
+
+def test_sin_atencion_cita_el_primer_mensaje_sustantivo():
+    mensajes = [_m(1, 0, "Gracias", 0), _m(2, 0, "No me llegó el pedido", 30)]
+    incidencia = reglas_atencion(mensajes, _conv("resolved"), ahora=5000)[0]
+    assert incidencia["clave"] == "sin_atencion"
+    assert "No me llegó el pedido" in incidencia["evidencia"]
+    assert incidencia["mensaje_id"] == 2
+
+
+def test_cierre_ignora_mensaje_vacio_final():
+    mensajes = [_m(1, 0, "Hola", 0), _m(2, 1, "Listo, ya quedó", 60), _m(3, 0, "", 120)]
+    assert "cierre_sin_responder" not in _claves(reglas_atencion(mensajes, _conv("resolved"), ahora=5000))

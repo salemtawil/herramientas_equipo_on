@@ -217,6 +217,15 @@ def es_cortesia(mensaje):
     return all(palabra in PALABRAS_CORTESIA for palabra in re.findall(r"[a-z0-9]+", normalizar(texto)))
 
 
+def _sustantivo(mensaje):
+    """Mensaje del cliente que pide algo: con texto que no sea solo cortesía, o con adjuntos (R8).
+
+    Los mensajes vacíos y los de pura cortesía no cuentan como algo que responder.
+    """
+    texto = _texto(mensaje)
+    return bool(texto and not es_cortesia(mensaje)) or bool(mensaje.get("attachments"))
+
+
 def _minutos(segundos):
     return int(segundos // 60)
 
@@ -243,6 +252,11 @@ def reglas_atencion(mensajes, conversacion, ahora):
     primero = clientes[0]
     if not any(es_respuesta_humana(m) for m in eventos):
         # Sin ninguna respuesta humana solo se marca sin_atencion, que absorbe las demás reglas.
+        # Si el cliente solo agradeció o mandó mensajes vacíos, no había nada que atender.
+        sustantivos = [m for m in clientes if _sustantivo(m)]
+        if not sustantivos:
+            return incidencias
+        primero = sustantivos[0]
         espera = ahora - _ts_mensaje(primero)
         if resuelto or (abierto and espera > SIN_ATENCION_ESPERA):
             if resuelto:
@@ -276,7 +290,7 @@ def reglas_atencion(mensajes, conversacion, ahora):
         else:
             # Cerrado: el tramo final lo cubre cierre_sin_responder (sin duplicarlo con cliente_ignorado)
             # y los agradecimientos o despedidas finales no cuentan como un reclamo sin responder.
-            sustantivos = [m for m in pendientes if not es_cortesia(m)]
+            sustantivos = [m for m in pendientes if _sustantivo(m)]
             if sustantivos:
                 agregar("cierre_sin_responder", f"El chat se cerró sin responder a {_cita(sustantivos[-1])}", sustantivos[-1])
 
