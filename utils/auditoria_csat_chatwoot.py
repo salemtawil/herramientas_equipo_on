@@ -2,7 +2,7 @@
 import logging
 from datetime import datetime
 
-from utils.auditoria_chats_transcripcion import construir_transcripcion
+from utils.auditoria_chats_transcripcion import construir_transcripcion_v2, metricas_tiempos, periodo_agente
 from utils.chatwoot_reportes import _obtener_timezone
 from utils.errores import mensaje_error_publico
 
@@ -118,7 +118,19 @@ def filas_desde_encuestas(encuestas, chatwoot, tz_name):
     return filas
 
 
-def cargar_transcripciones(filas, chatwoot, tz_name, max_chars=6000):
+def _metricas_de(mensajes, fila):
+    """Tiempos del chat ya calculados para la IA; {} si no se pueden calcular."""
+    agente_id = fila.get("agente_id")
+    agente = fila.get("agente") or ""
+    try:
+        return metricas_tiempos(mensajes, periodo_agente(mensajes, agente_id, agente), agente_id, agente)
+    except Exception:
+        logger.exception("No se pudieron calcular los tiempos de la conversación %s", fila.get("conversation_id"))
+        return {}
+
+
+def cargar_transcripciones(filas, chatwoot, tz_name, max_chars=12000):
+    """Trae la conversación completa (con notas internas y eventos) y sus tiempos, solo en memoria."""
     advertencias = []
     for fila in filas:
         if fila.get("transcripcion_conversacion"):
@@ -126,7 +138,8 @@ def cargar_transcripciones(filas, chatwoot, tz_name, max_chars=6000):
         conversation_id = fila.get("conversation_id")
         try:
             mensajes = chatwoot.mensajes_de_conversacion(conversation_id)
-            fila["transcripcion_conversacion"] = construir_transcripcion(mensajes, tz_name, max_chars)
+            fila["transcripcion_conversacion"] = construir_transcripcion_v2(mensajes, tz_name, max_chars)
+            fila["metricas_tiempo"] = _metricas_de(mensajes, fila)
         except Exception as exc:
             logger.exception("Error cargando conversación %s de Chatwoot", conversation_id)
             advertencias.append(mensaje_error_publico(exc, f"No se pudo cargar la conversación {conversation_id}"))

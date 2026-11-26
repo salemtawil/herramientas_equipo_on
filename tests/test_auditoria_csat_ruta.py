@@ -318,6 +318,7 @@ def test_auditar_con_ia_no_deja_transcripciones_en_el_temporal(cliente, store, c
     with app.app_context():
         estado = herramienta.cargar_analisis(_hidden(respuesta, "analysis_id"))
     assert estado["rows"] and all(not f.get("transcripcion_conversacion") for f in estado["rows"])
+    assert all("metricas_tiempo" not in f for f in estado["rows"])
     assert any(f.get("ia_justificable") for f in estado["rows"])
 
 

@@ -144,3 +144,42 @@ def test_resumen_para_guardar():
     assert r["csat_real"] == 66.67 and r["csat_ajustado"] == 100.0
     assert r["negativos_total"] == 1 and r["negativos_excluidos"] == 1 and r["negativos_pendientes"] == 0
     assert r["por_agente"][0]["Agente"] == "Ana P."
+
+
+# --- Conversación completa y tiempos calculados para la IA ---------------------------------
+
+AGENTE = {"id": 7, "name": "Ana Perez"}
+
+
+class ChatwootConNota(ChatwootFalso):
+    def mensajes_de_conversacion(self, conversation_id, max_paginas=5):
+        return [
+            {"id": 1, "message_type": 0, "content": "Necesito una llamada", "created_at": 1700000000},
+            {"id": 2, "message_type": 1, "content": "Hola, te llamo", "created_at": 1700000130, "sender": AGENTE},
+            {"id": 3, "message_type": 1, "content": "PMF-PTZGH-111", "private": True, "created_at": 1700000400, "sender": AGENTE},
+        ]
+
+
+class ChatwootSinRespuesta(ChatwootFalso):
+    def mensajes_de_conversacion(self, conversation_id, max_paginas=5):
+        return [{"id": 1, "message_type": 0, "content": "Hola?", "created_at": 1700000000}]
+
+
+def test_transcripcion_incluye_notas_internas():
+    filas = filas_desde_encuestas([enc(1)], ChatwootConNota(), TZ)
+    assert cargar_transcripciones(filas, ChatwootConNota(), TZ) == []
+    texto = filas[0]["transcripcion_conversacion"]
+    assert "Nota interna" in texto and "PMF-PTZGH-111" in texto
+
+
+def test_metricas_tiempo_calculadas():
+    filas = filas_desde_encuestas([enc(1)], ChatwootConNota(), TZ)
+    cargar_transcripciones(filas, ChatwootConNota(), TZ)
+    assert filas[0]["metricas_tiempo"]["primera_respuesta"]["segundos"] == 130
+
+
+def test_metricas_sin_respuesta_del_agente_no_fallan():
+    filas = filas_desde_encuestas([enc(1)], ChatwootSinRespuesta(), TZ)
+    assert cargar_transcripciones(filas, ChatwootSinRespuesta(), TZ) == []
+    assert filas[0]["transcripcion_conversacion"]
+    assert filas[0]["metricas_tiempo"]["primera_respuesta"] is None

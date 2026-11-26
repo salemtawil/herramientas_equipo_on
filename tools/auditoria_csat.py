@@ -181,7 +181,7 @@ STATE_NAMESPACE = "auditoria_csat"
 # Negativos por paso. Igual que la Auditoría de chats: una conversación por petición, para que
 # Gemini responda dentro del tiempo y el respaldo alcance a intentarse.
 CSAT_IA_MAX_CASOS_DEFAULT = 1
-CSAT_IA_MAX_TRANSCRIPT_CHARS = 6000
+CSAT_IA_MAX_TRANSCRIPT_CHARS = 12000
 # Tiempo total de IA por clic (principal + respaldo). Vercel corta a los 60 s y antes se
 # traen conversaciones de Chatwoot y se guarda en Supabase, así que se deja margen.
 CSAT_IA_PRESUPUESTO_SEGUNDOS = 48
@@ -275,7 +275,7 @@ def parsear_fecha(valor):
     try:
         return datetime.fromisoformat(texto)
     except ValueError:
-        pass
+        fila.pop("metricas_tiempo", None)
 
     fecha = pd.to_datetime(texto, errors="coerce", dayfirst=True)
     if pd.isna(fecha):
@@ -511,7 +511,7 @@ def construir_caso_auditoria_ia(fila):
     )
     fuente = "transcripcion_csv" if transcript else "comentario_csv_sin_transcript"
 
-    return {
+    caso = {
         "row_id": fila.get("row_id"),
         "rating": fila.get("calificacion_visible"),
         "tipo_rating": fila.get("tipo_rating"),
@@ -524,6 +524,9 @@ def construir_caso_auditoria_ia(fila):
         "fuente_disponible": fuente,
         "motivos_permitidos": MOTIVOS_INCONFORMIDAD,
     }
+    if fila.get("metricas_tiempo"):
+        caso["metricas_tiempo"] = fila["metricas_tiempo"]
+    return caso
 
 
 def construir_instrucciones_auditoria_ia():
@@ -1557,6 +1560,7 @@ def ejecutar_paso_ia(estado, advertencia_previa=""):
     # La conversación solo se usa en memoria para la IA; no queda en el estado temporal.
     for fila in filas_chatwoot:
         fila["transcripcion_conversacion"] = ""
+        fila.pop("metricas_tiempo", None)
     advertencia = unir_advertencias(
         advertencia_previa, *advertencias_transcripcion, *advertencias_ia, persistir_estado(estado)
     )
