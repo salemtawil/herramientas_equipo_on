@@ -11,6 +11,7 @@ from utils.incidencias_chats_reglas import fragmento
 
 CUPO_DEFECTO = 10
 MAX_EXTRAS = 5
+MAX_REINTENTOS_IA = 3
 # Una llamada a la IA cabe en un paso (<60 s): pasado este margen, el claim «procesando» quedó abandonado.
 SEGUNDOS_IA_ABANDONADA = 90
 
@@ -150,6 +151,12 @@ def paso_ia(store, revision, config_ia, hoy):
         return _respuesta(store, review_id, "ia", "Sin cupo de IA hoy: los chats restantes quedan sin confirmar.")
 
     pendientes.sort(key=lambda c: 0 if _es_alta(c) else 1)  # estable: respeta el orden dentro de cada grupo
+    # Sin transcripción no hay nada que enviar: no se gasta cupo.
+    for sin in [c for c in pendientes if not c.get("transcripcion_tmp")]:
+        store.actualizar_chat(sin["id"], {"ia_estado": None, "ia_resultado": None})
+    pendientes = [c for c in pendientes if c.get("transcripcion_tmp")]
+    if not pendientes:
+        return _respuesta(store, review_id, "ia", "Chats sin transcripción: no se revisan con IA.")
     chat = None
     for candidato in pendientes:
         chat = store.reclamar_ia(candidato["id"], "pendiente", "procesando")
@@ -164,7 +171,11 @@ def paso_ia(store, revision, config_ia, hoy):
         if exc.diario:
             _a_sin_cupo(store, pendientes + [chat] if chat not in pendientes else pendientes)
             return _respuesta(store, review_id, "ia", f"{exc} Los chats restantes quedan sin confirmar.")
-        store.actualizar_chat(chat["id"], {"ia_estado": "pendiente"})
+        marcas = dict(chat.get("ia_resultado") or {})
+        marcas["reintentos"] = int(marcas.get("reintentos") or 0) + 1
+        if marcas["reintentos"] >= MAX_REINTENTOS_IA:
+            return _fallo(store, chat, f"La IA falló {MAX_REINTENTOS_IA} veces seguidas en el chat #{chat['conversation_id']}: {exc}")
+        store.actualizar_chat(chat["id"], {"ia_estado": "pendiente", "ia_resultado": marcas})
         return _respuesta(store, review_id, "espera", str(exc), esperar_segundos=exc.esperar_segundos)
     except (IAConfigError, IARespuestaError) as exc:
         return _fallo(store, chat, f"La IA no pudo revisar el chat #{chat['conversation_id']}: {exc}")

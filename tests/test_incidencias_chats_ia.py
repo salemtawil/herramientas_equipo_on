@@ -240,3 +240,54 @@ def test_claim_reciente_de_otra_pestana_espera(monkeypatch):
     }])
     r = ia.paso_ia(store, store.obtener_revision(rid), CONFIG, _hoy())
     assert r["accion"] == "espera" and not falsa.llamadas
+
+
+def test_ia_temporal_persistente_termina_en_error(monkeypatch):
+    falsa = IAFalsa([IATemporalError("saturado")])
+    monkeypatch.setattr(ia, "completar_json", falsa)
+    store = MemoriaIncidenciasStore()
+    rid = _revision(store)["id"]
+    r = _correr(store, rid, _escenario(3, cobro={2}))
+    chat = _por_conv(store, rid)[2]
+    assert r["estado"] == "completado" and chat["ia_estado"] == "error" and chat["transcripcion_tmp"] is None
+    assert len(falsa.llamadas) == 3
+
+
+def test_pendiente_sin_transcripcion_no_llama(monkeypatch):
+    falsa = IAFalsa()
+    monkeypatch.setattr(ia, "completar_json", falsa)
+    store = MemoriaIncidenciasStore()
+    rid = _revision(store)["id"]
+    store.insertar_chats([{"review_id": rid, "conversation_id": 1, "estado": "evaluado", "ia_estado": "pendiente",
+                           "transcripcion_tmp": None, "incidencias": [{"severidad": "alta"}]}])
+    ia.paso_ia(store, store.obtener_revision(rid), CONFIG, _hoy())
+    assert not falsa.llamadas and store.usos_ia(_hoy()) == 0
+    assert store.listar_chats(rid)[0]["ia_estado"] is None
+
+
+def test_reutilizar_no_hereda_ia_en_curso():
+    store = MemoriaIncidenciasStore()
+    previa = _revision(store)["id"]
+    store.insertar_chats([{"review_id": previa, "conversation_id": 5, "estado": "evaluado", "resuelto": True,
+                           "reglas_version": motor.REGLAS_VERSION, "last_activity_at": 100, "incidencias": [],
+                           "ia_estado": "pendiente", "ia_resultado": {"x": 1}}])
+    nueva = _revision(store)["id"]
+    fila = motor._reutilizar(store, {"review_id": nueva, "conversation_id": 5, "status": "resolved",
+                                     "last_activity_at": 100, "agente_nombre": ""})
+    assert fila["estado"] == "evaluado" and fila["ia_estado"] is None and fila["ia_resultado"] is None
+
+
+def test_veredicto_ia_en_filas_y_csv():
+    chat = {"id": "a", "conversation_id": 1, "ia_estado": "hecha", "ia_resultado": {
+        "incidencias": [{"indice": 1, "confirmada": True, "motivo": "lo dijo"}, {"indice": 2, "confirmada": False, "motivo": "no es"}],
+        "resumen": "res"}, "incidencias": [
+        {"tipo": "atencion", "etiqueta": "A", "severidad": "alta", "evidencia": "e"},
+        {"tipo": "atencion", "etiqueta": "B", "severidad": "media", "evidencia": "e"},
+        {"tipo": "cliente", "etiqueta": "C", "severidad": "media", "evidencia": "e", "origen": "ia"}]}
+    filas = list(motor._filas_incidencias([chat], {}))
+    assert [(f["ia_confirmada"], f["ia_motivo"]) for f in filas] == [(True, "lo dijo"), (False, "no es"), (True, "res")]
+    csv = motor.filas_csv({}, [chat], {}, None)
+    assert sorted(f[8] for f in csv[1:]) == ["Confirmada: lo dijo", "Confirmada: res", "Descartada: no es"]
+    sin = dict(chat, ia_estado="sin_cupo", ia_resultado=None, incidencias=chat["incidencias"][:1])
+    f = list(motor._filas_incidencias([sin], {}))[0]
+    assert f["ia_confirmada"] is None and f["ia_motivo"] == ""

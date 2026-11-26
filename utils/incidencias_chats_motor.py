@@ -185,8 +185,9 @@ def _reutilizar(store, fila):
         estado="evaluado",
         resuelto=True,
         incidencias=previa.get("incidencias") or [],
-        ia_estado=previa.get("ia_estado"),
-        ia_resultado=previa.get("ia_resultado"),
+        # Una IA aún en curso en la revisión anterior no deja transcripción: no se hereda.
+        ia_estado=None if previa.get("ia_estado") in ("pendiente", "procesando") else previa.get("ia_estado"),
+        ia_resultado=None if previa.get("ia_estado") in ("pendiente", "procesando") else previa.get("ia_resultado"),
         reglas_version=REGLAS_VERSION,
         agente_id=previa.get("agente_id"),
         agente_nombre=previa.get("agente_nombre") or fila["agente_nombre"],
@@ -380,17 +381,32 @@ def _partir(evidencia, coincidencia):
     return evidencia[:pos], evidencia[pos:fin], evidencia[fin:]
 
 
+def _veredicto_ia(chat, numero, incidencia):
+    """(confirmada, motivo) de la IA para la incidencia `numero` (1..n); None si la IA no la juzgó."""
+    resultado = chat.get("ia_resultado") or {}
+    if incidencia.get("origen") == "ia":
+        return True, resultado.get("resumen", "")
+    if chat.get("ia_estado") != "hecha":
+        return None, ""
+    for juicio in resultado.get("incidencias") or []:
+        if isinstance(juicio, dict) and juicio.get("indice") == numero:
+            return juicio.get("confirmada"), juicio.get("motivo") or resultado.get("resumen", "")
+    return None, resultado.get("resumen", "")
+
+
 def _filas_incidencias(chats, decisiones):
     for chat in chats:
-        for incidencia in chat.get("incidencias") or []:
+        for numero, incidencia in enumerate(chat.get("incidencias") or [], 1):
             antes, marca, despues = _partir(incidencia.get("evidencia"), incidencia.get("coincidencia"))
+            confirmada, motivo = _veredicto_ia(chat, numero, incidencia)
             yield {
                 **incidencia,
                 "conversation_id": chat.get("conversation_id"),
                 "chat_id": chat.get("id"),
                 "status": chat.get("status"),
                 "ia_estado": chat.get("ia_estado"),
-                "ia_motivo": (chat.get("ia_resultado") or {}).get("motivo", ""),
+                "ia_motivo": motivo,
+                "ia_confirmada": confirmada,
                 "decision": decisiones.get(int(chat.get("conversation_id") or 0)),
                 "antes": antes,
                 "marca": marca,
@@ -429,6 +445,14 @@ def _fecha_local(ts, tz):
     return datetime.fromtimestamp(int(ts), tz).strftime("%Y-%m-%d %H:%M") if ts else ""
 
 
+def _texto_ia(fila):
+    confirmada = fila.get("ia_confirmada")
+    if confirmada is None:
+        return fila.get("ia_estado") or ""
+    texto = "Confirmada" if confirmada else "Descartada"
+    return f"{texto}: {fila['ia_motivo']}" if fila.get("ia_motivo") else texto
+
+
 def filas_csv(revision, chats, decisiones, url_conversacion):
     """Encabezado y una fila por incidencia."""
     tz = _obtener_timezone(_timezone())
@@ -446,7 +470,7 @@ def filas_csv(revision, chats, decisiones, url_conversacion):
                 fila.get("etiqueta") or "",
                 fila.get("severidad") or "",
                 fila.get("evidencia") or "",
-                fila.get("ia_estado") or "",
+                _texto_ia(fila),
                 decision.get("decision") or "",
                 decision.get("por") or "",
                 decision.get("nota") or "",
