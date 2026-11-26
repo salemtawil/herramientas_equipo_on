@@ -33,6 +33,8 @@ from utils.estado_temporal import cargar_json_temporal
 from utils.estado_temporal import guardar_estado_temporal
 from utils.estado_temporal import guardar_json_temporal
 from utils.estado_temporal import limpiar_estados_temporales_expirados
+from utils.auditoria_csat_criterios import DEFINICIONES_MOTIVOS
+from utils.auditoria_csat_criterios import construir_instrucciones as construir_instrucciones_criterios
 from utils.ia_chat import IAConfigError, IARateLimitError, IARespuestaError, IATemporalError, completar_json
 from utils.ia_chat import obtener_config_ia as obtener_config_ia_compartida
 
@@ -454,6 +456,8 @@ def construir_filas_desde_dataframe(df, columnas_resueltas):
                 "ia_confianza": "",
                 "ia_explicacion": "",
                 "ia_evidencia": "",
+                "ia_puntaje": "",
+                "ia_reglas": [],
                 "ia_modelo": "",
                 "ia_fecha": "",
                 "ia_fuente": "",
@@ -523,21 +527,13 @@ def construir_caso_auditoria_ia(fila):
 
 
 def construir_instrucciones_auditoria_ia():
-    return (
-        "Audita valoraciones CSAT negativas de soporte. "
-        "Decide si cada negativo debe excluirse del CSAT del agente. "
-        "Usa SI cuando el negativo parece injusto, no atribuible al agente, causado por sistema/política/cliente sin solicitud clara, o sin evidencia suficiente contra el agente. "
-        "Usa NO cuando la conversación muestra falla atribuible al agente o mala gestión que justifica contar el negativo. "
-        "Usa TAL VEZ cuando la evidencia es ambigua y requiere revisión humana. "
-        "Elige un motivo exacto de la lista permitida. "
-        "Si no hay transcripción completa, dilo en la explicación y baja la confianza. "
-        "Devuelve un resultado por cada row_id recibido."
-    )
+    return construir_instrucciones_criterios()
 
 
 def construir_payload_lote_auditoria_ia(filas):
     contenido = {
         "motivos_permitidos": MOTIVOS_INCONFORMIDAD,
+        "definiciones_motivos": DEFINICIONES_MOTIVOS,
         "casos": [construir_caso_auditoria_ia(fila) for fila in filas],
     }
     return construir_instrucciones_auditoria_ia() + "\n\nCasos:\n" + json.dumps(contenido, ensure_ascii=False, indent=2)
@@ -560,6 +556,15 @@ def esquema_auditoria_ia():
                 "minimum": 0,
                 "maximum": 1,
             },
+            "puntaje": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100,
+            },
+            "reglas_incumplidas": {
+                "type": "array",
+                "items": {"type": "string"},
+            },
             "explicacion": {
                 "type": "string",
             },
@@ -571,6 +576,8 @@ def esquema_auditoria_ia():
             "justificable",
             "motivo_inconformidad",
             "confianza",
+            "puntaje",
+            "reglas_incumplidas",
             "explicacion",
             "evidencia",
         ],
@@ -665,6 +672,24 @@ def auditar_lote_con_proveedor(filas, config):
     return [dict(resultado, _modelo=modelo) for resultado in resultados if isinstance(resultado, dict)]
 
 
+def normalizar_puntaje_ia(valor):
+    """Puntaje de la rúbrica como entero 0–100, o "" si la IA no dio un número."""
+    try:
+        numero = float(valor)
+    except (TypeError, ValueError):
+        return ""
+    if numero != numero:  # NaN
+        return ""
+    return int(round(max(0.0, min(100.0, numero))))
+
+
+def normalizar_reglas_ia(valor, maximo=5, largo=160):
+    if not isinstance(valor, list):
+        return []
+    reglas = [limpiar_texto(regla)[:largo] for regla in valor if isinstance(regla, str)]
+    return [regla for regla in reglas if regla][:maximo]
+
+
 def aplicar_resultado_ia(fila, resultado, modelo):
     justificable = normalizar_justificable(resultado.get("justificable"))
     if not justificable:
@@ -689,6 +714,8 @@ def aplicar_resultado_ia(fila, resultado, modelo):
     fila["ia_confianza"] = formatear_porcentaje(confianza * 100)
     fila["ia_explicacion"] = explicacion
     fila["ia_evidencia"] = evidencia
+    fila["ia_puntaje"] = normalizar_puntaje_ia(resultado.get("puntaje"))
+    fila["ia_reglas"] = normalizar_reglas_ia(resultado.get("reglas_incumplidas"))
     fila["ia_modelo"] = modelo
     fila["ia_fecha"] = datetime.utcnow().isoformat()
     if fila.get("survey_id") and fila.get("transcripcion_conversacion"):

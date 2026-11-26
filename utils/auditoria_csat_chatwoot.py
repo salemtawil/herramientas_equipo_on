@@ -105,6 +105,8 @@ def filas_desde_encuestas(encuestas, chatwoot, tz_name):
                 "ia_confianza": "",
                 "ia_explicacion": "",
                 "ia_evidencia": "",
+                "ia_puntaje": "",
+                "ia_reglas": [],
                 "ia_modelo": "",
                 "ia_fecha": "",
                 "ia_fuente": "",
