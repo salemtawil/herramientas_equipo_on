@@ -275,7 +275,7 @@ def parsear_fecha(valor):
     try:
         return datetime.fromisoformat(texto)
     except ValueError:
-        fila.pop("metricas_tiempo", None)
+        pass
 
     fecha = pd.to_datetime(texto, errors="coerce", dayfirst=True)
     if pd.isna(fecha):
