@@ -13,7 +13,7 @@ TITULOS_PASOS = (
     ("resultado", "Resultado"),
 )
 
-ORIGEN_TEXTO = {"humana": "tú", "ia_aceptada": "aceptado de la IA"}
+ORIGEN_TEXTO = {"humana": "tú", "ia_aceptada": "decidido por la IA"}
 
 
 def _negativos(filas):

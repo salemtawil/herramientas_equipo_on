@@ -143,11 +143,11 @@
       <p class="csat-ia-estado" data-csat-ia-estado aria-live="polite" hidden></p>
       <p class="small csat-revision__nota">
         {% if contexto.ia_disponible %}
-          La IA ({{ contexto.ia_modelo }}) revisa {{ contexto.ia_tanda }} negativos por paso y solo propone.
+          La IA ({{ contexto.ia_modelo }}) revisa {{ contexto.ia_tanda }} negativos por paso y deja su decisión puesta; si no estás de acuerdo, ábrela y cámbiala.
         {% else %}
           Configura AUDITORIA_CHATS_AI_API_KEY (la misma IA de la Auditoría de chats) para habilitar la revisión con IA.
         {% endif %}
-        Auditados a mano: {{ contexto.auditados_humana }} · Aceptados de la IA: {{ contexto.aceptados_ia }}
+        Auditados a mano: {{ contexto.auditados_humana }} · Decididos por la IA: {{ contexto.aceptados_ia }}
       </p>
 
       <div class="csat-listo" data-csat-listo role="status" {% if kpis.por_confirmar %}hidden{% endif %}>

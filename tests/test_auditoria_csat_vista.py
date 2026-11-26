@@ -66,7 +66,7 @@ def test_fichas_orden_y_textos():
     assert fichas[0]["ia"]["texto"] == "No fue culpa del agente"
     assert fichas[0]["confirmada"] is False
     assert fichas[0]["origen_texto"] == ""
-    assert fichas[1]["origen_texto"] == "aceptado de la IA"
+    assert fichas[1]["origen_texto"] == "decidido por la IA"
     assert fichas[1]["motivo"] == "Fuera de control"
     assert fichas[1]["decision_texto"] == "No fue culpa del agente"
     assert fichas[1]["confirmada"] is True

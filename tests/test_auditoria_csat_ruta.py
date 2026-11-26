@@ -137,7 +137,7 @@ def test_traer_chatwoot_guarda_periodo(cliente, store):
     assert [n["survey_id"] for n in store.negativos(periodo["id"])] == [1]
     assert _hidden(html, "period_id") == periodo["id"]
     assert _kpi(html, "por_confirmar") == "1" and 'data-confirmada="0"' in _ficha_de(html, "1")
-    assert "Auditados a mano: 0 · Aceptados de la IA: 0" in html
+    assert "Auditados a mano: 0 · Decididos por la IA: 0" in html
     assert "/auditoria-csat/conversacion/501" in html and "Ver conversación" in html
     assert "Modo prueba — nada de esto se guarda" not in html
 
@@ -201,7 +201,7 @@ def test_guardar_decision_sincroniza_y_cuenta_origen(cliente, store):
     assert negativo["decision_final"] == "SÍ" and negativo["origen_decision"] == "humana"
     periodo = store.obtener_periodo(period_id)
     assert periodo["negativos_pendientes"] == 0 and periodo["csat_ajustado"] == 100.0
-    assert "Auditados a mano: 1 · Aceptados de la IA: 0" in html2
+    assert "Auditados a mano: 1 · Decididos por la IA: 0" in html2
     assert _kpi(html2, "por_confirmar") == "0" and 'data-confirmada="1"' in _ficha_de(html2, "1")
 
 
@@ -292,7 +292,8 @@ def test_auditar_con_ia_carga_transcripcion_solo_de_candidatos(cliente, store, c
     assert vistos == [("1", True)]
     assert chatwoot.mensajes_pedidos == [501]
     negativos = {n["survey_id"]: n for n in store.negativos(period_id)}
-    assert negativos[1]["ia_justificable"] == "SÍ" and negativos[1]["decision_final"] == ""
+    assert negativos[1]["ia_justificable"] == "SÍ" and negativos[1]["decision_final"] == "SÍ"
+    assert negativos[1]["origen_decision"] == "ia_aceptada"
     assert negativos[2]["decision_final"] == "NO"
     assert "transcripcion" not in negativos[1]
 

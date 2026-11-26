@@ -725,6 +725,9 @@ def aplicar_resultado_ia(fila, resultado, modelo):
         fila["ia_fuente"] = "transcripcion_chatwoot"
     else:
         fila["ia_fuente"] = "transcripcion_csv" if fila.get("transcripcion_conversacion") else "comentario_csv_sin_transcript"
+    # La decisión de la IA queda puesta de una vez; el auditor la cambia si no está de acuerdo.
+    if not fila.get("justificable"):
+        aplicar_propuesta_ia(fila)
 
 
 def ia_disponible(config):
@@ -910,13 +913,18 @@ def aceptar_propuestas_ia(estado):
         propuesta = fila.get("ia_justificable")
         if not propuesta or fila.get("justificable"):
             continue
-        fila["justificable"] = propuesta
-        fila["motivo_inconformidad"] = fila.get("ia_motivo", "")
-        fila["origen_decision"] = "ia_aceptada"
-        fila["estado_auditoria"] = propuesta
-        fila["csat_flag"] = calcular_flag_csat(fila.get("tipo_rating"), propuesta)
+        aplicar_propuesta_ia(fila)
         aceptadas += 1
     return aceptadas
+
+
+def aplicar_propuesta_ia(fila):
+    propuesta = fila.get("ia_justificable")
+    fila["justificable"] = propuesta
+    fila["motivo_inconformidad"] = fila.get("ia_motivo", "")
+    fila["origen_decision"] = "ia_aceptada"
+    fila["estado_auditoria"] = propuesta
+    fila["csat_flag"] = calcular_flag_csat(fila.get("tipo_rating"), propuesta)
 
 
 def inferir_periodo(filas):

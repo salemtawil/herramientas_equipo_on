@@ -61,7 +61,7 @@ def fila_con_propuesta(valor):
 
 
 class AuditoriaCsatPropuestaIaTests(unittest.TestCase):
-    def test_ia_no_cambia_decision_ni_csat(self):
+    def test_ia_deja_puesta_su_decision(self):
         fila = fila_negativa()
         aplicar_resultado_ia(
             fila,
@@ -70,10 +70,21 @@ class AuditoriaCsatPropuestaIaTests(unittest.TestCase):
         )
         self.assertEqual("SÍ", fila["ia_justificable"])
         self.assertEqual("CAPTCHA", fila["ia_motivo"])
-        self.assertEqual("", fila["justificable"])
+        self.assertEqual("SÍ", fila["justificable"])
+        self.assertEqual("CAPTCHA", fila["motivo_inconformidad"])
+        self.assertEqual("ia_aceptada", fila["origen_decision"])
         self.assertEqual("", fila["comentario_auditor"])
-        self.assertEqual("pendiente", fila["estado_auditoria"])
-        self.assertEqual("contabiliza", fila["csat_flag"])
+        self.assertEqual("SÍ", fila["estado_auditoria"])
+        self.assertEqual("excluida_por_justificable_si", fila["csat_flag"])
+
+    def test_ia_no_pisa_decision_humana(self):
+        fila = fila_negativa(justificable="NO", motivo_inconformidad="OTRO", origen_decision="humana",
+                             estado_auditoria="NO")
+        aplicar_resultado_ia(fila, {"justificable": "SI", "motivo_inconformidad": "CAPTCHA"}, "m")
+        self.assertEqual("SÍ", fila["ia_justificable"])
+        self.assertEqual("NO", fila["justificable"])
+        self.assertEqual("OTRO", fila["motivo_inconformidad"])
+        self.assertEqual("humana", fila["origen_decision"])
 
     def test_ia_fuente_chatwoot_si_hay_survey_id_y_transcripcion(self):
         fila = fila_negativa(survey_id="9", transcripcion_conversacion="hola")
@@ -177,7 +188,7 @@ class IaCompartidaTests(unittest.TestCase):
         self.assertEqual(["system", "user"], [m["role"] for m in mensajes])
         fila = estado["rows"][0]
         self.assertEqual(("SÍ", "CAPTCHA", "principal"), (fila["ia_justificable"], fila["ia_motivo"], fila["ia_modelo"]))
-        self.assertEqual("", fila["justificable"])
+        self.assertEqual("SÍ", fila["justificable"])
 
     def test_usa_modelo_de_respaldo_si_el_principal_no_tiene_cupo(self):
         from utils.ia_chat import IARateLimitError
