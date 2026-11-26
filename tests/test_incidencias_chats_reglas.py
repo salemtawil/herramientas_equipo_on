@@ -1,4 +1,13 @@
-from utils.incidencias_chats_reglas import agente_en, es_respuesta_humana, reglas_atencion
+from utils.incidencias_chats_reglas import (
+    agente_en,
+    es_respuesta_humana,
+    evaluar_chat,
+    fragmento,
+    normalizar,
+    regla_csat,
+    reglas_atencion,
+    reglas_cliente,
+)
 
 
 def _m(id, tipo, texto, t, sender_type="user"):
@@ -117,3 +126,125 @@ def test_sin_asignar():
     incidencias = reglas_atencion([_m(1, 0, "Hola", 0)], _conv("resolved"), ahora=5000)
     assert incidencias[0]["agente_nombre"] == "Sin asignar"
     assert incidencias[0]["agente_id"] is None
+
+
+# --- Tarea 2: reportes de clientes, frustración, CSAT y evaluar_chat ---
+
+def test_cobro_doble_con_tildes_y_mayusculas():
+    incidencias = reglas_cliente([_m(1, 0, "Me COBRARON dos veces la recarga", 0)], _conv())
+    assert len(incidencias) == 1
+    assert incidencias[0]["tipo"] == "cliente"
+    assert incidencias[0]["clave"] == "cobros"
+    assert incidencias[0]["severidad"] == "alta"
+    assert "COBRARON dos veces" in incidencias[0]["evidencia"]
+    assert incidencias[0]["coincidencia"] == "Me COBRARON dos veces"
+
+
+def test_tildes_en_el_texto_original():
+    incidencias = reglas_cliente([_m(1, 0, "Pésima   atención, no me llegó nada", 0)], _conv())
+    assert {"frustracion", "no_recibido"} == set(_claves(incidencias))
+    assert next(i for i in incidencias if i["clave"] == "frustracion")["coincidencia"] == "Pésima atención"
+
+
+def test_frase_del_agente_no_cuenta():
+    assert reglas_cliente([_m(1, 1, "no funciona así", 0)], _conv()) == []
+
+
+def test_una_por_categoria():
+    mensajes = [_m(1, 0, "no funciona", 0), _m(2, 0, "sigue sin funcionar, no funciona", 5)]
+    assert _claves(reglas_cliente(mensajes, _conv())).count("fallas_app") == 1
+
+
+def test_evidencia_anonimizada_y_recortada():
+    texto = "a" * 280 + " correo yo@mail.com y " + "me cobraron dos veces " + "b" * 280
+    assert len(texto) > 600
+    incidencia = reglas_cliente([_m(1, 0, texto, 0)], _conv())[0]
+    assert len(incidencia["evidencia"]) <= 200
+    assert "yo@mail.com" not in incidencia["evidencia"]
+    assert "me cobraron dos veces" in incidencia["evidencia"]
+    assert incidencia["evidencia"].startswith("…") and incidencia["evidencia"].endswith("…")
+
+
+def test_fragmento_anonimiza_correo_cercano():
+    texto = "escribi a yo@mail.com porque no funciona nada"
+    inicio = texto.index("no funciona")
+    resultado = fragmento(texto, inicio, inicio + len("no funciona"))
+    assert "yo@mail.com" not in resultado
+    assert "no funciona" in resultado
+
+
+def test_frustracion_es_atencion():
+    incidencias = reglas_cliente([_m(1, 0, "Nadie me responde", 0)], _conv())
+    assert _claves(incidencias) == ["frustracion"]
+    assert incidencias[0]["tipo"] == "atencion"
+    assert incidencias[0]["severidad"] == "media"
+    assert incidencias[0]["etiqueta"] == "Frustración del cliente"
+
+
+def test_normalizar():
+    assert normalizar("  PÉSIMA   Atención ") == "pesima atencion"
+
+
+def test_csat_bajo():
+    mensajes = [_m(1, 0, "Hola", 0)]
+    incidencias = regla_csat(2, _conv(), mensajes)
+    assert _claves(incidencias) == ["csat_bajo"]
+    assert incidencias[0]["evidencia"] == "CSAT 2/5"
+    assert regla_csat(3, _conv(), mensajes) == []
+    assert regla_csat(None, _conv(), mensajes) == []
+
+
+def test_evaluar_descarta_llamada_y_sin_cliente():
+    llamada = [_m(1, 0, "Hola", 0), {"id": 2, "message_type": 2, "content": "Llamada entrante de +5491155550000", "created_at": 5}]
+    resultado = evaluar_chat(llamada, _conv(), ahora=5000, csat=1)
+    assert resultado["descartado"] == "llamada"
+    assert resultado["incidencias"] == []
+    sin_cliente = evaluar_chat([_m(1, 1, "Hola", 0)], _conv(), ahora=5000)
+    assert sin_cliente["descartado"] == "sin_cliente"
+    assert sin_cliente["incidencias"] == []
+
+
+def test_evaluar_junta_todo():
+    mensajes = [_m(1, 0, "Me cobraron dos veces", 0), _m(2, 1, "Buenas", 1380)]
+    resultado = evaluar_chat(mensajes, _conv("resolved", asignado={"id": 7, "name": "Luis Gómez"}), ahora=5000, csat=1)
+    claves = _claves(resultado["incidencias"])
+    assert {"cobros", "primera_respuesta_tardia", "csat_bajo"} <= set(claves)
+    assert resultado["descartado"] is None
+    assert resultado["resuelto"] is True
+    assert resultado["agente_nombre"] == "Luis Gómez"
+    assert resultado["agente_id"] == 7
+
+
+def test_evidencia_de_evaluar_anonimizada_y_corta():
+    texto = "mi correo es yo@mail.com " + "x " * 300 + "no funciona " + "y " * 300
+    resultado = evaluar_chat([_m(1, 0, texto, 0), _m(2, 1, "Hola", 10)], _conv(), ahora=5000, csat=1)
+    assert resultado["incidencias"]
+    for incidencia in resultado["incidencias"]:
+        assert len(incidencia["evidencia"]) <= 200
+        assert "yo@mail.com" not in incidencia["evidencia"]
+
+
+def test_cierre_ignora_cortesia():
+    mensajes = [_m(1, 0, "Hola", 0), _m(2, 1, "Listo, ya quedó", 60), _m(3, 0, "Gracias!! 🙏", 120)]
+    assert "cierre_sin_responder" not in _claves(reglas_atencion(mensajes, _conv("resolved"), ahora=5000))
+    mensajes.append(_m(4, 0, "Muchas gracias, excelente", 130))
+    assert "cierre_sin_responder" not in _claves(reglas_atencion(mensajes, _conv("resolved"), ahora=5000))
+
+
+def test_cierre_cita_el_ultimo_mensaje_sustantivo():
+    mensajes = [_m(1, 0, "Hola", 0), _m(2, 1, "Buenas", 60), _m(3, 0, "Sigo sin saldo", 120), _m(4, 0, "Gracias", 130)]
+    cierre = next(i for i in reglas_atencion(mensajes, _conv("resolved"), ahora=5000) if i["clave"] == "cierre_sin_responder")
+    assert "Sigo sin saldo" in cierre["evidencia"]
+
+
+def test_cierre_no_duplica_ignorado():
+    mensajes = [
+        _m(1, 0, "Hola", 0),
+        _m(2, 1, "Buenas", 30),
+        _m(3, 0, "Sigo aquí", 100),
+        _m(4, 0, "¿Hola?", 400),
+        _m(5, 0, "¿Me ayudan?", 900),
+    ]
+    claves = _claves(reglas_atencion(mensajes, _conv("resolved"), ahora=5000))
+    assert "cierre_sin_responder" in claves
+    assert "cliente_ignorado" not in claves
