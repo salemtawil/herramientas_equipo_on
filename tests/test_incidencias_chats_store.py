@@ -52,3 +52,15 @@ def test_usos_ia_por_fecha():
     assert store.sumar_uso_ia(hoy) == 1
     assert store.sumar_uso_ia(hoy) == 2
     assert store.usos_ia(hoy) == 2 and store.usos_ia(ayer) == 0
+
+
+def test_ultima_evaluacion_elige_la_mas_reciente_por_updated_at():
+    store = MemoriaIncidenciasStore()
+    a = store.crear_revision({"estado": "completado"})
+    b = store.crear_revision({"estado": "completado"})
+    c = store.crear_revision({"estado": "evaluando"})
+    store.insertar_chats([_fila(a["id"], 5, estado="evaluado")])
+    store.insertar_chats([_fila(b["id"], 5, estado="evaluado")])
+    vieja = next(ch for ch in store.listar_chats(a["id"]))
+    store.actualizar_chat(vieja["id"], {"incidencias": [{"nuevo": True}]})
+    assert store.ultima_evaluacion(5, c["id"])["review_id"] == a["id"]

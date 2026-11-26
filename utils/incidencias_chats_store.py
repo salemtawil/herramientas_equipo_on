@@ -98,6 +98,7 @@ class SupabaseIncidenciasStore:
             .eq("review_id", review_id)
             .in_("estado", list(estados))
             .order("created_at")
+            .order("id")
             .limit(5)
         )
         for candidato in candidatos:
@@ -222,6 +223,7 @@ class MemoriaIncidenciasStore:
                 copy.deepcopy(fila), id=str(uuid.uuid4()), created_at=_ahora_iso(), updated_at=_ahora_iso(),
                 _orden=self._orden(),
             )
+            chat["_actualizado"] = chat["_orden"]
             chat.setdefault("intentos", 0)
             self.chats[chat["id"]] = chat
             existentes.add(clave)
@@ -235,13 +237,13 @@ class MemoriaIncidenciasStore:
         )
         if not candidatos:
             return None
-        candidatos[0].update(estado=nuevo_estado, updated_at=_ahora_iso())
+        candidatos[0].update(estado=nuevo_estado, updated_at=_ahora_iso(), _actualizado=self._orden())
         return copy.deepcopy(candidatos[0])
 
     def actualizar_chat(self, chat_id, cambios):
         if chat_id not in self.chats:
             return None
-        self.chats[chat_id].update(copy.deepcopy(cambios), updated_at=_ahora_iso())
+        self.chats[chat_id].update(copy.deepcopy(cambios), updated_at=_ahora_iso(), _actualizado=self._orden())
         return copy.deepcopy(self.chats[chat_id])
 
     def listar_chats(self, review_id):
@@ -258,7 +260,8 @@ class MemoriaIncidenciasStore:
         ]
         if not candidatos:
             return None
-        return copy.deepcopy(max(candidatos, key=lambda c: c["_orden"]))
+        # Igual que Supabase: la más reciente por updated_at (el contador desempata en el mismo instante).
+        return copy.deepcopy(max(candidatos, key=lambda c: (c["updated_at"], c["_actualizado"])))
 
     def decisiones(self, conversation_ids):
         return {
