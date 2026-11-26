@@ -248,3 +248,18 @@ def test_cierre_no_duplica_ignorado():
     claves = _claves(reglas_atencion(mensajes, _conv("resolved"), ahora=5000))
     assert "cierre_sin_responder" in claves
     assert "cliente_ignorado" not in claves
+
+
+def test_fragmento_anonimiza_correo_que_contiene_la_frase():
+    texto = "mi correo es juan.reclamo@mail.com gracias"
+    inicio = texto.index("reclamo")
+    resultado = fragmento(texto, inicio, inicio + len("reclamo"))
+    assert "@" not in resultado and "juan" not in resultado
+    assert "[correo]" in resultado
+
+
+def test_reglas_cliente_no_filtra_correo_con_la_frase():
+    for texto in ("mi correo es juan.reclamo@mail.com gracias", "escribanme a reembolso@mail.com"):
+        incidencia = reglas_cliente([_m(1, 0, texto, 0)], _conv())[0]
+        assert "@" not in incidencia["evidencia"] and "mail.com" not in incidencia["evidencia"]
+        assert "@" not in incidencia["coincidencia"]

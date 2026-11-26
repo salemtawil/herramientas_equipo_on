@@ -11,6 +11,9 @@ from utils.auditoria_chats_transcripcion import (
     _mismo_nombre,
     _ordenados,
     _texto,
+    _RE_CORREO,
+    _RE_NUMERO_LARGO,
+    _RE_TELEFONO,
     _ts_mensaje,
     anonimizar,
     es_llamada,
@@ -146,9 +149,19 @@ def _limpio(texto):
     return " ".join(anonimizar(texto).split())
 
 
+def _expandir_sensibles(texto, inicio, fin):
+    """Amplía [inicio, fin) para cubrir enteros los correos o números que toca (nunca se corta uno a medias)."""
+    for patron in (_RE_CORREO, _RE_NUMERO_LARGO, _RE_TELEFONO):
+        for m in patron.finditer(texto):
+            if m.start() < fin and m.end() > inicio:
+                inicio, fin = min(inicio, m.start()), max(fin, m.end())
+    return inicio, fin
+
+
 def fragmento(texto, inicio, fin, maximo=MAX_EVIDENCIA):
     """Texto anonimizado centrado en texto[inicio:fin], con «…» donde se corta."""
     texto = str(texto or "")
+    inicio, fin = _expandir_sensibles(texto, inicio, fin)
     antes, centro, despues = _limpio(texto[:inicio]), _limpio(texto[inicio:fin])[:maximo], _limpio(texto[fin:])
     if antes and texto[:inicio][-1:].isspace():
         antes += " "
@@ -291,7 +304,7 @@ def _buscar(normal, mapa, original, frases):
     if not hallazgos:
         return None
     pos, frase = min(hallazgos)
-    inicio, fin = mapa[pos], mapa[pos + len(frase) - 1] + 1
+    inicio, fin = _expandir_sensibles(original, mapa[pos], mapa[pos + len(frase) - 1] + 1)
     return fragmento(original, inicio, fin), _limpio(original[inicio:fin])
 
 
