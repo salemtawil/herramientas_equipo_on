@@ -85,7 +85,8 @@ def _recuperar_abandonados(store, chats):
         if actualizado.tzinfo is None:
             actualizado = actualizado.replace(tzinfo=timezone.utc)
         if actualizado <= limite:
-            store.actualizar_chat(chat["id"], {"estado": "pendiente"})
+            # Cuenta como intento: un chat que siempre tumba la petición termina en `error`.
+            _registrar_error(store, chat)
 
 
 # ---------------------------------------------------------------------------
@@ -206,6 +207,9 @@ def _listar_pagina(store, revision, chatwoot, maximo=None):
 
     terminado = not conversaciones or pagina >= MAX_PAGINAS_LISTADO
     cambios = {"pagina_listado": pagina + 1}
+    contadores = revision.get("contadores") or {}
+    if contadores.get("fallos_listado"):
+        cambios["contadores"] = dict(contadores, fallos_listado=0)
     if terminado:
         cambios["estado"] = "evaluando"
     store.actualizar_revision(revision["id"], cambios)
@@ -216,9 +220,17 @@ def _paso_listado(store, revision, chatwoot):
     try:
         resultado = _listar_pagina(store, revision, chatwoot)
     except Exception as exc:
+        mensaje = f"No se pudo listar la página {revision.get('pagina_listado')}: {exc}"
+        contadores = dict(revision.get("contadores") or {})
+        contadores["fallos_listado"] = int(contadores.get("fallos_listado") or 0) + 1
+        if contadores["fallos_listado"] < MAX_INTENTOS:
+            store.actualizar_revision(revision["id"], {"contadores": contadores})
+            return _respuesta(store, revision["id"], "error", mensaje, esperar_segundos=5)
+        contadores["error_listado"] = mensaje
+        store.actualizar_revision(revision["id"], {"estado": "con_errores", "contadores": contadores})
         return _respuesta(
-            store, revision["id"], "error", f"No se pudo listar la página {revision.get('pagina_listado')}: {exc}",
-            esperar_segundos=5,
+            store, revision["id"], "error",
+            f"{mensaje}. Se dejó de listar tras {MAX_INTENTOS} intentos; la revisión queda con errores.",
         )
     if resultado["terminado"]:
         mensaje = "Listado completo; se empiezan a evaluar los chats."
@@ -291,8 +303,10 @@ def _paso_ia(store, revision, config_ia, ahora):
 
 def _finalizar(store, review_id):
     chats = store.listar_chats(review_id)
-    estado = "con_errores" if any(c.get("estado") == "error" for c in chats) else "completado"
-    store.actualizar_revision(review_id, {"estado": estado, "contadores": _progreso(chats)})
+    contadores = (store.obtener_revision(review_id) or {}).get("contadores") or {}
+    con_errores = contadores.get("error_listado") or any(c.get("estado") == "error" for c in chats)
+    estado = "con_errores" if con_errores else "completado"
+    store.actualizar_revision(review_id, {"estado": estado, "contadores": dict(contadores, **_progreso(chats))})
     return _respuesta(store, review_id, "fin", "Revisión terminada.")
 
 

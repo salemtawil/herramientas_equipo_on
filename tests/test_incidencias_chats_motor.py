@@ -293,3 +293,56 @@ def test_revision_en_memoria_parcial():
     assert len(resultado["chats"]) == 30
     assert resultado["vistos"] >= 30
     assert resultado["revision"]["estado"] == "completado"
+
+
+def _abandonar(store, review_id, conversation_id, intentos):
+    chat = next(c for c in store.listar_chats(review_id) if c["conversation_id"] == conversation_id)
+    store.chats[chat["id"]].update(estado="procesando", intentos=intentos, updated_at="2000-01-01T00:00:00+00:00")
+
+
+def test_abandonado_cuenta_intentos():
+    chatwoot = _escenario(2)
+    store = MemoriaIncidenciasStore()
+    revision = _nueva(store)
+    while store.obtener_revision(revision["id"])["estado"] == "listando":
+        motor.ejecutar_paso(store, revision["id"], chatwoot, {}, ahora=UNTIL, reloj=_reloj())
+    _abandonar(store, revision["id"], 1, intentos=0)
+    _abandonar(store, revision["id"], 2, intentos=motor.MAX_INTENTOS - 1)
+    respuesta = _correr(store, revision["id"], chatwoot)
+    chats = {c["conversation_id"]: c for c in store.listar_chats(revision["id"])}
+    assert chats[1]["estado"] == "evaluado" and chats[1]["intentos"] == 1
+    assert chats[2]["estado"] == "error" and chats[2]["intentos"] == motor.MAX_INTENTOS
+    assert 2 not in chatwoot.lecturas
+    assert respuesta["estado"] == "con_errores"
+
+
+class ChatwootListadoFalla(ChatwootFalso):
+    def __init__(self, *args, fallos=10**6, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fallos = fallos
+        self.intentos_listado = 0
+
+    def conversaciones_en_rango(self, since, until, page=1, inbox_ids=None):
+        self.intentos_listado += 1
+        if self.intentos_listado <= self.fallos:
+            raise RuntimeError("422 filtro inválido")
+        return super().conversaciones_en_rango(since, until, page, inbox_ids)
+
+
+def test_listado_falla_siempre_termina():
+    chatwoot = ChatwootListadoFalla([_conv(1, SINCE + 60)], {1: _normal(1, SINCE + 60)})
+    store = MemoriaIncidenciasStore()
+    revision = _nueva(store)
+    respuesta = _correr(store, revision["id"], chatwoot, maximo=20)
+    assert respuesta["estado"] == "con_errores"
+    assert chatwoot.intentos_listado == motor.MAX_INTENTOS
+    assert "422" in store.obtener_revision(revision["id"])["contadores"]["error_listado"]
+
+
+def test_listado_falla_una_vez_se_recupera():
+    chatwoot = ChatwootListadoFalla([_conv(1, SINCE + 60)], {1: _normal(1, SINCE + 60)}, fallos=motor.MAX_INTENTOS - 1)
+    store = MemoriaIncidenciasStore()
+    revision = _nueva(store)
+    respuesta = _correr(store, revision["id"], chatwoot)
+    assert respuesta["estado"] == "completado" and respuesta["progreso"]["evaluados"] == 1
+    assert store.obtener_revision(revision["id"])["contadores"]["fallos_listado"] == 0
