@@ -18,10 +18,11 @@ incidencias_chats_bp = Blueprint("incidencias_chats", __name__)
 logger = logging.getLogger(__name__)
 
 MAX_HORAS_PRUEBA = 12
-MAX_CHATS_PRUEBA = 30
+MAX_CHATS_PRUEBA = motor.MAX_CHATS_PRUEBA
 MAX_POR = 80
 MAX_NOTA = 500
-DECISIONES = {"atendida": "Atendida", "falso_positivo": "Falso positivo"}
+# «No es incidencia» se guarda como `falso_positivo` (valor estable para entrenar un modelo).
+DECISIONES = {"atendida": "Atendida", "falso_positivo": "No es incidencia"}
 COOKIE_POR = "ic_por"
 DIAS_COOKIE_POR = 180
 ESTADOS_REVISION = {
@@ -93,6 +94,12 @@ def _cargar_revision_o_404(store, review_id):
     return revision
 
 
+def _chats_y_decisiones(store, review_id):
+    chats = store.listar_chats(review_id)
+    con_incidencias = [c["conversation_id"] for c in chats if c.get("incidencias")]
+    return chats, (store.decisiones(con_incidencias) if con_incidencias else {})
+
+
 def _texto_ia(fila):
     confirmada = fila.get("ia_confirmada")
     if confirmada is True:
@@ -111,6 +118,7 @@ def _contexto_revision(revision, chats, decisiones, agente="", clave=""):
         "estado_texto": ESTADOS_REVISION.get(revision.get("estado"), revision.get("estado") or ""),
         "terminado": revision.get("estado") in motor.ESTADOS_TERMINALES,
         "error_listado": (revision.get("contadores") or {}).get("error_listado") or "",
+        "aviso_listado": (revision.get("contadores") or {}).get("aviso_listado") or "",
         "fecha_hora": _fecha_hora,
         "texto_ia": _texto_ia,
         "decisiones_texto": DECISIONES,
@@ -212,6 +220,8 @@ def crear():
             modo_prueba=True,
             parcial=resultado["parcial"],
             vistos=resultado["vistos"],
+            cortado_por_tiempo=resultado["cortado_por_tiempo"],
+            evaluados=resultado["evaluados"],
             max_chats_prueba=MAX_CHATS_PRUEBA,
             url_conversacion=chatwoot.url_conversacion,
             por_guardado="",
@@ -248,9 +258,11 @@ def ver(review_id):
     if not store:
         abort(404)
     revision = _cargar_revision_o_404(store, review_id)
-    chats = store.listar_chats(review_id)
-    con_incidencias = [c["conversation_id"] for c in chats if c.get("incidencias")]
-    decisiones = store.decisiones(con_incidencias) if con_incidencias else {}
+    try:
+        chats, decisiones = _chats_y_decisiones(store, review_id)
+    except IncidenciasError as exc:
+        logger.warning("No se pudo leer la revisión de incidencias %s: %s", review_id, exc)
+        return _volver_al_inicio(mensaje_error_publico(exc, "No se pudo leer la revisión"))
     chatwoot, _ = _chatwoot_o_error()
     agente = (request.args.get("agente") or "").strip()
     clave = (request.args.get("clave") or "").strip()
@@ -270,7 +282,15 @@ def paso(review_id):
     if not store or not chatwoot:
         resultado = {"accion": "configuracion", "estado": "", "mensaje": error_store or error_chatwoot, "esperar_segundos": 0}
     else:
-        _cargar_revision_o_404(store, review_id)
+        try:
+            existe = bool(store.obtener_revision(review_id))
+        except IncidenciasError:
+            existe = False
+        if not existe:
+            if _quiere_json():
+                # «configuracion» detiene el bucle del navegador de inmediato.
+                return jsonify({"accion": "configuracion", "estado": "", "mensaje": "La revisión no existe.", "esperar_segundos": 0}), 404
+            abort(404)
         try:
             resultado = motor.ejecutar_paso(store, review_id, chatwoot, obtener_config_ia())
         except IncidenciasError as exc:
@@ -321,7 +341,7 @@ def decidir(conversation_id):
             return jsonify({"ok": False, "mensaje": "Ese chat no pertenece a la revisión."}), 404
         abort(404)
     if decision not in DECISIONES:
-        return _respuesta_decision(False, "Elige «Atendida» o «Falso positivo».", review_id, filtros, 400)
+        return _respuesta_decision(False, "Elige «Atendida» o «No es incidencia».", review_id, filtros, 400)
     if not por:
         return _respuesta_decision(False, "Escribe tu nombre para guardar la decisión.", review_id, filtros, 400)
 
@@ -337,7 +357,7 @@ def decidir(conversation_id):
     )
     if isinstance(respuesta, tuple):
         respuesta = respuesta[0]
-    respuesta.set_cookie(COOKIE_POR, por, max_age=DIAS_COOKIE_POR * 86400, samesite="Lax", httponly=True)
+    respuesta.set_cookie(COOKIE_POR, por, max_age=DIAS_COOKIE_POR * 86400, samesite="Lax", httponly=True, secure=request.is_secure)
     return respuesta
 
 
@@ -347,7 +367,11 @@ def reintentar_errores(review_id):
     if not store:
         abort(404)
     _cargar_revision_o_404(store, review_id)
-    vueltos = motor.reintentar_errores(store, review_id)
+    try:
+        vueltos = motor.reintentar_errores(store, review_id)
+    except IncidenciasError as exc:
+        logger.warning("No se pudieron reintentar los errores de %s: %s", review_id, exc)
+        return _volver_al_inicio(mensaje_error_publico(exc, "No se pudieron reintentar los chats con error"))
     if vueltos:
         flash(f"{vueltos} chats vuelven a la cola.", "success")
     else:
@@ -361,9 +385,11 @@ def exportar_csv(review_id):
     if not store:
         abort(404)
     revision = _cargar_revision_o_404(store, review_id)
-    chats = store.listar_chats(review_id)
-    con_incidencias = [c["conversation_id"] for c in chats if c.get("incidencias")]
-    decisiones = store.decisiones(con_incidencias) if con_incidencias else {}
+    try:
+        chats, decisiones = _chats_y_decisiones(store, review_id)
+    except IncidenciasError as exc:
+        logger.warning("No se pudo exportar la revisión de incidencias %s: %s", review_id, exc)
+        return _volver_al_inicio(mensaje_error_publico(exc, "No se pudo exportar la revisión"))
     chatwoot, _ = _chatwoot_o_error()
     filas = motor.filas_csv(revision, chats, decisiones, chatwoot.url_conversacion if chatwoot else None)
     salida = io.StringIO()

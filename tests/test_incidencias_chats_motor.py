@@ -63,7 +63,8 @@ class ChatwootFalso:
             raise RuntimeError("Chatwoot no responde")
         return list(self.mensajes[int(conversation_id)])
 
-    def respuestas_csat(self, since, until):
+    def respuestas_csat(self, since, until, max_paginas=40):
+        self.llamadas_csat = getattr(self, "llamadas_csat", []) + [(since, until, max_paginas)]
         if self.csat_falla:
             raise RuntimeError("CSAT caído")
         return list(self.csat)
@@ -346,3 +347,73 @@ def test_listado_falla_una_vez_se_recupera():
     respuesta = _correr(store, revision["id"], chatwoot)
     assert respuesta["estado"] == "completado" and respuesta["progreso"]["evaluados"] == 1
     assert store.obtener_revision(revision["id"])["contadores"]["fallos_listado"] == 0
+
+
+class ChatwootCsatCuelga(ChatwootFalso):
+    """Simula que la plataforma mata la petición mientras se lee el CSAT."""
+
+    def respuestas_csat(self, since, until, max_paginas=40):
+        super().respuestas_csat(since, until, max_paginas)
+        raise SystemExit("petición cortada")
+
+
+def test_csat_cuenta_el_intento_antes_de_llamar_y_se_rinde_a_los_dos():
+    chatwoot = ChatwootCsatCuelga([_conv(1, SINCE + 60)], {1: _normal(1, SINCE + 60)})
+    store = MemoriaIncidenciasStore()
+    revision = _nueva(store)
+    for _ in range(motor.MAX_INTENTOS_CSAT):
+        with pytest.raises(SystemExit):
+            motor.ejecutar_paso(store, revision["id"], chatwoot, {}, ahora=UNTIL, reloj=_reloj())
+    guardada = store.obtener_revision(revision["id"])
+    assert guardada["contadores"]["intentos_csat"] == motor.MAX_INTENTOS_CSAT and guardada["csat"] is None
+    respuesta = motor.ejecutar_paso(store, revision["id"], chatwoot, {}, ahora=UNTIL, reloj=_reloj())
+    guardada = store.obtener_revision(revision["id"])
+    assert respuesta["accion"] == "csat" and guardada["csat"] == {} and guardada["csat_error"]
+    assert len(chatwoot.llamadas_csat) == motor.MAX_INTENTOS_CSAT
+    assert _correr(store, revision["id"], chatwoot)["estado"] == "completado"
+
+
+def test_csat_acotado_hasta_ahora_y_con_pocas_paginas():
+    chatwoot = _escenario(1)
+    store = MemoriaIncidenciasStore()
+    revision = _nueva(store)
+    ahora = UNTIL + 3600
+    motor.ejecutar_paso(store, revision["id"], chatwoot, {}, ahora=ahora, reloj=_reloj())
+    since, until, max_paginas = chatwoot.llamadas_csat[0]
+    assert since == SINCE and until == ahora and max_paginas == motor.MAX_PAGINAS_CSAT
+
+
+def test_tope_de_paginas_del_listado_deja_aviso(monkeypatch):
+    monkeypatch.setattr(motor, "MAX_PAGINAS_LISTADO", 1)
+    chatwoot = _escenario(30)
+    store = MemoriaIncidenciasStore()
+    revision = _nueva(store)
+    _correr(store, revision["id"], chatwoot)
+    contadores = store.obtener_revision(revision["id"])["contadores"]
+    assert "aviso_listado" in contadores and "Acorta el rango" in contadores["aviso_listado"]
+
+
+def test_listado_completo_sin_aviso():
+    chatwoot = _escenario(30)
+    store = MemoriaIncidenciasStore()
+    revision = _nueva(store)
+    _correr(store, revision["id"], chatwoot)
+    assert "aviso_listado" not in store.obtener_revision(revision["id"])["contadores"]
+
+
+def test_revision_en_memoria_corta_por_tiempo():
+    chatwoot = _escenario(10)
+    resultado = motor.revision_en_memoria(
+        chatwoot, since=SINCE, until=UNTIL, bandejas=[BANDEJA], limite_segundos=6, reloj=_reloj(), ahora=UNTIL
+    )
+    assert resultado["cortado_por_tiempo"] is True
+    assert resultado["evaluados"] < 10
+    assert resultado["revision"]["estado"] not in motor.ESTADOS_TERMINALES
+
+
+def test_revision_en_memoria_sin_corte_y_csat_acotado():
+    chatwoot = _escenario(5)
+    resultado = motor.revision_en_memoria(chatwoot, since=SINCE, until=UNTIL, bandejas=[BANDEJA], ahora=UNTIL)
+    assert resultado["cortado_por_tiempo"] is False and resultado["evaluados"] == 5
+    assert chatwoot.llamadas_csat[0][2] == motor.MAX_PAGINAS_CSAT_PRUEBA
+    assert motor.MAX_CHATS_PRUEBA == 20

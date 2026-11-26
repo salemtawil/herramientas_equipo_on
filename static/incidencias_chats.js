@@ -91,7 +91,8 @@
             headers: { Accept: "application/json" },
             credentials: "same-origin",
           });
-          if (!respuesta.ok) throw new Error("HTTP " + respuesta.status);
+          // Un 404 con JSON («configuracion») trae el motivo y detiene el bucle; otro error HTTP se reintenta.
+          if (!respuesta.ok && respuesta.status !== 404) throw new Error("HTTP " + respuesta.status);
           datos = await respuesta.json();
           if (!datos || typeof datos !== "object") throw new Error("respuesta vacía");
         } catch (error) {
@@ -171,7 +172,7 @@
     const decision = datos.get("decision");
     const por = String(datos.get("por") || "").trim();
     const nota = String(datos.get("nota") || "").trim();
-    const textos = { atendida: "Atendida", falso_positivo: "Falso positivo" };
+    const textos = { atendida: "Atendida", falso_positivo: "No es incidencia" };
     const id = formulario.action.match(/conversacion\/(\d+)\//);
     if (!id) return;
     // La decisión es por conversación: se actualizan todas sus filas.

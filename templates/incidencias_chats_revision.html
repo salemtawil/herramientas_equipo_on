@@ -57,7 +57,7 @@
                       </label>
                       <div class="acciones-barra">
                         <button type="submit" name="decision" value="atendida">Atendida</button>
-                        <button type="submit" name="decision" value="falso_positivo" class="btn secondary">Falso positivo</button>
+                        <button type="submit" name="decision" value="falso_positivo" class="btn secondary">No es incidencia</button>
                       </div>
                       <p class="small" data-ic-decision-mensaje aria-live="polite"></p>
                     </form>
@@ -93,10 +93,12 @@
     {% endwith %}
     {% if modo_prueba %}
       <div class="warning top-space">Modo prueba: no se guarda. No hay decisiones, IA ni exportación.</div>
+      {% if cortado_por_tiempo %}<div class="warning top-space">Se evaluaron {{ evaluados }} chats antes del límite de tiempo; acorta el rango.</div>{% endif %}
       {% if parcial %}<div class="warning top-space">Resultado parcial: {{ max_chats_prueba }} de al menos {{ vistos }} chats. Acorta el rango o crea una revisión guardada para verlos todos.</div>{% endif %}
     {% endif %}
     {% if revision.csat_error %}<div class="warning top-space">No se pudo leer el CSAT; se omitió la regla CSAT bajo.</div>{% endif %}
     {% if error_listado %}<div class="warning top-space">{{ error_listado }}</div>{% endif %}
+    {% if aviso_listado %}<div class="warning top-space">{{ aviso_listado }}</div>{% endif %}
 
     <div class="grid top-space ic-contadores">
       <div class="metric"><div class="label">Chats</div><div class="value" data-ic-contador="total">{{ progreso.total }}</div></div>
@@ -160,7 +162,7 @@
     <div class="page-section-title">
       <div>
         <h2 id="ic-cliente-titulo">Reportes de clientes</h2>
-        <p class="small">Cobros, fallas y frustración que escribió el cliente. Lo resaltado es la frase que activó la regla.</p>
+        <p class="small">Cobros, fallas de la app, pedidos no recibidos, acceso a la cuenta y reclamos formales que escribió el cliente. Lo resaltado es la frase que activó la regla.</p>
       </div>
       <span class="hero-badge hero-badge-soft">{{ listas.cliente|length }}</span>
     </div>
@@ -171,7 +173,7 @@
     <div class="page-section-title">
       <div>
         <h2 id="ic-atencion-titulo">Mala atención</h2>
-        <p class="small">Esperas largas, chats sin respuesta, cierres abruptos y CSAT bajo.</p>
+        <p class="small">Esperas largas, chats sin respuesta, cierres abruptos, frustración del cliente y CSAT bajo.</p>
       </div>
       <span class="hero-badge hero-badge-soft">{{ listas.atencion|length }}</span>
     </div>

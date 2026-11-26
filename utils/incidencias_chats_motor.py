@@ -20,6 +20,16 @@ MAX_PAGINAS_LISTADO = 200
 SEGUNDOS_PROCESANDO_ABANDONADO = 75
 # Las encuestas CSAT llegan después del chat: se piden hasta 3 días después del fin del rango.
 DIAS_EXTRA_CSAT = 3
+# El CSAT se pide una sola vez, acotado: si la plataforma corta la petición, a los 2 intentos se sigue sin él.
+MAX_INTENTOS_CSAT = 2
+MAX_PAGINAS_CSAT = 10
+# Modo prueba: todo corre en una sola petición, que Vercel corta a los 60 s.
+MAX_CHATS_PRUEBA = 20
+LIMITE_PRUEBA_SEGUNDOS = 40
+MAX_PAGINAS_CSAT_PRUEBA = 2
+AVISO_LISTADO_CORTADO = (
+    f"Se alcanzó el máximo de {MAX_PAGINAS_LISTADO} páginas del listado: puede haber chats sin revisar. Acorta el rango."
+)
 ESTADOS_TERMINALES = ("completado", "con_errores")
 ORDEN_SEVERIDAD = {"alta": 0, "media": 1}
 COLUMNAS_CSV = [
@@ -114,9 +124,21 @@ def _mapa_csat(encuestas):
     return mapa
 
 
-def _paso_csat(store, revision, chatwoot):
+def _paso_csat(store, revision, chatwoot, ahora, max_paginas=MAX_PAGINAS_CSAT):
+    contadores = dict(revision.get("contadores") or {})
+    intentos = int(contadores.get("intentos_csat") or 0)
+    if intentos >= MAX_INTENTOS_CSAT:
+        # Los intentos anteriores no terminaron (la plataforma cortó la petición): se sigue sin CSAT.
+        error = f"El CSAT no respondió en {MAX_INTENTOS_CSAT} intentos"
+        store.actualizar_revision(revision["id"], {"csat": {}, "csat_error": error})
+        return _respuesta(store, revision["id"], "csat", f"{error}; se sigue sin él.")
+    # El intento se anota ANTES de llamar: si la petición muere a mitad, el siguiente paso lo cuenta.
+    contadores["intentos_csat"] = intentos + 1
+    store.actualizar_revision(revision["id"], {"contadores": contadores})
+    since = int(revision["since"])
+    hasta = max(since, min(int(revision["until"]) + DIAS_EXTRA_CSAT * 86400, int(ahora)))
     try:
-        encuestas = chatwoot.respuestas_csat(int(revision["since"]), int(revision["until"]) + DIAS_EXTRA_CSAT * 86400)
+        encuestas = chatwoot.respuestas_csat(since, hasta, max_paginas=max_paginas)
     except Exception as exc:
         store.actualizar_revision(revision["id"], {"csat": {}, "csat_error": str(exc) or exc.__class__.__name__})
         return _respuesta(store, revision["id"], "csat", f"No se pudo leer el CSAT ({exc}); se sigue sin él.")
@@ -210,9 +232,15 @@ def _listar_pagina(store, revision, chatwoot, maximo=None):
 
     terminado = not conversaciones or pagina >= MAX_PAGINAS_LISTADO
     cambios = {"pagina_listado": pagina + 1}
-    contadores = revision.get("contadores") or {}
-    if contadores.get("fallos_listado"):
-        cambios["contadores"] = dict(contadores, fallos_listado=0)
+    contadores = dict(revision.get("contadores") or {})
+    nuevos = dict(contadores)
+    if nuevos.get("fallos_listado"):
+        nuevos["fallos_listado"] = 0
+    if conversaciones and pagina >= MAX_PAGINAS_LISTADO:
+        # El tope corta el listado aunque Chatwoot aún devuelva chats: se avisa en la revisión.
+        nuevos["aviso_listado"] = AVISO_LISTADO_CORTADO
+    if nuevos != contadores:
+        cambios["contadores"] = nuevos
     if terminado:
         cambios["estado"] = "evaluando"
     store.actualizar_revision(revision["id"], cambios)
@@ -280,10 +308,10 @@ def _evaluar_uno(store, revision, chat, chatwoot, ahora):
     store.actualizar_chat(chat["id"], cambios)
 
 
-def _paso_evaluacion(store, revision, chatwoot, ahora, reloj):
+def _paso_evaluacion(store, revision, chatwoot, ahora, reloj, presupuesto=PRESUPUESTO_PASO):
     inicio = reloj()
     evaluados, fallo = 0, None
-    while reloj() - inicio < PRESUPUESTO_PASO:
+    while reloj() - inicio < presupuesto:
         chat = store.tomar_siguiente(revision["id"], ("pendiente",), "procesando")
         if not chat:
             break
@@ -316,7 +344,7 @@ def _finalizar(store, review_id):
     return _respuesta(store, review_id, "fin", "Revisión terminada.")
 
 
-def ejecutar_paso(store, review_id, chatwoot, config_ia, ahora=None, reloj=time.monotonic):
+def ejecutar_paso(store, review_id, chatwoot, config_ia, ahora=None, reloj=time.monotonic, presupuesto=PRESUPUESTO_PASO):
     ahora = int(time.time()) if ahora is None else int(ahora)
     revision = store.obtener_revision(review_id)
     if not revision:
@@ -332,14 +360,14 @@ def ejecutar_paso(store, review_id, chatwoot, config_ia, ahora=None, reloj=time.
 
     # 2. CSAT, una sola vez por revisión.
     if revision.get("csat") is None:
-        return _paso_csat(store, revision, chatwoot)
+        return _paso_csat(store, revision, chatwoot, ahora)
 
     # 3. Listado, una página por paso.
     if revision.get("estado") == "listando":
         return _paso_listado(store, revision, chatwoot)
 
     # 4. Evaluación con reglas hasta agotar el presupuesto del paso.
-    respuesta = _paso_evaluacion(store, revision, chatwoot, ahora, reloj)
+    respuesta = _paso_evaluacion(store, revision, chatwoot, ahora, reloj, presupuesto)
     if respuesta:
         return respuesta
     if any(c.get("estado") == "procesando" for c in store.listar_chats(review_id)):
@@ -484,15 +512,31 @@ def filas_csv(revision, chats, decisiones, url_conversacion):
 # ---------------------------------------------------------------------------
 
 
-def revision_en_memoria(chatwoot, *, since, until, bandejas, maximo=30):
-    """Revisión sin Supabase ni IA: lista hasta `maximo` chats, los evalúa y devuelve todo."""
+def revision_en_memoria(
+    chatwoot, *, since, until, bandejas, maximo=MAX_CHATS_PRUEBA,
+    limite_segundos=LIMITE_PRUEBA_SEGUNDOS, reloj=time.monotonic, ahora=None,
+):
+    """Revisión sin Supabase ni IA: lista hasta `maximo` chats, los evalúa y devuelve todo.
+
+    Corre en una sola petición: al llegar a `limite_segundos` se detiene y devuelve lo evaluado
+    con `cortado_por_tiempo`. El CSAT se pide con pocas páginas para no gastar el tiempo en él.
+    """
+    ahora = int(time.time()) if ahora is None else int(ahora)
+    inicio = reloj()
     store = MemoriaIncidenciasStore()
     revision = crear_revision(store, since=since, until=until, bandejas=bandejas, usar_ia=False, creado_por="")
     review_id = revision["id"]
-    vistos, parcial = 0, False
+    vistos, parcial, cortado = 0, False, False
     for _ in range(MAX_PAGINAS_LISTADO + 10_000):
+        restante = limite_segundos - (reloj() - inicio)
+        if restante <= 0:
+            cortado = True
+            break
         revision = store.obtener_revision(review_id)
-        if revision.get("estado") == "listando" and revision.get("csat") is not None:
+        if revision.get("csat") is None:
+            _paso_csat(store, revision, chatwoot, ahora, max_paginas=MAX_PAGINAS_CSAT_PRUEBA)
+            continue
+        if revision.get("estado") == "listando":
             resultado = _listar_pagina(store, revision, chatwoot, maximo=maximo)
             vistos += resultado["vistos"]
             if not resultado["terminado"] and len(store.listar_chats(review_id)) >= maximo:
@@ -500,11 +544,17 @@ def revision_en_memoria(chatwoot, *, since, until, bandejas, maximo=30):
                 parcial = vistos > len(store.listar_chats(review_id))
                 store.actualizar_revision(review_id, {"estado": "evaluando"})
             continue
-        if ejecutar_paso(store, review_id, chatwoot, {})["accion"] == "fin":
+        paso = ejecutar_paso(
+            store, review_id, chatwoot, {}, ahora=ahora, reloj=reloj, presupuesto=min(PRESUPUESTO_PASO, restante)
+        )
+        if paso["accion"] == "fin":
             break
+    chats = store.listar_chats(review_id)
     return {
         "revision": store.obtener_revision(review_id),
-        "chats": store.listar_chats(review_id),
+        "chats": chats,
         "parcial": parcial,
         "vistos": vistos,
+        "cortado_por_tiempo": cortado,
+        "evaluados": sum(1 for c in chats if c.get("estado") in ("evaluado", "descartado")),
     }

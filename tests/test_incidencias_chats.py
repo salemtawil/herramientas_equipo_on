@@ -222,7 +222,8 @@ def test_modo_prueba_parcial_muestra_vistos(cliente, monkeypatch):
     monkeypatch.setattr(herramienta, "obtener_store", lambda: MemoriaIncidenciasStore())
     monkeypatch.setattr(herramienta, "obtener_chatwoot", lambda: ChatwootFalso(n=40))
     html = cliente.post("/incidencias-chats/revisiones", data=_datos(prueba="1")).get_data(as_text=True)
-    assert "Resultado parcial: 30 de al menos 40 chats" in html
+    # Con 20 de máximo basta la primera página (25 chats vistos).
+    assert f"Resultado parcial: {herramienta.MAX_CHATS_PRUEBA} de al menos 25 chats" in html
 
 
 def test_modo_prueba_rango_maximo_12_horas(entorno, cliente):
@@ -264,3 +265,79 @@ def test_paso_sin_terminar_muestra_url_de_paso(entorno, cliente):
     review_id = entorno.listar_revisiones()[0]["id"]
     html = cliente.get(f"/incidencias-chats/revision/{review_id}").get_data(as_text=True)
     assert f'data-ic-paso-url="/incidencias-chats/revision/{review_id}/paso"' in html
+
+
+class StoreQueFalla(MemoriaIncidenciasStore):
+    """La revisión existe, pero leer sus chats falla (p. ej. Supabase caído)."""
+
+    def listar_chats(self, review_id):
+        raise herramienta.IncidenciasError("Supabase no responde")
+
+
+def _revision_con_store_roto(monkeypatch):
+    store = StoreQueFalla()
+    revision = store.crear_revision({"since": SINCE, "until": SINCE + 3600, "bandejas": [], "estado": "evaluando"})
+    monkeypatch.setattr(herramienta, "obtener_store", lambda: store)
+    monkeypatch.setattr(herramienta, "obtener_chatwoot", lambda: ChatwootFalso())
+    return revision["id"]
+
+
+@pytest.mark.parametrize(
+    "metodo, ruta",
+    [("get", ""), ("post", "/reintentar-errores"), ("get", "/csv")],
+)
+def test_error_del_store_avisa_en_espanol(cliente, monkeypatch, metodo, ruta):
+    review_id = _revision_con_store_roto(monkeypatch)
+    respuesta = getattr(cliente, metodo)(f"/incidencias-chats/revision/{review_id}{ruta}")
+    assert respuesta.status_code == 302
+    assert respuesta.headers["Location"].endswith("/incidencias-chats/")
+
+
+def test_paso_revision_inexistente_json_detiene(entorno, cliente):
+    respuesta = cliente.post("/incidencias-chats/revision/no-existe/paso", headers={"Accept": "application/json"})
+    assert respuesta.status_code == 404
+    datos = respuesta.get_json()
+    assert datos["accion"] == "configuracion" and datos["mensaje"]
+
+
+def test_decision_muestra_no_es_incidencia(entorno, cliente):
+    review_id = _crear_y_terminar(cliente, entorno)
+    html = cliente.get(f"/incidencias-chats/revision/{review_id}").get_data(as_text=True)
+    assert "No es incidencia" in html and "Falso positivo" not in html
+    respuesta = cliente.post(
+        "/incidencias-chats/conversacion/2/decision",
+        data={"decision": "falso_positivo", "por": "Marta", "review_id": review_id},
+        headers={"Accept": "application/json"},
+    )
+    assert "No es incidencia" in respuesta.get_json()["mensaje"]
+    assert entorno.decisiones([2])[2]["decision"] == "falso_positivo"
+
+
+def test_cookie_por_es_segura_en_https(entorno, cliente):
+    review_id = _crear_y_terminar(cliente, entorno)
+    respuesta = cliente.post(
+        "/incidencias-chats/conversacion/2/decision",
+        data={"decision": "atendida", "por": "Marta", "review_id": review_id},
+        base_url="https://localhost",
+    )
+    assert "Secure" in respuesta.headers["Set-Cookie"]
+
+
+def test_modo_prueba_cortado_por_tiempo_avisa(cliente, monkeypatch):
+    original = herramienta.motor.revision_en_memoria
+
+    def con_limite_cero(chatwoot, **kwargs):
+        return original(chatwoot, limite_segundos=0, **kwargs)
+
+    monkeypatch.setattr(herramienta.motor, "revision_en_memoria", con_limite_cero)
+    monkeypatch.setattr(herramienta, "obtener_chatwoot", lambda: ChatwootFalso())
+    html = cliente.post("/incidencias-chats/revisiones", data=_datos(prueba="1")).get_data(as_text=True)
+    assert "antes del límite de tiempo; acorta el rango" in html
+
+
+def test_aviso_de_tope_del_listado_en_la_revision(entorno, cliente):
+    cliente.post("/incidencias-chats/revisiones", data=_datos())
+    review_id = entorno.listar_revisiones()[0]["id"]
+    entorno.actualizar_revision(review_id, {"contadores": {"aviso_listado": "Se alcanzó el máximo de páginas"}})
+    html = cliente.get(f"/incidencias-chats/revision/{review_id}").get_data(as_text=True)
+    assert "Se alcanzó el máximo de páginas" in html

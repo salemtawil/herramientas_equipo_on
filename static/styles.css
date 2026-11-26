@@ -5691,6 +5691,18 @@ th {
   color: var(--success-text);
 }
 
+/* «No es incidencia» y la IA que descarta: tono neutro con borde punteado. */
+.ic-etiqueta--falso_positivo,
+.ic-etiqueta--descartada {
+  border-style: dashed;
+  background: transparent;
+  color: var(--muted);
+}
+
+.ic-contadores {
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+
 .ic-decidir {
   margin-top: var(--space-1);
 }

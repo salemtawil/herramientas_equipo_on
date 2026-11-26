@@ -310,8 +310,8 @@ Cómo funciona:
 - **Reglas y umbrales**: se editan en `utils/incidencias_chats_reglas.py` (por ejemplo `PRIMERA_RESPUESTA_MAX`, `ESPERA_MAX`, `IGNORADO_MENSAJES`, `IGNORADO_SEGUNDOS`, `SIN_ATENCION_ESPERA`, `CSAT_BAJO_MAX`). Al cambiarlos, sube `REGLAS_VERSION`.
 - **Los diccionarios son un borrador**: las frases de `CATEGORIAS_CLIENTE` y `FRASES_FRUSTRACION` hay que validarlas con chats reales y ajustarlas.
 - **Confirmación con IA (opcional)**: confirma las incidencias dudosas. Comparte proveedor y claves con la Auditoría de chats (`AUDITORIA_CHATS_AI_*`), pero tiene su propio cupo diario (`INCIDENCIAS_CHATS_AI_CUPO_DIARIO`). Sin clave, la IA queda desactivada.
-- **Modo prueba (no se guarda)**: limita el rango a 12 horas y 30 chats y no escribe en Supabase. Úsalo mientras el `.env` local apunte a producción.
-- **Decisiones**: «Atendida» y «Falso positivo» se guardan por conversación; servirán para entrenar un modelo más adelante.
+- **Modo prueba (no se guarda)**: limita el rango a 12 horas y 20 chats y no escribe en Supabase. Úsalo mientras el `.env` local apunte a producción. Corre en una sola petición: se detiene a los 40 s y muestra lo evaluado hasta ahí («acorta el rango»); el CSAT se lee con solo 2 páginas, así que en rangos con muchas encuestas la regla CSAT bajo puede quedar incompleta.
+- **Decisiones**: «Atendida» y «No es incidencia» (guardada como `falso_positivo`) se guardan por conversación; servirán para entrenar un modelo más adelante.
 
 ## Limitaciones conocidas
 
