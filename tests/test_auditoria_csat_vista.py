@@ -106,3 +106,14 @@ def test_enlace_solo_http_o_https():
     )
     por_id = {f["row_id"]: f["enlace"] for f in fichas}
     assert por_id == {1: "", 2: "https://chat.test/c/2", 3: "HTTP://chat.test/c/3", 4: ""}
+
+
+def test_ficha_lleva_puntaje_y_reglas_de_la_ia():
+    fila = _neg(1, ia_justificable="NO", ia_puntaje=58, ia_reglas=["primera respuesta de 7 min"])
+    ia = construir_fichas([fila])[0]["ia"]
+    assert ia["puntaje"] == 58 and ia["reglas"] == ["primera respuesta de 7 min"]
+
+
+def test_ficha_sin_puntaje_como_tras_reabrir():
+    ia = construir_fichas([_neg(1, ia_justificable="SÍ")])[0]["ia"]
+    assert ia["puntaje"] == "" and ia["reglas"] == []

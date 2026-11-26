@@ -87,6 +87,9 @@ def _ficha(fila):
             "motivo": fila.get("ia_motivo", ""),
             "confianza": fila.get("ia_confianza", ""),
             "evidencia": fila.get("ia_evidencia", ""),
+            # Solo existen mientras se trabaja la auditoría; al reabrir desde Supabase vienen vacíos.
+            "puntaje": fila.get("ia_puntaje", ""),
+            "reglas": list(fila.get("ia_reglas") or []),
         }
     justificable = fila.get("justificable") or ""
     return {

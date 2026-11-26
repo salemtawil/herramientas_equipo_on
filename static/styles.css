@@ -5464,6 +5464,14 @@ th {
   overflow-wrap: anywhere;
 }
 
+.auditoria-csat-page .csat-ia .csat-ia__reglas {
+  margin-top: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--danger-text);
+  overflow-wrap: anywhere;
+}
+
 /* Decisión */
 .auditoria-csat-page .csat-decision {
   display: flex;

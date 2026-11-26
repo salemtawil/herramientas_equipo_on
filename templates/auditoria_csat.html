@@ -201,8 +201,9 @@
                   <div class="csat-ia" data-csat-ia-propuesta="{{ f.ia.decision }}">
                     <p class="csat-ia__titulo"><span aria-hidden="true">🤖</span> La IA cree: <strong class="{{ clase_decision.get(f.ia.decision, '') }}">{{ f.ia.texto }}</strong></p>
                     <p class="csat-ia__meta">
-                      {% if f.ia.motivo %}Motivo: {{ f.ia.motivo }}{% endif %}{% if f.ia.motivo and f.ia.confianza not in ("", None) %} · {% endif %}{% if f.ia.confianza not in ("", None) %}{{ f.ia.confianza }}% seguro{% endif %}
+                      {% if f.ia.motivo %}Motivo: {{ f.ia.motivo }}{% endif %}{% if f.ia.motivo and f.ia.confianza not in ("", None) %} · {% endif %}{% if f.ia.confianza not in ("", None) %}{{ f.ia.confianza }}% seguro{% endif %}{% if f.ia.puntaje not in ("", None) %} · Rúbrica {{ f.ia.puntaje }}%{% endif %}
                     </p>
+                    {% if f.ia.reglas %}<p class="csat-ia__reglas">Rompió: {{ f.ia.reglas|join("; ") }}</p>{% endif %}
                     {% if f.ia.evidencia %}<p class="csat-ia__evidencia">Evidencia: «{{ f.ia.evidencia }}»</p>{% endif %}
                   </div>
                 {% else %}

@@ -318,6 +318,7 @@ def test_auditar_con_ia_no_deja_transcripciones_en_el_temporal(cliente, store, c
     with app.app_context():
         estado = herramienta.cargar_analisis(_hidden(respuesta, "analysis_id"))
     assert estado["rows"] and all(not f.get("transcripcion_conversacion") for f in estado["rows"])
+    assert all("metricas_tiempo" not in f for f in estado["rows"])
     assert any(f.get("ia_justificable") for f in estado["rows"])
 
 
@@ -765,3 +766,26 @@ def test_enlace_del_csv_no_se_usa_si_no_es_http(cliente):
     ).get_data(as_text=True)
     (ficha,) = _fichas(html)
     assert "javascript:" not in ficha and "Abrir enlace" not in ficha
+
+
+def test_ficha_muestra_rubrica_y_reglas_incumplidas(cliente, store, chatwoot, monkeypatch):
+    chatwoot.encuestas = [enc(1, rating=1), enc(2, rating=2)]
+    monkeypatch.setenv("AUDITORIA_CHATS_AI_API_KEY", "clave-de-prueba")
+    monkeypatch.setenv("CSAT_AI_MAX_CASES", "2")
+
+    def ia(filas, config):
+        return [
+            {"row_id": "1", "justificable": "NO", "motivo_inconformidad": "OTRO", "confianza": 0.8,
+             "puntaje": 58, "reglas_incumplidas": ["primera respuesta de 7 min", "cerró sin despedida"]},
+            {"row_id": "2", "justificable": "SÍ", "motivo_inconformidad": "OTRO", "confianza": 0.8},
+        ]
+
+    monkeypatch.setattr(herramienta, "auditar_lote_con_proveedor", ia)
+    html = _traer(cliente, prueba="1").get_data(as_text=True)
+    texto = cliente.post(
+        "/auditoria-csat",
+        data={"accion": "auditar_con_ia", "analysis_id": _hidden(html, "analysis_id"), "prueba": "1"},
+    ).get_data(as_text=True)
+    assert "Rúbrica 58%" in texto
+    assert "Rompió: primera respuesta de 7 min; cerró sin despedida" in texto
+    assert texto.count("Rúbrica ") == 1  # la ficha sin puntaje no muestra rúbrica

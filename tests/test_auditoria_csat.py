@@ -275,3 +275,12 @@ class AvisoModelosTests(unittest.TestCase):
         self.assertIn("gemini-principal: saturado", avisos[0])
         self.assertIn("gemini-respaldo: tardó demasiado", avisos[0])
         self.assertNotIn("AUDITORIA_CHATS_AI_MODEL_RESPALDO", avisos[0])
+
+
+class CasoIaTests(unittest.TestCase):
+    def test_caso_incluye_metricas_si_hay(self):
+        fila = fila_negativa(metricas_tiempo={"primera_respuesta": {"segundos": 130}})
+        self.assertEqual(130, csat.construir_caso_auditoria_ia(fila)["metricas_tiempo"]["primera_respuesta"]["segundos"])
+
+    def test_caso_csv_sin_metricas(self):
+        self.assertNotIn("metricas_tiempo", csat.construir_caso_auditoria_ia(fila_negativa()))
