@@ -488,6 +488,34 @@ class ChatwootClient:
             conversaciones = _normalizar_lista_respuesta(respuesta["data"])
         return conversaciones
 
+    def conversaciones_en_rango(self, since, until, page=1, inbox_ids=None):
+        """Página cruda del filtro de Chatwoot para todas las conversaciones del rango, sin filtrar por agente.
+
+        Igual que `conversaciones_de_agente`: se amplía un día por lado y el recorte exacto lo hace quien llama.
+        """
+        tz = _obtener_timezone(_timezone())
+        desde = datetime.fromtimestamp(int(since), tz).date() - timedelta(days=1)
+        hasta = datetime.fromtimestamp(int(until), tz).date() + timedelta(days=2)
+        filtros = [
+            {"attribute_key": "created_at", "filter_operator": "is_greater_than", "values": [desde.isoformat()]},
+            {"attribute_key": "created_at", "filter_operator": "is_less_than", "values": [hasta.isoformat()]},
+        ]
+        if inbox_ids:
+            filtros.append(
+                {"attribute_key": "inbox_id", "filter_operator": "equal_to", "values": [int(i) for i in inbox_ids]}
+            )
+        for filtro in filtros[:-1]:
+            filtro["query_operator"] = "and"
+        respuesta = self.post(
+            f"/api/v1/accounts/{self.account_id}/conversations/filter",
+            json={"payload": filtros},
+            params={"page": int(page)},
+        )
+        conversaciones = _normalizar_lista_respuesta(respuesta)
+        if not conversaciones and isinstance(respuesta, dict) and isinstance(respuesta.get("data"), dict):
+            conversaciones = _normalizar_lista_respuesta(respuesta["data"])
+        return conversaciones
+
     def mensajes_de_conversacion(self, conversation_id, max_paginas=5):
         mensajes = {}
         params = {}

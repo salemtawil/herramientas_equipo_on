@@ -417,3 +417,21 @@ def test_conversaciones_de_agente_filtra_por_bandejas():
     assert bandeja and bandeja[0]["values"] == [3, 5] and bandeja[0]["filter_operator"] == "equal_to"
     assert "query_operator" not in filtros[-1]
     assert all("query_operator" in f for f in filtros[:-1])
+
+
+def test_conversaciones_en_rango_sin_assignee():
+    llamadas = []
+
+    def post_falso(url, headers=None, json=None, params=None, timeout=None):
+        llamadas.append({"url": url, "json": json, "params": params})
+        return _RespuestaJson({"payload": [{"id": 1}]})
+
+    with patch("utils.chatwoot_reportes.requests.post", post_falso):
+        conversaciones = _cliente_prueba().conversaciones_en_rango(1762747200, 1763351999, page=3)
+
+    assert conversaciones == [{"id": 1}]
+    assert llamadas[0]["params"] == {"page": 3}
+    filtros = llamadas[0]["json"]["payload"]
+    assert all(f["attribute_key"] != "assignee_id" for f in filtros)
+    assert [f["values"] for f in filtros] == [["2025-11-09"], ["2025-11-18"]]
+    assert "query_operator" not in filtros[-1]
