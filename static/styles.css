@@ -5636,6 +5636,7 @@ th {
 .ic-evidencia {
   min-width: 260px;
   max-width: 520px;
+  white-space: normal;
   overflow-wrap: anywhere;
 }
 
