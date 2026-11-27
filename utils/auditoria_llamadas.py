@@ -152,14 +152,21 @@ def _es_saliente(tipo):
     return str(tipo or "").lower().startswith(("out", "sal"))
 
 
+def _puntaje_medio(llamadas):
+    return _media(float(l["puntaje"]) for l in llamadas if l.get("puntaje") is not None)
+
+
 def resumen_llamadas_por_agente(llamadas):
     grupos = {}
     for llamada in llamadas:
         grupos.setdefault(llamada.get("agente_id"), []).append(llamada)
     filas = []
     for agente_id, grupo in grupos.items():
+        con_conversacion = [l for l in grupo if not l.get("sin_conversacion")]
+        buzones = [l for l in grupo if l.get("sin_conversacion")]
+        # Los buzones suelen puntuar 95–100: los criterios bajos salen de las llamadas con conversación.
         por_criterio = {}
-        for llamada in grupo:
+        for llamada in con_conversacion or grupo:
             for item in llamada.get("rubrica") or []:
                 if item.get("pct") is not None:
                     por_criterio.setdefault(item.get("nombre"), []).append(float(item["pct"]))
@@ -170,7 +177,9 @@ def resumen_llamadas_por_agente(llamadas):
             {
                 "agente_id": agente_id,
                 "llamadas": len(grupo),
-                "puntaje_medio": _media(float(l["puntaje"]) for l in grupo if l.get("puntaje") is not None),
+                "puntaje_medio": _puntaje_medio(grupo),
+                "puntaje_conversacion": _puntaje_medio(con_conversacion),
+                "puntaje_buzon": _puntaje_medio(buzones),
                 "sin_conversacion": sum(1 for l in grupo if l.get("sin_conversacion")),
                 "salientes": sum(1 for l in grupo if _es_saliente(l.get("tipo"))),
                 "entrantes": sum(1 for l in grupo if not _es_saliente(l.get("tipo"))),

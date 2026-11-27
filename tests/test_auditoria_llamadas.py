@@ -136,3 +136,22 @@ def test_validar_resumen_descarta_tickets_inexistentes_y_limita():
     assert r["recomendaciones"][0]["tickets"] == [2]
     assert r["buzon_voz"] == {"evaluacion": "Deja mensaje claro", "tickets": [3]}
     assert al.validar_resumen_llamadas({"resumen": "x"}, set())["buzon_voz"] is None
+
+
+def test_promedios_separan_las_llamadas_de_buzon():
+    buzon_rubrica = [{"nombre": "Claridad", "peso": 10, "pct": 100, "justificacion": ""}]
+    filas = [
+        _fila(1, 70), _fila(2, 80),
+        _fila(3, 100, sin_conv=True, rubrica=buzon_rubrica), _fila(4, 98, sin_conv=True, rubrica=buzon_rubrica),
+    ]
+    [m] = al.resumen_llamadas_por_agente(filas)
+    assert m["puntaje_conversacion"] == 75.0
+    assert m["puntaje_buzon"] == 99.0
+    assert m["puntaje_medio"] == 87.0  # todas, solo como referencia
+    # Los criterios más bajos salen de las llamadas con conversación
+    assert m["criterios_bajos"][0] == {"nombre": "Claridad", "pct": 50.0}
+
+
+def test_sin_buzones_el_promedio_de_buzon_es_none():
+    [m] = al.resumen_llamadas_por_agente([_fila(1, 70)])
+    assert m["puntaje_conversacion"] == 70.0 and m["puntaje_buzon"] is None

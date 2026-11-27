@@ -265,7 +265,7 @@ python scripts/cargar_manual_auditoria.py "Manual de Procedimientos.pdf" --versi
 
 ### Llamadas de Multiadmin e informe PDF
 
-- En los lotes QA-1.1 se traen **todas** las llamadas analizadas en Multiadmin (Análisis de llamadas) de los agentes del lote y en sus fechas, incluidas las de buzón de voz o sin conversación (quedan etiquetadas y cuentan en el puntaje). Se usa el mismo acceso de Multiadmin que Usuarios activos (`MULTIADMIN_ID_TOKEN` / `MULTIADMIN_REFRESH_TOKEN`); solo se lee, nunca se modifica nada en Multiadmin.
+- En los lotes QA-1.1 se traen **todas** las llamadas analizadas en Multiadmin (Análisis de llamadas) de los agentes del lote y en sus fechas, incluidas las de buzón de voz o sin conversación (quedan etiquetadas y se evalúan). El puntaje se muestra por separado: llamadas con conversación y buzón de voz, porque los buzones suelen puntuar 95–100 y taparían la atención real; los criterios más bajos salen de las llamadas con conversación. Se usa el mismo acceso de Multiadmin que Usuarios activos (`MULTIADMIN_ID_TOKEN` / `MULTIADMIN_REFRESH_TOKEN`); solo se lee, nunca se modifica nada en Multiadmin.
 - Se trae un día por paso y luego el detalle de 15 llamadas por paso (rúbrica, coaching y puntos clave). No se guardan la transcripción, el audio ni el teléfono del cliente.
 - Los agentes se emparejan por nombre (Chatwoot ↔ Multiadmin). Si un agente aparece con otro nombre en Multiadmin, la página del lote permite emparejarlo y lo guarda para siguientes lotes.
 - Al terminar los chats, la IA resume las llamadas de cada agente (puntos fuertes, áreas de mejora, buzón de voz y recomendaciones con sus tickets): una petición a la IA por agente.

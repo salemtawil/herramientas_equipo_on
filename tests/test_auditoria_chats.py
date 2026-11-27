@@ -640,6 +640,9 @@ def test_lote_qa_muestra_llamadas_y_feedback_por_canal(entorno_qa, cliente):
     html = cliente.get(f"/auditoria-chats/lote/{lote_id}").get_data(as_text=True)
     assert "Atención por mensajes" in html and "Atención por llamadas" in html
     assert "Atiende con calma" in html and "Deja un mensaje claro" in html and "Claridad" in html
+    # Ana: 82,5 en la llamada con conversación y 100 en el buzón, por separado
+    assert "Puntaje con conversación" in html and "Puntaje de buzón" in html
+    assert "puntaje con conversación 82,5" in html and "(puntaje 100,0)" in html
     assert "https://chat.test/app/accounts/2/conversations/7001" in html
     assert "+15559876543" not in html and "5559876543" not in html
     # Luis no tiene llamadas: se ofrece emparejarlo con el nombre de Multiadmin sin emparejar
@@ -672,6 +675,7 @@ def test_informe_pdf_del_lote_qa(entorno_qa, cliente):
     assert "Informe de auditoría de calidad" in html
     assert "system-logos/compinche_48.svg" in html or "informe-logo.svg" in html
     assert "auditoria_informe.css" in html and "data-ac-imprimir" in html
+    assert "llamadas con conversación" in html and "82,5" in html
     for texto in ("Ana Pérez", "Atención por mensajes", "Atención por llamadas", "Atiende con calma", "Anexo"):
         assert texto in html
     assert "5559876543" not in html

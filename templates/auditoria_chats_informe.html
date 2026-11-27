@@ -33,14 +33,14 @@
     <div class="kpi"><span class="kpi__valor">{{ total.chats }}</span><span class="kpi__etiqueta">chats auditados</span></div>
     <div class="kpi"><span class="kpi__valor">{{ total.qa_medio|decimal_es if total.qa_medio is not none else "—" }}</span><span class="kpi__etiqueta">QA medio de mensajes</span></div>
     <div class="kpi"><span class="kpi__valor">{{ total.llamadas }}</span><span class="kpi__etiqueta">llamadas analizadas</span></div>
-    <div class="kpi"><span class="kpi__valor">{{ total.puntaje_llamadas|decimal_es if total.puntaje_llamadas is not none else "—" }}</span><span class="kpi__etiqueta">puntaje medio de llamadas</span></div>
-    <div class="kpi"><span class="kpi__valor">{{ total.sin_conversacion }}</span><span class="kpi__etiqueta">llamadas de buzón o sin conversación</span></div>
+    <div class="kpi"><span class="kpi__valor">{{ total.puntaje_conversacion|decimal_es if total.puntaje_conversacion is not none else "—" }}</span><span class="kpi__etiqueta">puntaje medio de llamadas con conversación</span></div>
+    <div class="kpi"><span class="kpi__valor">{{ total.sin_conversacion }}</span><span class="kpi__etiqueta">llamadas de buzón o sin conversación{% if total.puntaje_buzon is not none %} · puntaje {{ total.puntaje_buzon|decimal_es }}{% endif %}</span></div>
   </div>
   <p class="estados">
     {% for clave, texto in estados_qa.items() %}<span class="estado estado--{{ clave }}">{{ texto }}: {{ total.estados[clave] }}</span>{% endfor %}
   </p>
   <table class="tabla">
-    <thead><tr><th>Agente</th><th>Chats</th><th>QA mensajes</th><th>Llamadas</th><th>Puntaje llamadas</th><th>Buzón / sin conversación</th></tr></thead>
+    <thead><tr><th>Agente</th><th>Chats</th><th>QA mensajes</th><th>Llamadas</th><th>Puntaje llamadas con conversación</th><th>Buzón / sin conversación</th><th>Puntaje de buzón</th></tr></thead>
     <tbody>
       {% for bloque in feedback_agentes %}
         <tr>
@@ -48,8 +48,9 @@
           <td>{{ bloque.chats.auditados if bloque.chats else 0 }}</td>
           <td>{{ bloque.chats.qa_media|decimal_es if bloque.chats else "—" }}</td>
           <td>{{ bloque.llamadas.llamadas if bloque.llamadas else 0 }}</td>
-          <td>{{ bloque.llamadas.puntaje_medio|decimal_es if bloque.llamadas else "—" }}</td>
+          <td>{{ bloque.llamadas.puntaje_conversacion|decimal_es if bloque.llamadas and bloque.llamadas.puntaje_conversacion is not none else "—" }}</td>
           <td>{{ bloque.llamadas.sin_conversacion if bloque.llamadas else 0 }}</td>
+          <td>{{ bloque.llamadas.puntaje_buzon|decimal_es if bloque.llamadas and bloque.llamadas.puntaje_buzon is not none else "—" }}</td>
         </tr>
       {% endfor %}
     </tbody>

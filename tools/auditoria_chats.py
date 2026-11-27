@@ -393,7 +393,10 @@ def informe(lote_id):
         estado = motor.estado_efectivo(chat)
         if estado in estados:
             estados[estado] += 1
-    puntajes = [float(l["puntaje"]) for l in llamadas if l.get("puntaje") is not None]
+    def _media_puntaje(filas):
+        valores = [float(l["puntaje"]) for l in filas if l.get("puntaje") is not None]
+        return round(sum(valores) / len(valores), 1) if valores else None
+
     qas = [q for q in (motor.qa_efectivo(c) for c in auditados) if q is not None]
 
     return render_template(
@@ -410,7 +413,8 @@ def informe(lote_id):
             "qa_medio": round(sum(qas) / len(qas), 1) if qas else None,
             "estados": estados,
             "llamadas": len(llamadas),
-            "puntaje_llamadas": round(sum(puntajes) / len(puntajes), 1) if puntajes else None,
+            "puntaje_conversacion": _media_puntaje([l for l in llamadas if not l.get("sin_conversacion")]),
+            "puntaje_buzon": _media_puntaje([l for l in llamadas if l.get("sin_conversacion")]),
             "sin_conversacion": sum(1 for l in llamadas if l.get("sin_conversacion")),
         },
         chats_auditados=sorted(auditados, key=lambda c: (c.get("agente_nombre") or "", c.get("conversacion_fecha") or "")),

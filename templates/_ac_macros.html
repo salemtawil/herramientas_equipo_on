@@ -41,7 +41,7 @@
 {% endmacro %}
 
 {% macro feedback_llamadas(metricas, resumen, url_ticket) %}
-  <p class="small">{{ metricas.llamadas }} llamadas · puntaje medio {{ metricas.puntaje_medio|decimal_es }} · {{ metricas.entrantes }} entrantes, {{ metricas.salientes }} salientes · {{ metricas.sin_conversacion }} de buzón o sin conversación</p>
+  <p class="small">{{ metricas.llamadas }} llamadas · puntaje con conversación {{ metricas.puntaje_conversacion|decimal_es if metricas.puntaje_conversacion is not none else "—" }} · {{ metricas.sin_conversacion }} de buzón o sin conversación{% if metricas.puntaje_buzon is not none %} (puntaje {{ metricas.puntaje_buzon|decimal_es }}){% endif %} · {{ metricas.entrantes }} entrantes, {{ metricas.salientes }} salientes</p>
   {% if resumen and resumen.error %}
     <p class="small">No se pudo generar el resumen con IA: {{ resumen.error }}</p>
   {% elif resumen %}

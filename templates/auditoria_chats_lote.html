@@ -112,14 +112,15 @@
     {% if llamadas_metricas %}
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Agente</th><th>Llamadas</th><th>Puntaje medio</th><th>Buzón o sin conversación</th><th>Entrantes</th><th>Salientes</th><th>Menor puntaje</th></tr></thead>
+          <thead><tr><th>Agente</th><th>Llamadas</th><th>Puntaje con conversación</th><th>Buzón o sin conversación</th><th>Puntaje de buzón</th><th>Entrantes</th><th>Salientes</th><th>Menor puntaje</th></tr></thead>
           <tbody>
             {% for m in llamadas_metricas %}
               <tr>
                 <td>{{ m.nombre }}</td>
                 <td>{{ m.llamadas }}</td>
-                <td>{{ m.puntaje_medio|decimal_es }}</td>
+                <td>{{ m.puntaje_conversacion|decimal_es if m.puntaje_conversacion is not none else "—" }}</td>
                 <td>{{ m.sin_conversacion }}</td>
+                <td>{{ m.puntaje_buzon|decimal_es if m.puntaje_buzon is not none else "—" }}</td>
                 <td>{{ m.entrantes }}</td>
                 <td>{{ m.salientes }}</td>
                 <td>{% for l in m.peores %}{% if url_ticket %}<a href="{{ url_ticket(l.ticket_id) }}" target="_blank" rel="noopener noreferrer">#{{ l.ticket_id }}</a>{% else %}#{{ l.ticket_id }}{% endif %} ({{ l.puntaje|decimal_es(0) }}){% if not loop.last %}, {% endif %}{% endfor %}</td>
